@@ -45,7 +45,9 @@ namespace Internal.IL
         private readonly MethodSignature _signature;
         private readonly TypeDesc _thisType;
         private readonly WebAssemblyCodegenCompilation _compilation;
+        private readonly string _mangledName;
         private LLVMValueRef _llvmFunction;
+        private LLVMValueRef _currentFunclet;
         private LLVMBasicBlockRef _curBasicBlock;
         private LLVMBuilderRef _builder;
         private readonly LocalVariableDefinition[] _locals;
@@ -57,6 +59,7 @@ namespace Internal.IL
         private MethodDebugInformation _debugInformation;
         private LLVMMetadataRef _debugFunction;
         private TypeDesc _constrainedType = null;
+        List<LLVMValueRef> _exceptionFunclets;
 
         /// <summary>
         /// Stack of values pushed onto the IL stack: locals, arguments, values, function pointer, ...
@@ -98,6 +101,7 @@ namespace Internal.IL
             _compilation = compilation;
             _method = method;
             _methodIL = methodIL;
+            _mangledName = mangledName;
             _ilBytes = methodIL.GetILBytes();
             _locals = methodIL.GetLocals();
             _localSlots = new LLVMValueRef[_locals.Length];
@@ -107,11 +111,14 @@ namespace Internal.IL
 
             var ilExceptionRegions = methodIL.GetExceptionRegions();
             _exceptionRegions = new ExceptionRegion[ilExceptionRegions.Length];
-            for (int i = 0; i < ilExceptionRegions.Length; i++)
+            _exceptionFunclets = new List<LLVMValueRef>(_exceptionRegions.Length);
+            int curRegion = 0;
+            foreach (ILExceptionRegion region in ilExceptionRegions.OrderBy(region => region.TryOffset))
             {
-                _exceptionRegions[i] = new ExceptionRegion() { ILRegion = ilExceptionRegions[i] };
+                _exceptionRegions[curRegion++] = new ExceptionRegion() { ILRegion = region };
             }
             _llvmFunction = GetOrCreateLLVMFunction(mangledName, method.Signature);
+            _currentFunclet = _llvmFunction;
             _builder = LLVM.CreateBuilder();
             _pointerSize = compilation.NodeFactory.Target.PointerSize;
 
@@ -142,6 +149,11 @@ namespace Internal.IL
                         LLVM.ReplaceAllUsesWith(block.Block, trapBlock);
                         LLVM.DeleteBasicBlock(block.Block);
                     }
+                }
+
+                foreach (LLVMValueRef funclet in _exceptionFunclets)
+                {
+                    LLVM.DeleteFunction(funclet);
                 }
 
                 LLVM.PositionBuilderAtEnd(_builder, trapBlock);
@@ -196,16 +208,31 @@ namespace Internal.IL
             {
                 if (CanStoreTypeOnStack(_signature[i]))
                 {
-                    string argName = String.Empty;
-                    if (argNames != null && argNames[i] != null)
-                    {
-                        argName = argNames[i] + "_";
-                    }
-                    argName += $"arg{i + thisOffset}_";
+                    LLVMValueRef storageAddr;
+                    LLVMValueRef argValue = LLVM.GetParam(_llvmFunction, (uint)signatureIndex);
 
-                    LLVMValueRef argStackSlot = LLVM.BuildAlloca(_builder, GetLLVMTypeForTypeDesc(_signature[i]), argName);
-                    LLVM.BuildStore(_builder, LLVM.GetParam(_llvmFunction, (uint)signatureIndex), argStackSlot);
-                    _argSlots[i] = argStackSlot;
+                    // The caller will always pass the argument on the stack. If this function doesn't have 
+                    // EH, we can put it in an alloca for efficiency and better debugging. Otherwise,
+                    // copy it to the shadow stack so funclets can find it
+                    int argOffset = i + thisOffset;
+                    if (_exceptionRegions.Length == 0)
+                    {
+                        string argName = String.Empty;
+                        if (argNames != null && argNames[argOffset] != null)
+                        {
+                            argName = argNames[argOffset] + "_";
+                        }
+                        argName += $"arg{argOffset}_";
+
+                        storageAddr = LLVM.BuildAlloca(_builder, GetLLVMTypeForTypeDesc(_signature[i]), argName);
+                        _argSlots[i] = storageAddr;                        
+                    }
+                    else
+                    {
+                        storageAddr = CastIfNecessary(LoadVarAddress(argOffset, LocalVarKind.Argument, out _), LLVM.PointerType(LLVM.TypeOf(argValue), 0));
+                    }
+
+                    LLVM.BuildStore(_builder, argValue, storageAddr);
                     signatureIndex++;
                 }
             }
@@ -226,7 +253,7 @@ namespace Internal.IL
 
             for (int i = 0; i < _locals.Length; i++)
             {
-                if (CanStoreLocalOnStack(_locals[i].Type))
+                if (CanStoreVariableOnStack(_locals[i].Type))
                 {
                     string localName = String.Empty;
                     if (localNames[i] != null)
@@ -246,7 +273,7 @@ namespace Internal.IL
                 for(int i = 0; i < _locals.Length; i++)
                 {
                     LLVMValueRef localAddr = LoadVarAddress(i, LocalVarKind.Local, out TypeDesc localType);
-                    if(CanStoreLocalOnStack(localType))
+                    if(CanStoreVariableOnStack(localType))
                     {
                         LLVMTypeRef llvmType = GetLLVMTypeForTypeDesc(localType);
                         LLVMTypeKind typeKind = LLVM.GetTypeKind(llvmType);
@@ -337,6 +364,24 @@ namespace Internal.IL
             return llvmFunction;
         }
 
+        /// <summary>
+        /// Gets or creates an LLVM function for an exception handling funclet
+        /// </summary>
+        private LLVMValueRef GetOrCreateFunclet(ILExceptionRegionKind kind, int handlerOffset)
+        {
+            string funcletName = _mangledName + "$" + kind.ToString() + handlerOffset.ToString("X");
+            LLVMValueRef funclet = LLVM.GetNamedFunction(Module, funcletName);
+            if (funclet.Pointer == IntPtr.Zero)
+            {
+                // Funclets only accept a shadow stack pointer
+                LLVMTypeRef universalFuncletSignature = LLVM.FunctionType(LLVM.VoidType(), new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0) }, false);
+                funclet = LLVM.AddFunction(Module, funcletName, universalFuncletSignature);
+                _exceptionFunclets.Add(funclet);
+            }
+
+            return funclet;
+        }
+
         private void ImportCallMemset(LLVMValueRef targetPointer, byte value, int length)
         {
             LLVMValueRef objectSizeValue = BuildConstInt32(length);
@@ -404,9 +449,52 @@ namespace Internal.IL
         {
             if (block.Block.Pointer == IntPtr.Zero)
             {
-                block.Block = LLVM.AppendBasicBlock(_llvmFunction, "Block" + block.StartOffset);
+                LLVMValueRef blockFunclet = GetFuncletForBlock(block);
+
+                block.Block = LLVM.AppendBasicBlock(blockFunclet, "Block" + block.StartOffset.ToString("X"));
             }
             return block.Block;
+        }
+
+        /// <summary>
+        /// Gets or creates the LLVM function or funclet the basic block is part of
+        /// </summary>
+        private LLVMValueRef GetFuncletForBlock(BasicBlock block)
+        {
+            LLVMValueRef blockFunclet;
+
+            // Find the matching funclet for this block
+            ExceptionRegion ehRegion = GetHandlerRegion(block.StartOffset);
+
+            if (ehRegion != null)
+            {
+                blockFunclet = GetOrCreateFunclet(ehRegion.ILRegion.Kind, ehRegion.ILRegion.HandlerOffset);
+            }
+            else
+            {
+                blockFunclet = _llvmFunction;
+            }
+
+            return blockFunclet;
+        }
+
+        /// <summary>
+        /// Returns the most nested exception handler region the offset is in
+        /// </summary>
+        /// <returns>An exception region or null if it is not in an exception region</returns>
+        private ExceptionRegion GetHandlerRegion(int offset)
+        {
+            // Iterate backwards to find the most nested region
+            for (int i = _exceptionRegions.Length - 1; i >= 0; i--)
+            {
+                ExceptionRegion region = _exceptionRegions[i];
+                if (IsOffsetContained(offset, region.ILRegion.HandlerOffset, region.ILRegion.HandlerLength))
+                {
+                    return region;
+                }
+            }
+
+            return null;
         }
 
         private void StartImportingBasicBlock(BasicBlock basicBlock)
@@ -424,6 +512,7 @@ namespace Internal.IL
             }
 
             _curBasicBlock = GetLLVMBasicBlockForBlock(basicBlock);
+            _currentFunclet = GetFuncletForBlock(basicBlock);
 
             LLVM.PositionBuilderAtEnd(_builder, _curBasicBlock);
         }
@@ -664,7 +753,7 @@ namespace Internal.IL
                 type = _spilledExpressions[index].Type;
             }
 
-            return LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_llvmFunction),
+            return LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_currentFunclet),
                 new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (uint)(varBase + varOffset), LLVMMisc.False) },
                 $"{kind}{index}_");
 
@@ -1106,7 +1195,7 @@ namespace Internal.IL
             for (int i = 0; i < _locals.Length; i++)
             {
                 TypeDesc localType = _locals[i].Type;
-                if (!CanStoreLocalOnStack(localType))
+                if (!CanStoreVariableOnStack(localType))
                 {
                     offset = PadNextOffset(localType, offset);
                 }
@@ -1114,13 +1203,13 @@ namespace Internal.IL
             return offset.AlignUp(_pointerSize);
         }
 
-        private bool CanStoreLocalOnStack(TypeDesc localType)
+        private bool CanStoreVariableOnStack(TypeDesc variableType)
         {
-            // Keep all locals on the shadow stack if there is exception
+            // Keep all variables on the shadow stack if there is exception
             // handling so funclets can access them
             if (_exceptionRegions.Length == 0)
             {
-                return CanStoreTypeOnStack(localType);
+                return CanStoreTypeOnStack(variableType);
             }
             return false;
         }
@@ -1160,7 +1249,7 @@ namespace Internal.IL
             int offset = 0;
             for (int i = 0; i < _signature.Length; i++)
             {
-                if (!CanStoreTypeOnStack(_signature[i]))
+                if (!CanStoreVariableOnStack(_signature[i]))
                 {
                     offset = PadNextOffset(_signature[i], offset);
                 }
@@ -1212,13 +1301,13 @@ namespace Internal.IL
                 // We could compact the set of argSlots to only those that we'd keep on the stack, but currently don't
                 potentialRealArgIndex++;
 
-                if (!CanStoreTypeOnStack(_signature[i]))
+                if (!CanStoreVariableOnStack(_signature[i]))
                 {
                     offset = PadNextOffset(_signature[i], offset);
                 }
             }
 
-            if (CanStoreTypeOnStack(argType))
+            if (CanStoreVariableOnStack(argType))
             {
                 realArgIndex = potentialRealArgIndex;
                 offset = -1;
@@ -1234,7 +1323,7 @@ namespace Internal.IL
             LocalVariableDefinition local = _locals[index];
             size = local.Type.GetElementSize().AsInt;
 
-            if (CanStoreLocalOnStack(local.Type))
+            if (CanStoreVariableOnStack(local.Type))
             {
                 offset = -1;
             }
@@ -1243,7 +1332,7 @@ namespace Internal.IL
                 offset = 0;
                 for (int i = 0; i < index; i++)
                 {
-                    if (!CanStoreLocalOnStack(_locals[i].Type))
+                    if (!CanStoreVariableOnStack(_locals[i].Type))
                     {
                         offset = PadNextOffset(_locals[i].Type, offset);
                     }
@@ -1844,7 +1933,7 @@ namespace Internal.IL
             }
 
             int offset = GetTotalParameterOffset() + GetTotalLocalOffset();
-            LLVMValueRef shadowStack = LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_llvmFunction),
+            LLVMValueRef shadowStack = LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_currentFunclet),
                 new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (uint)offset, LLVMMisc.False) },
                 String.Empty);
             var castShadowStack = LLVM.BuildPointerCast(_builder, shadowStack, LLVM.PointerType(LLVM.Int8Type(), 0), "castshadowstack");
@@ -2001,7 +2090,7 @@ namespace Internal.IL
 
             // Save the top of the shadow stack in case the callee reverse P/Invokes
             LLVMValueRef stackFrameSize = BuildConstInt32(GetTotalParameterOffset() + GetTotalLocalOffset());
-            LLVM.BuildStore(_builder, LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_llvmFunction), new LLVMValueRef[] { stackFrameSize }, "shadowStackTop"),
+            LLVM.BuildStore(_builder, LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_currentFunclet), new LLVMValueRef[] { stackFrameSize }, "shadowStackTop"),
                 LLVM.GetNamedGlobal(Module, "t_pShadowStackTop"));
 
             // Don't name the return value if the function returns void, it's invalid
@@ -3076,7 +3165,7 @@ namespace Internal.IL
 
         private void ImportLeave(BasicBlock target)
         {
-            for (int i = 0; i < _exceptionRegions.Length; i++)
+            for (int i = _exceptionRegions.Length - 1; i >= 0; i--)
             {
                 var r = _exceptionRegions[i];
 
@@ -3084,7 +3173,10 @@ namespace Internal.IL
                     IsOffsetContained(_currentOffset - 1, r.ILRegion.TryOffset, r.ILRegion.TryLength) &&
                     !IsOffsetContained(target.StartOffset, r.ILRegion.TryOffset, r.ILRegion.TryLength))
                 {
-                    MarkBasicBlock(_basicBlocks[r.ILRegion.HandlerOffset]);
+                    // Work backwards through containing finally blocks to call them in the right order
+                    BasicBlock finallyBlock = _basicBlocks[r.ILRegion.HandlerOffset];
+                    MarkBasicBlock(finallyBlock);
+                    LLVM.BuildCall(_builder, GetFuncletForBlock(finallyBlock), new LLVMValueRef[] { LLVM.GetFirstParam(_currentFunclet) }, String.Empty);
                 }
             }
 
@@ -3175,9 +3267,7 @@ namespace Internal.IL
 
         private void ImportEndFinally()
         {
-            // These are currently unreachable since we can't get into finally blocks.
-            // We'll need to change this once we have other finally block handling.
-            LLVM.BuildUnreachable(_builder);
+            LLVM.BuildRetVoid(_builder);
         }
 
         private void ImportFallthrough(BasicBlock next)

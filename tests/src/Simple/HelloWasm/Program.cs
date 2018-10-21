@@ -321,6 +321,8 @@ internal static class Program
 
         TestArrayItfDispatch();
 
+        TestTryFinally();
+
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
         System.Diagnostics.Debugger.Break();
@@ -723,6 +725,39 @@ internal static class Program
         {
             PrintLine("Ok.");
         }
+    }
+
+    /// <summary>
+    /// Ensures all of the blocks of a try/finally function are hit when there aren't exceptions
+    /// </summary>
+    private static void TestTryFinally()
+    {
+        PrintString("Try/Finally test: ");
+        uint result = TryFinallyInner();
+        if (result == 1111)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed. Result: " + result.ToString());
+        }
+    }
+
+    private static uint TryFinallyInner()
+    {
+        uint result = 1;
+        try
+        {
+            result += 10;
+        }
+        finally
+        {
+            result += 100;
+        }
+        result += 1000;
+
+        return result;
     }
 
     [DllImport("*")]
