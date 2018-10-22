@@ -182,6 +182,12 @@ namespace Internal.IL
             LLVMBasicBlockRef prologBlock = LLVM.AppendBasicBlock(_llvmFunction, "Prolog");
             LLVM.PositionBuilderAtEnd(_builder, prologBlock);
 
+            // Allocate a slot to store exceptions being dispatched
+            if(_exceptionRegions.Length > 0)
+            {
+                _spilledExpressions.Add(new SpilledExpressionEntry(StackValueKind.ObjRef, "ExceptionSlot", GetWellKnownType(WellKnownType.Object), 0, this));
+            }
+
             // Copy arguments onto the stack to allow
             // them to be referenced by address
             int thisOffset = 0;
@@ -373,8 +379,18 @@ namespace Internal.IL
             LLVMValueRef funclet = LLVM.GetNamedFunction(Module, funcletName);
             if (funclet.Pointer == IntPtr.Zero)
             {
+                LLVMTypeRef returnType;
+                if (kind == ILExceptionRegionKind.Filter || kind == ILExceptionRegionKind.Catch)
+                {
+                    returnType = LLVM.Int32Type();
+                }
+                else
+                {
+                    returnType = LLVM.VoidType();
+                }
+
                 // Funclets only accept a shadow stack pointer
-                LLVMTypeRef universalFuncletSignature = LLVM.FunctionType(LLVM.VoidType(), new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0) }, false);
+                LLVMTypeRef universalFuncletSignature = LLVM.FunctionType(returnType, new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0) }, false);
                 funclet = LLVM.AddFunction(Module, funcletName, universalFuncletSignature);
                 _exceptionFunclets.Add(funclet);
             }
@@ -468,7 +484,25 @@ namespace Internal.IL
 
             if (ehRegion != null)
             {
-                blockFunclet = GetOrCreateFunclet(ehRegion.ILRegion.Kind, ehRegion.ILRegion.HandlerOffset);
+                ILExceptionRegionKind kind;
+                int funcletOffset;
+                if (ehRegion.ILRegion.Kind == ILExceptionRegionKind.Filter && 
+                    IsOffsetContained(block.StartOffset, ehRegion.ILRegion.FilterOffset, ehRegion.ILRegion.HandlerOffset - ehRegion.ILRegion.FilterOffset))
+                {
+                    kind = ILExceptionRegionKind.Filter;
+                    funcletOffset = ehRegion.ILRegion.FilterOffset;
+                }
+                else
+                {
+                    kind = ehRegion.ILRegion.Kind;
+                    if (kind == ILExceptionRegionKind.Filter)
+                    {
+                        kind = ILExceptionRegionKind.Catch;
+                    }
+                    funcletOffset = ehRegion.ILRegion.HandlerOffset;
+                }
+
+                blockFunclet = GetOrCreateFunclet(ehRegion.ILRegion.Kind, funcletOffset);
             }
             else
             {
@@ -487,10 +521,11 @@ namespace Internal.IL
             // Iterate backwards to find the most nested region
             for (int i = _exceptionRegions.Length - 1; i >= 0; i--)
             {
-                ExceptionRegion region = _exceptionRegions[i];
-                if (IsOffsetContained(offset, region.ILRegion.HandlerOffset, region.ILRegion.HandlerLength))
+                ILExceptionRegion region = _exceptionRegions[i].ILRegion;
+                if (IsOffsetContained(offset, region.HandlerOffset, region.HandlerLength) ||
+                    (region.Kind == ILExceptionRegionKind.Filter && IsOffsetContained(offset, region.FilterOffset, region.HandlerOffset - region.FilterOffset)))
                 {
-                    return region;
+                    return _exceptionRegions[i];
                 }
             }
 
@@ -511,8 +546,43 @@ namespace Internal.IL
                 }
             }
 
+            // Push an exception object for catch and filter
+            if (basicBlock.HandlerStart || basicBlock.FilterStart)
+            {
+                foreach (ExceptionRegion ehRegion in _exceptionRegions)
+                {
+                    if (ehRegion.ILRegion.HandlerOffset == basicBlock.StartOffset ||
+                        ehRegion.ILRegion.FilterOffset == basicBlock.StartOffset)
+                    {
+                        if (ehRegion.ILRegion.Kind != ILExceptionRegionKind.Finally)
+                        {
+                            _stack.Push(_spilledExpressions[0]);
+                        }
+                        break;
+                    }
+                }
+            }
+
             _curBasicBlock = GetLLVMBasicBlockForBlock(basicBlock);
             _currentFunclet = GetFuncletForBlock(basicBlock);
+
+            if (basicBlock.TryStart)
+            {
+                foreach (ExceptionRegion ehRegion in _exceptionRegions)
+                {
+                    if(ehRegion.ILRegion.TryOffset == basicBlock.StartOffset)
+                    {
+                        if (ehRegion.ILRegion.Kind == ILExceptionRegionKind.Filter)
+                        {
+                            MarkBasicBlock(_basicBlocks[ehRegion.ILRegion.FilterOffset]);
+                        }
+                        else
+                        {
+                            MarkBasicBlock(_basicBlocks[ehRegion.ILRegion.HandlerOffset]);
+                        }
+                    }
+                }
+            }
 
             LLVM.PositionBuilderAtEnd(_builder, _curBasicBlock);
         }
@@ -2908,6 +2978,7 @@ namespace Internal.IL
 
         private void ImportEndFilter()
         {
+            LLVM.BuildRet(_builder, _stack.Pop().ValueAsInt32(_builder, false));
         }
 
         private void ImportCpBlk()
@@ -3181,7 +3252,18 @@ namespace Internal.IL
             }
 
             MarkBasicBlock(target);
-            LLVM.BuildBr(_builder, GetLLVMBasicBlockForBlock(target));
+
+            // If the target is in the current funclet, jump to it. If it's not, we're in a catch
+            // block and need to return the offset to the calling funclet to jump to the block
+            LLVMValueRef targetFunclet = GetFuncletForBlock(target);
+            if (_currentFunclet.Pointer.Equals(targetFunclet.Pointer))
+            {
+                LLVM.BuildBr(_builder, GetLLVMBasicBlockForBlock(target));
+            }
+            else
+            {
+                LLVM.BuildRet(_builder, BuildConstInt32(target.StartOffset));
+            }
         }
 
         private static bool IsOffsetContained(int offset, int start, int length)
