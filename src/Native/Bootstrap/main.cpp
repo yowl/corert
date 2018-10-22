@@ -217,10 +217,24 @@ Object * __load_string_literal(const char * string)
     return pString;
 }
 
+// Exception wrapper type that allows us to differentiate managed and native exceptions
+class ManagedExceptionWrapper : exception
+{
+public:
+    ManagedExceptionWrapper(void* pManagedException)
+    {
+        m_pManagedException = pManagedException;
+    }
+
+private:
+    void* m_pManagedException;
+};
+
 extern "C" void RhpThrowEx(void * pEx)
 {
-    throw "RhpThrowEx";
+    throw ManagedExceptionWrapper(pEx);
 }
+
 extern "C" void RhpThrowHwEx()
 {
     throw "RhpThrowHwEx";

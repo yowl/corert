@@ -59,7 +59,9 @@ namespace Internal.IL
         private MethodDebugInformation _debugInformation;
         private LLVMMetadataRef _debugFunction;
         private TypeDesc _constrainedType = null;
-        List<LLVMValueRef> _exceptionFunclets;
+        private List<LLVMValueRef> _exceptionFunclets;
+        private readonly Dictionary<Tuple<int, IntPtr>, LLVMBasicBlockRef> _landingPads;
+        private readonly Dictionary<IntPtr, LLVMBasicBlockRef> _funcletUnreachableBlocks = new Dictionary<IntPtr, LLVMBasicBlockRef>();
 
         /// <summary>
         /// Stack of values pushed onto the IL stack: locals, arguments, values, function pointer, ...
@@ -87,6 +89,7 @@ namespace Internal.IL
             public bool HandlerStart;
 
             public LLVMBasicBlockRef Block;
+            public List<LLVMBasicBlockRef> LLVMBlocks = new List<LLVMBasicBlockRef>(1);
         }
 
         private class ExceptionRegion
@@ -112,6 +115,10 @@ namespace Internal.IL
             var ilExceptionRegions = methodIL.GetExceptionRegions();
             _exceptionRegions = new ExceptionRegion[ilExceptionRegions.Length];
             _exceptionFunclets = new List<LLVMValueRef>(_exceptionRegions.Length);
+            if (_exceptionRegions.Length != 0)
+            {
+                _landingPads = new Dictionary<Tuple<int, IntPtr>, LLVMBasicBlockRef>();
+            }
             int curRegion = 0;
             foreach (ILExceptionRegion region in ilExceptionRegions.OrderBy(region => region.TryOffset))
             {
@@ -144,10 +151,16 @@ namespace Internal.IL
                 // Change the function body to trap
                 foreach (BasicBlock block in _basicBlocks)
                 {
-                    if (block != null && block.Block.Pointer != IntPtr.Zero)
+                    if (block != null)
                     {
-                        LLVM.ReplaceAllUsesWith(block.Block, trapBlock);
-                        LLVM.DeleteBasicBlock(block.Block);
+                        foreach (LLVMBasicBlockRef llvmBlock in block.LLVMBlocks)
+                        {
+                            if (llvmBlock.Pointer != IntPtr.Zero)
+                            {
+                                LLVM.ReplaceAllUsesWith(llvmBlock, trapBlock);
+                                LLVM.DeleteBasicBlock(llvmBlock);
+                            }
+                        }
                     }
                 }
 
@@ -179,6 +192,9 @@ namespace Internal.IL
 
         private void GenerateProlog()
         {
+            // Avoid appearing to be in any exception regions
+            _currentOffset = -1; 
+
             LLVMBasicBlockRef prologBlock = LLVM.AppendBasicBlock(_llvmFunction, "Prolog");
             LLVM.PositionBuilderAtEnd(_builder, prologBlock);
 
@@ -468,6 +484,7 @@ namespace Internal.IL
                 LLVMValueRef blockFunclet = GetFuncletForBlock(block);
 
                 block.Block = LLVM.AppendBasicBlock(blockFunclet, "Block" + block.StartOffset.ToString("X"));
+                block.LLVMBlocks.Add(block.Block);
             }
             return block.Block;
         }
@@ -510,6 +527,24 @@ namespace Internal.IL
             }
 
             return blockFunclet;
+        }
+
+        /// <summary>
+        /// Returns the most nested try region the current offset is in
+        /// </summary>
+        private ExceptionRegion GetCurrentTryRegion()
+        {
+            // Iterate backwards to find the most nested region
+            for (int i = _exceptionRegions.Length - 1; i >= 0; i--)
+            {
+                ILExceptionRegion region = _exceptionRegions[i].ILRegion;
+                if (IsOffsetContained(_currentOffset - 1, region.TryOffset, region.TryLength))
+                {
+                    return _exceptionRegions[i];
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -556,6 +591,7 @@ namespace Internal.IL
                     {
                         if (ehRegion.ILRegion.Kind != ILExceptionRegionKind.Finally)
                         {
+                            // todo: should this be converted to the exception's type?
                             _stack.Push(_spilledExpressions[0]);
                         }
                         break;
@@ -589,7 +625,7 @@ namespace Internal.IL
 
         private void EndImportingBasicBlock(BasicBlock basicBlock)
         {
-            var terminator = basicBlock.Block.GetBasicBlockTerminator();
+            var terminator = basicBlock.LLVMBlocks[basicBlock.LLVMBlocks.Count - 1].GetBasicBlockTerminator();
             if (terminator.Pointer == IntPtr.Zero)
             {
                 if (_basicBlocks.Length > _currentOffset)
@@ -2060,8 +2096,26 @@ namespace Internal.IL
             }
 
 
-            LLVMValueRef llvmReturn = LLVM.BuildCall(_builder, fn, llvmArgs.ToArray(), string.Empty);
-            
+            LLVMValueRef llvmReturn;
+
+            ExceptionRegion currentTryRegion = GetCurrentTryRegion();
+
+            if (currentTryRegion == null)
+            {
+                llvmReturn = LLVM.BuildCall(_builder, fn, llvmArgs.ToArray(), string.Empty);
+            }
+            else
+            {
+                LLVMBasicBlockRef nextInstrBlock = LLVM.AppendBasicBlock(_currentFunclet, String.Format("Try{0:X}", _currentOffset));
+
+                llvmReturn = LLVM.BuildInvoke(_builder, fn, llvmArgs.ToArray(),
+                    nextInstrBlock, GetOrCreateLandingPad(currentTryRegion, _currentFunclet), string.Empty);
+
+                _curBasicBlock = nextInstrBlock;
+                _currentBasicBlock.LLVMBlocks.Add(_curBasicBlock);
+                LLVM.PositionBuilderAtEnd(_builder, _curBasicBlock);
+            }
+
             if (!returnType.IsVoid)
             {
                 if (needsReturnSlot)
@@ -2077,6 +2131,32 @@ namespace Internal.IL
             {
                 return null;
             }
+        }
+
+        private LLVMBasicBlockRef GetOrCreateLandingPad(ExceptionRegion tryRegion, LLVMValueRef funclet)
+        {
+            Tuple<int, IntPtr> landingPadKey = Tuple.Create(tryRegion.ILRegion.TryOffset, funclet.Pointer);
+            if (_landingPads.TryGetValue(landingPadKey, out LLVMBasicBlockRef landingPad))
+            {
+                return landingPad;
+            }
+
+            if (GxxPersonality.Pointer.Equals(IntPtr.Zero))
+            {
+                GxxPersonality = LLVM.AddFunction(Module, "__gxx_personality_v0", LLVMTypeRef.FunctionType(LLVM.Int32Type(), new LLVMTypeRef[0], true));
+            }
+
+            landingPad = LLVM.AppendBasicBlock(_currentFunclet, "LandingPad" + tryRegion.ILRegion.TryOffset.ToString("X"));
+            _landingPads[landingPadKey] = landingPad;
+
+            LLVMBuilderRef landingPadBuilder = LLVM.CreateBuilder();
+            LLVM.PositionBuilderAtEnd(landingPadBuilder, landingPad);
+            LLVMValueRef pad = LLVM.BuildLandingPad(landingPadBuilder, LLVM.PointerType(LLVM.Int8Type(), 0), GxxPersonality, 1, "");
+            LLVM.AddClause(pad, LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0)));
+            EmitTrapCall(landingPadBuilder);
+            LLVM.DisposeBuilder(landingPadBuilder);
+
+            return landingPad;
         }
 
         private void AddMethodReference(MethodDesc method)
@@ -3038,7 +3118,49 @@ namespace Internal.IL
         {
             var exceptionObject = _stack.Pop();
 
-            EmitTrapCall();
+            if (RhpThrowEx.Pointer.Equals(IntPtr.Zero))
+            {
+                RhpThrowEx = LLVM.AddFunction(Module, "RhpThrowEx", LLVM.FunctionType(LLVMTypeRef.VoidType(), new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0) }, false));
+            }
+
+            LLVMValueRef[] args = new LLVMValueRef[] { exceptionObject.ValueAsType(LLVM.PointerType(LLVM.Int8Type(), 0), _builder) };
+            ExceptionRegion currentExceptionRegion = GetCurrentTryRegion();
+            if (currentExceptionRegion == null)
+            {
+                LLVM.BuildCall(_builder, RhpThrowEx, args, "");
+                LLVM.BuildUnreachable(_builder);
+            }
+            else
+            {
+                LLVM.BuildInvoke(_builder, RhpThrowEx, args, GetOrCreateUnreachableBlock(), GetOrCreateLandingPad(currentExceptionRegion, _currentFunclet), "");
+            }
+
+            for (int i = 0; i < _exceptionRegions.Length; i++)
+            {
+                var r = _exceptionRegions[i];
+
+                if (IsOffsetContained(_currentOffset - 1, r.ILRegion.TryOffset, r.ILRegion.TryLength))
+                {
+                    MarkBasicBlock(_basicBlocks[r.ILRegion.HandlerOffset]);
+                }
+            }
+        }
+
+        private LLVMBasicBlockRef GetOrCreateUnreachableBlock()
+        {
+            if(_funcletUnreachableBlocks.TryGetValue(_currentFunclet.Pointer, out LLVMBasicBlockRef unreachableBlock))
+            {
+                return unreachableBlock;
+            }
+
+            unreachableBlock = LLVM.AppendBasicBlock(_currentFunclet, "Unreachable");
+            LLVMBuilderRef unreachableBuilder = LLVM.CreateBuilder();
+            LLVM.PositionBuilderAtEnd(unreachableBuilder, unreachableBlock);
+            LLVM.BuildUnreachable(unreachableBuilder);
+            LLVM.DisposeBuilder(unreachableBuilder);
+            _funcletUnreachableBlocks[_currentFunclet.Pointer] = unreachableBlock;
+
+            return unreachableBlock;
         }
 
         private LLVMValueRef GetInstanceFieldAddress(StackEntry objectEntry, FieldDesc field)
@@ -3247,6 +3369,8 @@ namespace Internal.IL
                     // Work backwards through containing finally blocks to call them in the right order
                     BasicBlock finallyBlock = _basicBlocks[r.ILRegion.HandlerOffset];
                     MarkBasicBlock(finallyBlock);
+
+                    // todo morganb: this should use invoke if the finally is inside of an outer try block
                     LLVM.BuildCall(_builder, GetFuncletForBlock(finallyBlock), new LLVMValueRef[] { LLVM.GetFirstParam(_currentFunclet) }, String.Empty);
                 }
             }
@@ -3499,14 +3623,19 @@ namespace Internal.IL
             ThrowHelper.ThrowInvalidProgramException();
         }
 
-        private void EmitTrapCall()
+        private void EmitTrapCall(LLVMBuilderRef builder = default)
         {
+            if(builder.Pointer == IntPtr.Zero)
+            {
+                builder = _builder;
+            }
+
             if (TrapFunction.Pointer == IntPtr.Zero)
             {
                 TrapFunction = LLVM.AddFunction(Module, "llvm.trap", LLVM.FunctionType(LLVM.VoidType(), Array.Empty<LLVMTypeRef>(), false));
             }
-            LLVM.BuildCall(_builder, TrapFunction, Array.Empty<LLVMValueRef>(), string.Empty);
-            LLVM.BuildUnreachable(_builder);
+            LLVM.BuildCall(builder, TrapFunction, Array.Empty<LLVMValueRef>(), string.Empty);
+            LLVM.BuildUnreachable(builder);
         }
 
         private void EmitDoNothingCall()

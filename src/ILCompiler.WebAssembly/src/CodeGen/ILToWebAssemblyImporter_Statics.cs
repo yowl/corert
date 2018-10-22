@@ -115,6 +115,8 @@ namespace Internal.IL
         static LLVMValueRef DebugtrapFunction = default(LLVMValueRef);
         static LLVMValueRef TrapFunction = default(LLVMValueRef);
         static LLVMValueRef DoNothingFunction = default(LLVMValueRef);
+        static LLVMValueRef RhpThrowEx = default(LLVMValueRef);
+        public static LLVMValueRef GxxPersonality = default(LLVMValueRef);
 
         private static IEnumerable<string> GetParameterNamesForMethod(MethodDesc method)
         {
