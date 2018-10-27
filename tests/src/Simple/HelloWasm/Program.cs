@@ -5,6 +5,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
+using System.Globalization;
 #if PLATFORM_WINDOWS
 using CpObj;
 #endif
@@ -15,20 +16,34 @@ public static class Program
 //    [ThreadStatic]
 //    private static int threadStaticInt;
 
+//    [DllImport("*")]
+//    private static unsafe extern int setenv(byte* str, byte* unused, int overwrite);
+
     private static unsafe int Main(string[] args)
     {
-
+        // mono uses ninja.WriteLine ("emcc_flags = -Os -g -s DISABLE_EXCEPTION_CATCHING=0 -s ASSERTIONS=1 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s BINARYEN=1 -s \"BINARYEN_TRAP_MODE=\'clamp\'\" -s TOTAL_MEMORY=134217728 -s ALIASING_FUNCTION_POINTERS=0 -s NO_EXIT_RUNTIME=1 -s ERROR_ON_UNDEFINED_SYMBOLS=1 -s \"EXTRA_EXPORTED_RUNTIME_METHODS=[\'ccall\', \'cwrap\', \'setValue\', \'getValue\', \'UTF8ToString\']\" -s \"EXPORTED_FUNCTIONS=[\'___cxa_is_pointer_type\', \'___cxa_can_catch\']\"");
+//        CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator = ".";
+//        CultureInfo.InvariantCulture.NumberFormat.NumberDecimalSeparator = ".";
+        PrintLine((1.2345d).ToString());
         PrintLine("Starting");
-        var x = 0;
+//        var x = 0;
         byte[] res = RayTraceBenchmark.BenchmarkMain.Start();
-        for (var i = 0; i < res.Length; i++)
+        byte[] rgba = RayTraceBenchmark.BenchmarkMain.ConvertRGBToBGRA(res);
+//        SetEnv("ARRAYPTR","17");
+//        for (var i = 0; i < rgba.Length; i++)
+//        {
+//            PrintLine(rgba[i].ToString());
+//            x++;
+//        }
+        int heapPtr = 100;
+        fixed (byte* arrayPtr = rgba)
         {
-            PrintLine(res[i].ToString());
-            x++;
+            heapPtr = (int)arrayPtr;
         }
         PrintLine("Done");
-        return 100;
+        return heapPtr;
     }
+
 
     private static int StaticDelegateTarget()
     {         
@@ -48,7 +63,36 @@ public static class Program
             }
         }
     }
-    
+
+    public static unsafe void SetEnv(string name, string value)
+    {
+        int length = name.Length;
+        var nameStr = new byte[length + 1];
+        fixed (char* curChar = name)
+        {
+            for (int i = 0; i < length; i++)
+            {
+                nameStr[i] = (byte)(*(curChar + i));
+            }
+            nameStr[length] = 0;
+        }
+        length = value.Length;
+        var valueStr = new byte[length + 1];
+        fixed (char* curChar = value)
+        {
+            for (int i = 0; i < length; i++)
+            {
+                valueStr[i] = (byte)(*(curChar + i));
+            }
+            valueStr[length] = 0;
+        }
+//        fixed (byte* bytePtr = valueStr)
+//        fixed (byte* namePtr = nameStr)
+//        {
+//            setenv(namePtr, bytePtr, 1);
+//        }
+    }
+
     public static void PrintLine(string s)
     {
         PrintString(s);
