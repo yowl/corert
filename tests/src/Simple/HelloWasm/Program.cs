@@ -9,292 +9,23 @@ using System.Collections.Generic;
 using CpObj;
 #endif
 
-internal static class Program
+public static class Program
 {
-    private static int staticInt;
-    [ThreadStatic]
-    private static int threadStaticInt;
+//    private static int staticInt;
+//    [ThreadStatic]
+//    private static int threadStaticInt;
+
     private static unsafe int Main(string[] args)
     {
+
         PrintLine("Starting");
-
-        Add(1, 2);
-        int tempInt = 0;
-        int tempInt2 = 0;
-        (*(&tempInt)) = 9;
-        if(tempInt == 9)
+        var x = 0;
+        byte[] res = RayTraceBenchmark.BenchmarkMain.Start();
+        for (var i = 0; i < res.Length; i++)
         {
-            PrintLine("Hello from C#!");
+            PrintLine(res[i].ToString());
+            x++;
         }
-
-        int* targetAddr = (tempInt > 0) ? (&tempInt2) : (&tempInt);
-
-        (*targetAddr) = 1;
-        if(tempInt2 == 1 && tempInt == 9)
-        {
-            PrintLine("basic block stack entry Test: Ok.");
-        }
-
-        if(ILHelpers.ILHelpersTest.InlineAssignByte() == 100)
-        {
-            PrintLine("Inline assign byte Test: Ok.");
-        }
-        else
-        {
-            PrintLine("Inline assign byte Test: Failed.");
-        }
-
-        int dupTestInt = 9;
-        if(ILHelpers.ILHelpersTest.DupTest(ref dupTestInt) == 209 && dupTestInt == 209)
-        {
-            PrintLine("dup test: Ok.");
-        }
-        else
-        {
-            PrintLine("dup test: Failed.");
-        }
-
-        TestClass tempObj = new TestDerivedClass(1337);
-        tempObj.TestMethod("Hello");
-        tempObj.TestVirtualMethod("Hello");
-        tempObj.TestVirtualMethod2("Hello");
-
-        TwoByteStr str = new TwoByteStr() { first = 1, second = 2 };
-        TwoByteStr str2 = new TwoByteStr() { first = 3, second = 4 };
-        *(&str) = str2;
-        str2 = *(&str);
-
-        if (str2.second == 4)
-        {
-            PrintLine("value type int field test: Ok.");
-        }
-        
-        staticInt = 5;
-        if (staticInt == 5)
-        {
-            PrintLine("static int field test: Ok.");
-        }
-
-        if(threadStaticInt == 0)
-        {
-            PrintLine("thread static int initial value field test: Ok.");
-        }
-
-        threadStaticInt = 9;
-        if(threadStaticInt == 9)
-        {
-            PrintLine("thread static int field test: Ok.");
-        }
-
-        StaticCtorTest();
-
-        var boxedInt = (object)tempInt;
-        if(((int)boxedInt) == 9)
-        {
-            PrintLine("box test: Ok.");
-        }
-        else
-        {
-            PrintLine("box test: Failed. Value:");
-            PrintLine(boxedInt.ToString());
-        }
-        
-        var boxedStruct = (object)new BoxStubTest { Value = "Boxed Stub Test: Ok." };
-        PrintLine(boxedStruct.ToString());
-
-        int subResult = tempInt - 1;
-        if (subResult == 8)
-        {
-            PrintLine("Subtraction Test: Ok.");
-        }
-
-        int divResult = tempInt / 3;
-        if (divResult == 3)
-        {
-            PrintLine("Division Test: Ok.");
-        }
-
-        var not = Not(0xFFFFFFFF) == 0x00000000;
-        if (not)
-        {
-            PrintLine("not test: Ok.");
-        }
-
-        var negInt = Neg(42) == -42;
-        if (negInt)
-        {
-            PrintLine("negInt test: Ok.");
-        }
-
-        var shiftLeft = ShiftLeft(1, 2) == 4;
-        if (shiftLeft)
-        {
-            PrintLine("shiftLeft test: Ok.");
-        }
-
-        var shiftRight = ShiftRight(4, 2) == 1;
-        if (shiftRight)
-        {
-            PrintLine("shiftRight test: Ok.");
-        }
-
-        var unsignedShift = UnsignedShift(0xFFFFFFFFu, 4) == 0x0FFFFFFFu;
-        if (unsignedShift)
-        {
-            PrintLine("unsignedShift test: Ok.");
-        }
-        
-        var switchTest0 = SwitchOp(5, 5, 0);
-        if (switchTest0 == 10)
-        {
-            PrintLine("SwitchOp0 test: Ok.");
-        }
-
-        var switchTest1 = SwitchOp(5, 5, 1);
-        if (switchTest1 == 25)
-        {
-            PrintLine("SwitchOp1 test: Ok.");
-        }
-
-        var switchTestDefault = SwitchOp(5, 5, 20);
-        if (switchTestDefault == 0)
-        {
-            PrintLine("SwitchOpDefault test: Ok.");
-        }
-
-#if PLATFORM_WINDOWS
-        var cpObjTestA = new TestValue { Field = 1234 };
-        var cpObjTestB = new TestValue { Field = 5678 };
-        CpObjTest.CpObj(ref cpObjTestB, ref cpObjTestA);
-        if (cpObjTestB.Field == 1234)
-        {
-            PrintLine("CpObj test: Ok.");
-        }
-#endif
-
-        Func<int> staticDelegate = StaticDelegateTarget;
-        if(staticDelegate() == 7)
-        {
-            PrintLine("Static delegate test: Ok.");
-        }
-
-        tempObj.TestInt = 8;
-        Func<int> instanceDelegate = tempObj.InstanceDelegateTarget;
-        if(instanceDelegate() == 8)
-        {
-            PrintLine("Instance delegate test: Ok.");
-        }
-
-        Action virtualDelegate = tempObj.VirtualDelegateTarget;
-        virtualDelegate();
-
-        var arrayTest = new BoxStubTest[] { new BoxStubTest { Value = "Hello" }, new BoxStubTest { Value = "Array" }, new BoxStubTest { Value = "Test" } };
-        foreach(var element in arrayTest)
-            PrintLine(element.Value);
-
-        arrayTest[1].Value = "Array load/store test: Ok.";
-        PrintLine(arrayTest[1].Value);
-
-        int ii = 0;
-        arrayTest[ii++].Value = "dup ref test: Ok.";
-        PrintLine(arrayTest[0].Value);
-        
-        var largeArrayTest = new long[] { Int64.MaxValue, 0, Int64.MinValue, 0 };
-        if(largeArrayTest[0] == Int64.MaxValue &&
-            largeArrayTest[1] == 0 &&
-            largeArrayTest[2] == Int64.MinValue &&
-            largeArrayTest[3] == 0)
-        {
-            PrintLine("Large array load/store test: Ok.");
-        }
-
-        var smallArrayTest = new long[] { Int16.MaxValue, 0, Int16.MinValue, 0 };
-        if(smallArrayTest[0] == Int16.MaxValue &&
-            smallArrayTest[1] == 0 &&
-            smallArrayTest[2] == Int16.MinValue &&
-            smallArrayTest[3] == 0)
-        {
-            PrintLine("Small array load/store test: Ok.");
-        }
-
-        IntPtr returnedIntPtr = NewobjValueType();
-        if (returnedIntPtr.ToInt32() == 3)
-        {
-            PrintLine("Newobj value type test: Ok.");
-        }
-
-        StackallocTest();
-
-        IntToStringTest();
-
-        CastingTestClass castingTest = new DerivedCastingTestClass1();
-
-        PrintLine("interface call test: Ok " + (castingTest as ICastingTest1).GetValue().ToString());
-
-        if (((DerivedCastingTestClass1)castingTest).GetValue() == 1 && !(castingTest is DerivedCastingTestClass2))
-        {
-            PrintLine("Type casting with isinst & castclass to class test: Ok.");
-        }
-
-        // Instead of checking the result of `GetValue`, we use null check by now until interface dispatch is implemented.
-        if ((ICastingTest1)castingTest != null && !(castingTest is ICastingTest2))
-        {
-            PrintLine("Type casting with isinst & castclass to interface test: Ok.");
-        }
-
-        object arrayCastingTest = new BoxStubTest[] { new BoxStubTest { Value = "Array" }, new BoxStubTest { Value = "Cast" }, new BoxStubTest { Value = "Test" } };
-        PrintLine(((BoxStubTest[])arrayCastingTest)[0].Value);
-        PrintLine(((BoxStubTest[])arrayCastingTest)[1].Value);
-        PrintLine(((BoxStubTest[])arrayCastingTest)[2].Value);
-        if (!(arrayCastingTest is CastingTestClass[]))
-        {   
-            PrintLine("Type casting with isinst & castclass to array test: Ok.");
-        }
-
-        ldindTest();
-
-        InterfaceDispatchTest();
-
-        var testRuntimeHelpersInitArray = new long[] { 1, 2, 3 };
-        if (testRuntimeHelpersInitArray[0] == 1 &&
-            testRuntimeHelpersInitArray[1] == 2 &&
-            testRuntimeHelpersInitArray[2] == 3)
-        {
-            PrintLine("Runtime.Helpers array initialization test: Ok.");
-        }
-
-        var testMdArrayInstantiation = new int[2, 2];
-        if (testMdArrayInstantiation != null && testMdArrayInstantiation.GetLength(0) == 2 && testMdArrayInstantiation.GetLength(1) == 2)
-            PrintLine("Multi-dimension array instantiation test: Ok.");
-
-        floatDoubleTest();
-
-        // Create a ByReference<char> through the ReadOnlySpan ctor and call the ByReference.Value via the indexer.
-        var span = "123".AsSpan();
-        if (span[0] != '1'
-            || span[1] != '2'
-            || span[2] != '3')
-        {
-            PrintLine("ByReference intrinsics exercise via ReadOnlySpan failed");
-            PrintLine(span[0].ToString());
-            PrintLine(span[1].ToString());
-            PrintLine(span[2].ToString());
-        }
-        else
-        {
-            PrintLine("ByReference intrinsics exercise via ReadOnlySpan OK.");
-        }
-
-        TestConstrainedClassCalls();
-
-        TestValueTypeElementIndexing();
-        
-        TestArrayItfDispatch();
-
-        // This test should remain last to get other results before stopping the debugger
-        PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
-        System.Diagnostics.Debugger.Break();
-
         PrintLine("Done");
         return 100;
     }
@@ -304,7 +35,7 @@ internal static class Program
         return 7;
     }
 
-    private static unsafe void PrintString(string s)
+    public static unsafe void PrintString(string s)
     {
         int length = s.Length;
         fixed (char* curChar = s)
@@ -665,6 +396,7 @@ internal static class Program
             PrintLine("Failed.");
         }
     }
+
 
     [DllImport("*")]
     private static unsafe extern int printf(byte* str, byte* unused);
