@@ -41,7 +41,13 @@ namespace RayTraceBenchmark
 			p1.X += p2.X;
 			p1.Y += p2.Y;
 			p1.Z += p2.Z;
-			return p1;
+		    if (Benchmark.traceon)
+		    {
+		        Program.PrintLine("add op");
+		        Program.PrintLine(((int)(p1.Z * 1000)).ToString());
+		    }
+
+            return p1;
 		}
 
 		public static Vec3 operator-(Vec3 p1, Vec3 p2)
@@ -115,7 +121,8 @@ namespace RayTraceBenchmark
             var res = v / (Double)Math.Sqrt((v.X*v.X) + (v.Y*v.Y) + (v.Z*v.Z));
 		    if (Benchmark.traceon)
 		    {
-
+		        Program.PrintString("norm ");
+		        Program.PrintLine(((int)(res.Z * 1000)).ToString());
 		    }
 		    return res;
 		}
@@ -349,6 +356,10 @@ namespace RayTraceBenchmark
 					r.Dir = refraction_direction;
 					var refraction = trace(r, scene, depth + 1);
 					color += refraction * (1 - fresneleffect) * obj.Transparency;
+				    if (Benchmark.traceon)
+				    {
+				        Program.PrintLine("add refraction");
+				    }
 				}
 			}
 			return color;
@@ -396,7 +407,7 @@ namespace RayTraceBenchmark
 				        Program.PrintString(" ");
 				        Program.PrintString(pixels[i + 2].ToString());
 				        Program.PrintString(" ");
-				        Program.PrintString(pixel.Z.ToString());
+				        Program.PrintString(((int)(pixel.Z * 1000)).ToString());
                         Program.PrintLine(" ");
 				    }
                 }

@@ -24,22 +24,27 @@ public static class Program
         // mono uses ninja.WriteLine ("emcc_flags = -Os -g -s DISABLE_EXCEPTION_CATCHING=0 -s ASSERTIONS=1 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s BINARYEN=1 -s \"BINARYEN_TRAP_MODE=\'clamp\'\" -s TOTAL_MEMORY=134217728 -s ALIASING_FUNCTION_POINTERS=0 -s NO_EXIT_RUNTIME=1 -s ERROR_ON_UNDEFINED_SYMBOLS=1 -s \"EXTRA_EXPORTED_RUNTIME_METHODS=[\'ccall\', \'cwrap\', \'setValue\', \'getValue\', \'UTF8ToString\']\" -s \"EXPORTED_FUNCTIONS=[\'___cxa_is_pointer_type\', \'___cxa_can_catch\']\"");
 //        CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator = ".";
 //        CultureInfo.InvariantCulture.NumberFormat.NumberDecimalSeparator = ".";
-        PrintLine((1.2345d).ToString());
         PrintLine("Starting");
-//        var x = 0;
-        byte[] res = RayTraceBenchmark.BenchmarkMain.Start();
-        byte[] rgba = RayTraceBenchmark.BenchmarkMain.ConvertRGBToBGRA(res);
-//        SetEnv("ARRAYPTR","17");
-//        for (var i = 0; i < rgba.Length; i++)
-//        {
-//            PrintLine(rgba[i].ToString());
-//            x++;
-//        }
+        double z = 1.057;
+        var b = (byte)Math.Min(z * 255, 255);
+
+        PrintLine(b.ToString());
+        //        var x = 0;
+        //        byte[] res = RayTraceBenchmark.BenchmarkMain.Start();
+        //        byte[] rgba = RayTraceBenchmark.BenchmarkMain.ConvertRGBToBGRA(res);
+        //        SetEnv("ARRAYPTR","17");
+        //        for (var i = 0; i < rgba.Length; i++)
+        //        {
+        //            PrintLine(rgba[i].ToString());
+        //            x++;
+        //        }
+
+
         int heapPtr = 100;
-        fixed (byte* arrayPtr = rgba)
-        {
-            heapPtr = (int)arrayPtr;
-        }
+//        fixed (byte* arrayPtr = rgba)
+//        {
+//            heapPtr = (int)arrayPtr;
+//        }
         PrintLine("Done");
         return heapPtr;
     }
