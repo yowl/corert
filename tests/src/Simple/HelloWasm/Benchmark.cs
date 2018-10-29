@@ -13,9 +13,9 @@ using System.Threading.Tasks;
 #endif
 
 #if BIT64
-using Num = System.Double;
+using Num = System.Single;
 #else
-//using Num = System.Double;
+//using Num = System.Single;
 #endif
 
 namespace RayTraceBenchmark
@@ -25,11 +25,11 @@ namespace RayTraceBenchmark
 	// ==============================================
 	struct Vec3
 	{
-		public Double X, Y, Z;
+		public Single X, Y, Z;
 
 		public static readonly Vec3 Zero = new Vec3();
 
-		public Vec3(Double x, Double y, Double z)
+		public Vec3(Single x, Single y, Single z)
 		{
 			X = x;
 			Y = y;
@@ -41,12 +41,6 @@ namespace RayTraceBenchmark
 			p1.X += p2.X;
 			p1.Y += p2.Y;
 			p1.Z += p2.Z;
-		    if (Benchmark.traceon)
-		    {
-		        Program.PrintLine("add op");
-		        Program.PrintLine(((int)(p1.Z * 1000)).ToString());
-		    }
-
             return p1;
 		}
 
@@ -74,7 +68,7 @@ namespace RayTraceBenchmark
 			return p1;
 		}
 
-		public static Vec3 operator*(Vec3 p1, Double p2)
+		public static Vec3 operator*(Vec3 p1, Single p2)
 		{
 			p1.X *= p2;
 			p1.Y *= p2;
@@ -82,7 +76,7 @@ namespace RayTraceBenchmark
 			return p1;
 		}
 
-		public static Vec3 operator*(Double p1, Vec3 p2)
+		public static Vec3 operator*(Single p1, Vec3 p2)
 		{
 			p2.X = p1 * p2.X;
 			p2.Y = p1 * p2.Y;
@@ -98,7 +92,7 @@ namespace RayTraceBenchmark
 			return p1;
 		}
 
-		public static Vec3 operator/(Vec3 p1, Double p2)
+		public static Vec3 operator/(Vec3 p1, Single p2)
 		{
 			p1.X /= p2;
 			p1.Y /= p2;
@@ -106,24 +100,19 @@ namespace RayTraceBenchmark
 			return p1;
 		}
 
-		public static Double Dot(Vec3 v1, Vec3 v2)
+		public static Single Dot(Vec3 v1, Vec3 v2)
 		{
 			return (v1.X*v2.X) + (v1.Y*v2.Y) + (v1.Z*v2.Z);
 		}
 
-		public static Double Magnitude(Vec3 v)
+		public static Single Magnitude(Vec3 v)
 		{
-			return (Double)Math.Sqrt((v.X*v.X) + (v.Y*v.Y) + (v.Z*v.Z));
+			return (Single)Math.Sqrt((v.X*v.X) + (v.Y*v.Y) + (v.Z*v.Z));
 		}
 
 		public static Vec3 Normalize(Vec3 v)
 		{
-            var res = v / (Double)Math.Sqrt((v.X*v.X) + (v.Y*v.Y) + (v.Z*v.Z));
-		    if (Benchmark.traceon)
-		    {
-		        Program.PrintString("norm ");
-		        Program.PrintLine(((int)(res.Z * 1000)).ToString());
-		    }
+            var res = v / (Single)Math.Sqrt((v.X*v.X) + (v.Y*v.Y) + (v.Z*v.Z));
 		    return res;
 		}
 	}
@@ -137,12 +126,12 @@ namespace RayTraceBenchmark
 	class Sphere
 	{
 		public Vec3 Center;
-		public Double Radius;
+		public Single Radius;
 		public Vec3 Color;
-		public Double Reflection;
-		public Double Transparency;
+		public Single Reflection;
+		public Single Transparency;
 
-		public Sphere(Vec3 c, Double r, Vec3 clr, Double refl = 0, Double trans = 0)
+		public Sphere(Vec3 c, Single r, Vec3 clr, Single refl = 0, Single trans = 0)
 		{
 			Center = c;
 			Radius = r;
@@ -171,7 +160,7 @@ namespace RayTraceBenchmark
 			return true;
 		}
 
-		public static bool Intersect(Sphere sphere, Ray ray, out Double distance)
+		public static bool Intersect(Sphere sphere, Ray ray, out Single distance)
 		{
 			distance = 0;
 
@@ -191,12 +180,12 @@ namespace RayTraceBenchmark
 		        return false;
 		    }
 
-			var c = (Double)Math.Sqrt(r2 - b2);
+			var c = (Single)Math.Sqrt(r2 - b2);
 			var near = a - c;
 			var far  = a + c;
 			distance = (near < 0) ? far : near;
 //		    Program.PrintString("distance ");
-//		    if (distance != Double.MaxValue)
+//		    if (distance != Single.MaxValue)
 //		    {
 //		        Program.PrintLine("no longer max");
 //            }
@@ -230,24 +219,24 @@ namespace RayTraceBenchmark
 		public const int Height = 720;
 //	    public const int Width = 15;
 //	    public const int Height = 10;
-		private const Double fov = 45;
+		private const Single fov = 45;
 		private const int maxDepth = 6;
-		private const Double PI = (Double)Math.PI;
-	    public static bool traceon;
+		private const Single PI = (Single)Math.PI;
+//	    public static bool traceon;
 
         private static Vec3 trace (Ray ray, Scene scene, int depth)
 		{
-			var nearest = Double.MaxValue;
+			var nearest = Single.MaxValue;
             Sphere obj = null;
 
 		    // search the scene for nearest intersection
             foreach (var o in scene.Objects)
 			{
-				var distance = Double.MaxValue;
+				var distance = Single.MaxValue;
                 if (Sphere.Intersect(o, ray, out distance))
 				{
 //            Program.PrintLine("got intersection, check for nearest");
-//				    if (distance == Double.MaxValue)
+//				    if (distance == Single.MaxValue)
 //				    {
 //				        Program.PrintLine(" distance still max");
 //                    }
@@ -261,7 +250,7 @@ namespace RayTraceBenchmark
 //                    else if (distance > nearest)
 //                    {
 //                        Program.PrintLine(" distance > nearest");
-//                        if (nearest == Double.MaxValue)
+//                        if (nearest == Single.MaxValue)
 //                        {
 //                            Program.PrintLine("  nearest is max");
 //
@@ -270,7 +259,7 @@ namespace RayTraceBenchmark
 //                    else
 //                    {
 //				        Program.PrintLine(" distance equals nearest");
-//                        if (nearest == Double.MaxValue)
+//                        if (nearest == Single.MaxValue)
 //                        {
 //                            Program.PrintLine("  nearest is mac");
 //
@@ -323,8 +312,8 @@ namespace RayTraceBenchmark
 			}
 
 			var rayNormDot = Vec3.Dot(ray.Dir, normal);
-		    Double facing = Math.Max(0, -rayNormDot);
-		    Double fresneleffect = reflection_ratio + ((1 - reflection_ratio) * (Double)Math.Pow((1 - facing), 5));
+		    Single facing = Math.Max(0, -rayNormDot);
+		    Single fresneleffect = reflection_ratio + ((1 - reflection_ratio) * (Single)Math.Pow((1 - facing), 5));
 
 			// compute reflection
 			if (depth < maxDepth && reflection_ratio > 0)
@@ -349,17 +338,13 @@ namespace RayTraceBenchmark
 				var sin_t2_2 = sin_t1_2 * (eta * eta);
 				if (sin_t2_2 < 1)
 				{
-					var GC = normal * (Double)Math.Sqrt(1 - sin_t2_2);
+					var GC = normal * (Single)Math.Sqrt(1 - sin_t2_2);
 					var refraction_direction = GF - GC;
 					Ray r;
 					r.Org = point_of_hit - (normal * 1e-4f);
 					r.Dir = refraction_direction;
 					var refraction = trace(r, scene, depth + 1);
 					color += refraction * (1 - fresneleffect) * obj.Transparency;
-				    if (Benchmark.traceon)
-				    {
-				        Program.PrintLine("add refraction");
-				    }
 				}
 			}
 			return color;
@@ -368,15 +353,15 @@ namespace RayTraceBenchmark
 		public static byte[] Render(Scene scene, byte[] pixels)
 		{
 			var eye = Vec3.Zero;
-		    Double h = (Double)Math.Tan(((fov / 360) * (2 * PI)) / 2) * 2;
-		    Double w = h * Width / Height;
+		    Single h = (Single)Math.Tan(((fov / 360) * (2 * PI)) / 2) * 2;
+		    Single w = h * Width / Height;
 
 			for (int y = 0; y != Height; ++y)
 			{
 				for (int x = 0; x != Width; ++x)
 				{
-				    traceon = y == 361 && x == 363;
-				    Double xx = x, yy = y, ww = Width, hh = Height;
+//				    traceon = y == 361 && x == 363;
+				    Single xx = x, yy = y, ww = Width, hh = Height;
 					Vec3 dir;
 					dir.X = ((xx - (ww / 2.0f)) / ww)  * w;
 					dir.Y = (((hh/2.0f) - yy) / hh) * h;
@@ -398,18 +383,18 @@ namespace RayTraceBenchmark
 					pixels[i] = (byte)Math.Min(pixel.X * 255, 255);
 					pixels[i+1] = (byte)Math.Min(pixel.Y * 255, 255);
 					pixels[i+2] = (byte)Math.Min(pixel.Z * 255, 255);
-				    if (traceon)
-				    {
-				        Program.PrintString("pixel ");
-				        Program.PrintString(pixels[i].ToString());
-				        Program.PrintString(" ");
-				        Program.PrintString(pixels[i+1].ToString());
-				        Program.PrintString(" ");
-				        Program.PrintString(pixels[i + 2].ToString());
-				        Program.PrintString(" ");
-				        Program.PrintString(((int)(pixel.Z * 1000)).ToString());
-                        Program.PrintLine(" ");
-				    }
+//				    if (traceon)
+//				    {
+//				        Program.PrintString("pixel ");
+//				        Program.PrintString(pixels[i].ToString());
+//				        Program.PrintString(" ");
+//				        Program.PrintString(pixels[i+1].ToString());
+//				        Program.PrintString(" ");
+//				        Program.PrintString(pixels[i + 2].ToString());
+//				        Program.PrintString(" ");
+//				        Program.PrintString(((int)(pixel.Z * 1000)).ToString());
+//                        Program.PrintLine(" ");
+//				    }
                 }
 			}
 

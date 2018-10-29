@@ -29,9 +29,9 @@ public static class Program
         var b = (byte)Math.Min(z * 255, 255);
 
         PrintLine(b.ToString());
-        //        var x = 0;
-        //        byte[] res = RayTraceBenchmark.BenchmarkMain.Start();
-        //        byte[] rgba = RayTraceBenchmark.BenchmarkMain.ConvertRGBToBGRA(res);
+//        var x = 0;
+        byte[] res = RayTraceBenchmark.BenchmarkMain.Start();
+        byte[] rgba = RayTraceBenchmark.BenchmarkMain.ConvertRGBToBGRA(res);
         //        SetEnv("ARRAYPTR","17");
         //        for (var i = 0; i < rgba.Length; i++)
         //        {
@@ -41,10 +41,10 @@ public static class Program
 
 
         int heapPtr = 100;
-//        fixed (byte* arrayPtr = rgba)
-//        {
-//            heapPtr = (int)arrayPtr;
-//        }
+        fixed (byte* arrayPtr = rgba)
+        {
+            heapPtr = (int)arrayPtr;
+        }
         PrintLine("Done");
         return heapPtr;
     }
