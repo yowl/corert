@@ -312,6 +312,8 @@ internal static class Program
             PrintLine(rvaFieldValue.ToString());
         }
 
+        CallMe(123);
+
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
         System.Diagnostics.Debugger.Break();
@@ -319,6 +321,15 @@ internal static class Program
         PrintLine("Done");
         return 100;
     }
+
+    [System.Runtime.InteropServices.NativeCallable(EntryPoint = "CallMe")]
+    private static void _CallMe(int x)
+    {
+        Console.WriteLine("X is " + x.ToString());
+    }
+
+    [System.Runtime.InteropServices.DllImport("*")]
+    private static extern void CallMe(int x);
 
     private static int StaticDelegateTarget()
     {         
@@ -961,4 +972,30 @@ class ClassWithSealedVTable : ISomeItf
 interface ISomeItf
 {
     int GetValue();
+}
+
+namespace System.Runtime.InteropServices
+{
+    /// <summary>
+    /// Any method marked with NativeCallableAttribute can be directly called from
+    /// native code. The function token can be loaded to a local variable using LDFTN
+    /// and passed as a callback to native method.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method)]
+    public sealed class NativeCallableAttribute : Attribute
+    {
+        public NativeCallableAttribute()
+        {
+        }
+
+        /// <summary>
+        /// Optional. If omitted, compiler will choose one for you.
+        /// </summary>
+        public CallingConvention CallingConvention;
+
+        /// <summary>
+        /// Optional. If omitted, then the method is native callable, but no EAT is emitted.
+        /// </summary>
+        public string EntryPoint;
+    }
 }
