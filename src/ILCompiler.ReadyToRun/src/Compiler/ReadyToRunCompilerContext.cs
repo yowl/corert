@@ -59,9 +59,13 @@ namespace ILCompiler
 
             TypeDesc fieldType = field.FieldType;
             if (fieldType.IsValueType)
-                return ((DefType)fieldType).ContainsGCPointers;
+            {
+                return !fieldType.IsPrimitive && !fieldType.IsEnum; // In CoreCLR, all structs are implicitly boxed i.e. stored as GC pointers
+            }
             else
+            {
                 return fieldType.IsGCPointer;
+            }
         }
 
         /// <summary>
@@ -71,6 +75,16 @@ namespace ILCompiler
         protected override RuntimeInterfacesAlgorithm GetRuntimeInterfacesAlgorithmForNonPointerArrayType(ArrayType type)
         {
             return BaseTypeRuntimeInterfacesAlgorithm.Instance;
+        }
+
+        protected override IEnumerable<MethodDesc> GetAllMethodsForEnum(TypeDesc enumType)
+        {
+            return enumType.GetMethods();
+        }
+
+        protected override IEnumerable<MethodDesc> GetAllMethodsForValueType(TypeDesc valueType)
+        {
+            return valueType.GetMethods();
         }
 
         private class VectorFieldLayoutAlgorithm : FieldLayoutAlgorithm

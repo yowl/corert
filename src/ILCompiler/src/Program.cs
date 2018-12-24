@@ -252,7 +252,7 @@ namespace ILCompiler
                 else if (_targetArchitectureStr.Equals("arm", StringComparison.OrdinalIgnoreCase))
                     _targetArchitecture = TargetArchitecture.ARM;
                 else if (_targetArchitectureStr.Equals("armel", StringComparison.OrdinalIgnoreCase))
-                    _targetArchitecture = TargetArchitecture.ARMEL;
+                    _targetArchitecture = TargetArchitecture.ARM;
                 else if (_targetArchitectureStr.Equals("arm64", StringComparison.OrdinalIgnoreCase))
                     _targetArchitecture = TargetArchitecture.ARM64;
                 else if (_targetArchitectureStr.Equals("wasm", StringComparison.OrdinalIgnoreCase))
@@ -376,14 +376,7 @@ namespace ILCompiler
                     {
                         EcmaModule module = typeSystemContext.GetModuleFromPath(inputFile.Value);
 
-                        if (entrypointModule == module)
-                        {
-                            compilationRoots.Add(new ManagedEntryPointRootProvider(entrypointModule));
-                        }
-                        else
-                        {
-                            compilationRoots.Add(new ReadyToRunLibraryRootProvider(module));
-                        }
+                        compilationRoots.Add(new ReadyToRunRootProvider(module));
                         inputModules.Add(module);
                         if (!_isInputVersionBubble)
                         {

@@ -1075,11 +1075,13 @@ namespace Internal.JitInterface
             var type = HandleToObject(cls) as MetadataType;
             if (type != null)
             {
-                *namespaceName = (byte*)GetPin(type.Namespace);
-                return (byte*)GetPin(type.Name);
+                if (namespaceName != null)
+                    *namespaceName = (byte*)GetPin(StringToUTF8(type.Namespace));
+                return (byte*)GetPin(StringToUTF8(type.Name));
             }
 
-            *namespaceName = null;
+            if (namespaceName != null)
+                *namespaceName = null;
             return null;
         }
         
@@ -1185,6 +1187,9 @@ namespace Internal.JitInterface
             if (_compilation.IsEffectivelySealed(type))
                 result |= CorInfoFlag.CORINFO_FLG_FINAL;
 
+            if (type.IsIntrinsic)
+                result |= CorInfoFlag.CORINFO_FLG_INTRINSIC_TYPE;
+
             if (metadataType != null)
             {
                 if (metadataType.ContainsGCPointers)
@@ -1196,6 +1201,9 @@ namespace Internal.JitInterface
                 // Assume overlapping fields for explicit layout.
                 if (metadataType.IsExplicitLayout)
                     result |= CorInfoFlag.CORINFO_FLG_OVERLAPPING_FIELDS;
+
+                if (metadataType.IsAbstract)
+                    result |= CorInfoFlag.CORINFO_FLG_ABSTRACT;
             }
 
             return (uint)result;
@@ -1578,13 +1586,7 @@ namespace Internal.JitInterface
 
                 case CorInfoClassId.CLASSID_RUNTIME_TYPE:
                     TypeDesc typeOfRuntimeType = _compilation.GetTypeOfRuntimeType();
-
-                    // RyuJIT doesn't expect this to be null and this is used in comparisons.
-                    // Returning null might make RyuJIT think a type with unknown type information (null)
-                    // is a runtime type and that's a pain to debug.
-                    Debug.Assert(typeOfRuntimeType != null);
-
-                    return ObjectToHandle(typeOfRuntimeType);
+                    return typeOfRuntimeType != null ? ObjectToHandle(typeOfRuntimeType) : null;
 
                 default:
                     throw new NotImplementedException();
@@ -1739,7 +1741,58 @@ namespace Internal.JitInterface
         }
 
         private CORINFO_CLASS_STRUCT_* mergeClasses(CORINFO_CLASS_STRUCT_* cls1, CORINFO_CLASS_STRUCT_* cls2)
-        { throw new NotImplementedException("mergeClasses"); }
+        {
+            TypeDesc type1 = HandleToObject(cls1);
+            TypeDesc type2 = HandleToObject(cls2);
+
+            TypeDesc merged = TypeExtensions.MergeTypesToCommonParent(type1, type2);
+
+#if DEBUG
+            // Make sure the merge is reflexive in the cases we "support".
+            TypeDesc reflexive = TypeExtensions.MergeTypesToCommonParent(type2, type1);
+
+            // If both sides are classes than either they have a common non-interface parent (in which case it is
+            // reflexive)
+            // OR they share a common interface, and it can be order dependent (if they share multiple interfaces
+            // in common)
+            if (!type1.IsInterface && !type2.IsInterface)
+            {
+                if (merged.IsInterface)
+                {
+                    Debug.Assert(reflexive.IsInterface);
+                }
+                else
+                {
+                    Debug.Assert(merged == reflexive);
+                }
+            }
+            // Both results must either be interfaces or classes.  They cannot be mixed.
+            Debug.Assert(merged.IsInterface == reflexive.IsInterface);
+
+            // If the result of the merge was a class, then the result of the reflexive merge was the same class.
+            if (!merged.IsInterface)
+            {
+                Debug.Assert(merged == reflexive);
+            }
+
+            // If both sides are arrays, then the result is either an array or g_pArrayClass.  The above is
+            // actually true about the element type for references types, but I think that that is a little
+            // excessive for sanity.
+            if (type1.IsArray && type2.IsArray)
+            {
+                TypeDesc arrayClass = _compilation.TypeSystemContext.GetWellKnownType(WellKnownType.Array);
+                Debug.Assert((merged.IsArray && reflexive.IsArray)
+                         || ((merged == arrayClass) && (reflexive == arrayClass)));
+            }
+
+            // The results must always be assignable
+            Debug.Assert(type1.CanCastTo(merged) && type2.CanCastTo(merged) && type1.CanCastTo(reflexive)
+                     && type2.CanCastTo(reflexive));
+#endif
+
+            return ObjectToHandle(merged);
+        }
+
         private CORINFO_CLASS_STRUCT_* getParentType(CORINFO_CLASS_STRUCT_* cls)
         { throw new NotImplementedException("getParentType"); }
 
@@ -1896,10 +1949,20 @@ namespace Internal.JitInterface
 
             CORINFO_FIELD_ACCESSOR fieldAccessor;
             CORINFO_FIELD_FLAGS fieldFlags = (CORINFO_FIELD_FLAGS)0;
+            uint fieldOffset = (field.IsStatic && field.HasRva ? 0xBAADF00D : (uint)field.Offset.AsInt);
 
             if (field.IsStatic)
             {
                 fieldFlags |= CORINFO_FIELD_FLAGS.CORINFO_FLG_FIELD_STATIC;
+
+#if READYTORUN
+                if (field.FieldType.IsValueType && field.HasGCStaticBase)
+                {
+                    // statics of struct types are stored as implicitly boxed in CoreCLR i.e.
+                    // we need to modify field access flags appropriately
+                    fieldFlags |= CORINFO_FIELD_FLAGS.CORINFO_FLG_FIELD_STATIC_IN_HEAP;
+                }
+#endif
 
                 if (field.HasRva)
                 {
@@ -1917,7 +1980,6 @@ namespace Internal.JitInterface
                 else if (field.OwningType.IsCanonicalSubtype(CanonicalFormKind.Any))
                 {
                     // The JIT wants to know how to access a static field on a generic type. We need a runtime lookup.
-
                     fieldAccessor = CORINFO_FIELD_ACCESSOR.CORINFO_FIELD_STATIC_READYTORUN_HELPER;
                     pResult->helper = CorInfoHelpFunc.CORINFO_HELP_READYTORUN_GENERIC_STATIC_BASE;
 
@@ -1974,7 +2036,6 @@ namespace Internal.JitInterface
                 }
                 else
                 {
-
                     fieldAccessor = CORINFO_FIELD_ACCESSOR.CORINFO_FIELD_STATIC_SHARED_STATIC_HELPER;
                     pResult->helper = CorInfoHelpFunc.CORINFO_HELP_READYTORUN_STATIC_BASE;
 
@@ -2010,6 +2071,21 @@ namespace Internal.JitInterface
                         helperId = ReadyToRunHelperId.GetNonGCStaticBase;
                     }
 
+#if READYTORUN
+                    if (!_compilation.NodeFactory.CompilationModuleGroup.ContainsType(field.OwningType))
+                    {
+                        // Static fields outside of the version bubble need to be accessed using the ENCODE_FIELD_ADDRESS
+                        // helper in accordance with ZapInfo::getFieldInfo in CoreCLR.
+                        pResult->fieldLookup = CreateConstLookupToSymbol(_compilation.SymbolNodeFactory.FieldAddress(field, _signatureContext));
+
+                        pResult->helper = CorInfoHelpFunc.CORINFO_HELP_READYTORUN_STATIC_BASE;
+
+                        fieldFlags &= ~CORINFO_FIELD_FLAGS.CORINFO_FLG_FIELD_STATIC_IN_HEAP; // The dynamic helper takes care of the unboxing
+                        fieldOffset = 0;
+                    }
+                    else
+#endif
+
                     if (helperId != ReadyToRunHelperId.Invalid)
                     {
                         pResult->fieldLookup = CreateConstLookupToSymbol(
@@ -2034,11 +2110,7 @@ namespace Internal.JitInterface
             pResult->fieldFlags = fieldFlags;
             pResult->fieldType = getFieldType(pResolvedToken.hField, &pResult->structType, pResolvedToken.hClass);
             pResult->accessAllowed = CorInfoIsAccessAllowedResult.CORINFO_ACCESS_ALLOWED;
-
-            if (!field.IsStatic || !field.HasRva)
-                pResult->offset = (uint)field.Offset.AsInt;
-            else
-                pResult->offset = 0xBAADF00D;
+            pResult->offset = fieldOffset;
 
             // TODO: We need to implement access checks for fields and methods.  See JitInterface.cpp in mrtjit
             //       and STS::AccessCheck::CanAccess.
@@ -2184,8 +2256,7 @@ namespace Internal.JitInterface
                 //      no live GC references in callee saved registers around the PInvoke callsite.
                 int size = 5 * this.PointerSize;
 
-                if (_compilation.TypeSystemContext.Target.Architecture == TargetArchitecture.ARM ||
-                    _compilation.TypeSystemContext.Target.Architecture == TargetArchitecture.ARMEL)
+                if (_compilation.TypeSystemContext.Target.Architecture == TargetArchitecture.ARM)
                     size += this.PointerSize; // m_ChainPointer
 
                 return (uint)size;
@@ -2267,27 +2338,41 @@ namespace Internal.JitInterface
             return (byte*)GetPin(StringToUTF8(method.Name));
         }
 
-        private byte* getMethodNameFromMetadata(CORINFO_METHOD_STRUCT_* ftn, byte** className, byte** namespaceName)
+        private byte* getMethodNameFromMetadata(CORINFO_METHOD_STRUCT_* ftn, byte** className, byte** namespaceName, byte** enclosingClassName)
         {
             MethodDesc method = HandleToObject(ftn);
+
+            string result = null;
+            string classResult = null;
+            string namespaceResult = null;
+            string enclosingResult = null;
+
+            result = method.Name;
 
             MetadataType owningType = method.OwningType as MetadataType;
             if (owningType != null)
             {
-                if (className != null)
-                    *className = (byte*)GetPin(StringToUTF8(owningType.Name));
-                if (namespaceName != null)
-                    *namespaceName = (byte*)GetPin(StringToUTF8(owningType.Namespace));
-            }
-            else
-            {
-                if (className != null)
-                    *className = null;
-                if (namespaceName != null)
-                    *namespaceName = null;
-            }
+                classResult = owningType.Name;
+                namespaceResult = owningType.Namespace;
 
-            return (byte*)GetPin(StringToUTF8(method.Name));
+                // Query enclosingClassName when the method is in a nested class
+                // and get the namespace of enclosing classes (nested class's namespace is empty)
+                var containingType = owningType.ContainingType;
+                if (containingType != null)
+                {
+                    enclosingResult = containingType.Name;
+                    namespaceResult = containingType.Namespace;
+                }
+            }
+            
+            if (className != null)
+                *className = classResult != null ? (byte*)GetPin(StringToUTF8(classResult)) : null;
+            if (namespaceName != null)
+                *namespaceName = namespaceResult != null ? (byte*)GetPin(StringToUTF8(namespaceResult)) : null;
+            if (enclosingClassName != null)
+                *enclosingClassName = enclosingResult != null ? (byte*)GetPin(StringToUTF8(enclosingResult)) : null;
+
+            return result != null ? (byte*)GetPin(StringToUTF8(result)) : null;
         }
 
         private uint getMethodHash(CORINFO_METHOD_STRUCT_* ftn)
@@ -2630,9 +2715,20 @@ namespace Internal.JitInterface
                 MethodDesc directMethod = constrainedType.GetClosestDefType().TryResolveConstraintMethodApprox(exactType, method, out forceUseRuntimeLookup);
                 if (directMethod == null && constrainedType.IsEnum)
                 {
+#if READYTORUN
+                    if (method.Name == "GetHashCode")
+                    {
+                        directMethod = constrainedType.UnderlyingType.FindVirtualFunctionTargetMethodOnObjectType(method);
+                        Debug.Assert(directMethod != null);
+
+                        constrainedType = constrainedType.UnderlyingType;
+                        method = directMethod;
+                    }
+#else
                     // Constrained calls to methods on enum methods resolve to System.Enum's methods. System.Enum is a reference
                     // type though, so we would fail to resolve and box. We have a special path for those to avoid boxing.
                     directMethod = _compilation.TypeSystemContext.TryResolveConstrainedEnumMethod(constrainedType, method);
+#endif
                 }
 
                 if (directMethod != null)
@@ -3268,7 +3364,7 @@ namespace Internal.JitInterface
             {
                 // TODO: https://github.com/dotnet/corert/issues/3877
                 TargetArchitecture targetArchitecture = _compilation.TypeSystemContext.Target.Architecture;
-                if (targetArchitecture == TargetArchitecture.ARM || targetArchitecture == TargetArchitecture.ARMEL)
+                if (targetArchitecture == TargetArchitecture.ARM)
                     return;
                 throw new NotImplementedException("Arbitrary relocs"); 
             }
@@ -3316,7 +3412,6 @@ namespace Internal.JitInterface
                     return (ushort)ILCompiler.DependencyAnalysis.RelocType.IMAGE_REL_BASED_REL32;
 
                 case TargetArchitecture.ARM:
-                case TargetArchitecture.ARMEL:
                     return (ushort)ILCompiler.DependencyAnalysis.RelocType.IMAGE_REL_BASED_THUMB_BRANCH24;
 
                 default:
@@ -3338,8 +3433,6 @@ namespace Internal.JitInterface
                 case TargetArchitecture.X64:
                     return (uint)ImageFileMachine.AMD64;
                 case TargetArchitecture.ARM:
-                    return (uint)ImageFileMachine.ARM;
-                case TargetArchitecture.ARMEL:
                     return (uint)ImageFileMachine.ARM;
                 case TargetArchitecture.ARM64:
                     return (uint)ImageFileMachine.ARM;

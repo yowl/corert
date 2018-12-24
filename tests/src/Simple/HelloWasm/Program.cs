@@ -312,7 +312,7 @@ internal static class Program
             PrintLine(rvaFieldValue.ToString());
         }
 
-        CallMe(123);
+        TestNativeCallback();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -321,15 +321,6 @@ internal static class Program
         PrintLine("Done");
         return 100;
     }
-
-    [System.Runtime.InteropServices.NativeCallable(EntryPoint = "CallMe")]
-    private static void _CallMe(int x)
-    {
-        Console.WriteLine("X is " + x.ToString());
-    }
-
-    [System.Runtime.InteropServices.DllImport("*")]
-    private static extern void CallMe(int x);
 
     private static int StaticDelegateTarget()
     {         
@@ -707,8 +698,34 @@ internal static class Program
         {
             PrintLine("Failed.");
         }
-
     }
+
+    private static bool callbackResult;
+    private static unsafe void TestNativeCallback()
+    {
+        CallMe(123);
+        PrintString("Native callback test: ");
+        if (callbackResult)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+    }
+
+    [System.Runtime.InteropServices.NativeCallable(EntryPoint = "CallMe")]
+    private static void _CallMe(int x)
+    {
+        if (x == 123)
+        {
+            callbackResult = true;
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("*")]
+    private static extern void CallMe(int x);
 
     [DllImport("*")]
     private static unsafe extern int printf(byte* str, byte* unused);
@@ -997,5 +1014,10 @@ namespace System.Runtime.InteropServices
         /// Optional. If omitted, then the method is native callable, but no EAT is emitted.
         /// </summary>
         public string EntryPoint;
+    }
+
+    [AttributeUsage((System.AttributeTargets.Method | System.AttributeTargets.Class))]
+    internal class McgIntrinsicsAttribute : Attribute
+    {
     }
 }
