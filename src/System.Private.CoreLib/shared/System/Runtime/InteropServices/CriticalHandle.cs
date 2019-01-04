@@ -42,16 +42,10 @@
 ** progress). The runtime cannot protect you from undefined program
 ** behvior that might result from such scenarios. You have been warned.
 **
-**
+** 
 ===========================================================*/
 
-using System;
-using System.IO;
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Runtime.ConstrainedExecution;
-using System.Runtime.Versioning;
-using System.Threading;
 
 /*
   Problems addressed by the CriticalHandle class:
@@ -73,10 +67,6 @@ using System.Threading;
   should be decorated with a reliability contract of the appropriate
   level. In most cases this should be:
     ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)
-  Also, any P/Invoke methods should use the
-  SuppressUnmanagedCodeSecurity attribute to avoid a runtime security
-  check that can also inject failures (even if the check is guaranteed
-  to pass).
 
   Subclasses must also implement the IsInvalid property so that the
   infrastructure can tell when critical finalization is actually required.
@@ -87,7 +77,7 @@ using System.Threading;
 
   Most classes using CriticalHandle should not provide a finalizer.  If they do
   need to do so (ie, for flushing out file buffers, needing to write some data
-  back into memory, etc), then they can provide a finalizer that will be
+  back into memory, etc), then they can provide a finalizer that will be 
   guaranteed to run before the CriticalHandle's critical finalizer.
 
   Subclasses are expected to be written as follows (note that
@@ -109,7 +99,7 @@ using System.Threading;
           get { return handle == IntPtr.Zero; }
       }
 
-      [DllImport(Win32Native.KERNEL32), SuppressUnmanagedCodeSecurity, ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
+      [DllImport(Interop.Libraries.Kernel32), SuppressUnmanagedCodeSecurity, ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
       private static extern bool CloseHandle(IntPtr handle);
 
       override protected bool ReleaseHandle()
@@ -123,30 +113,25 @@ using System.Threading;
   Note that when returning a CriticalHandle like this, P/Invoke will call your
   classes default constructor.
 
-      [DllImport(Win32Native.KERNEL32)]
+      [DllImport(Interop.Libraries.Kernel32)]
       private static extern MyCriticalHandleSubclass CreateHandle(int someState);
 
  */
 
 namespace System.Runtime.InteropServices
 {
-    // This class should not be serializable - it's a handle.  We require unmanaged
-    // code permission to subclass CriticalHandle to prevent people from writing a
-    // subclass and suddenly being able to run arbitrary native code with the
-    // same signature as CloseHandle.  This is technically a little redundant, but
-    // we'll do this to ensure we've cut off all attack vectors.  Similarly, all
-    // methods have a link demand to ensure untrusted code cannot directly edit
-    // or alter a handle.
-    public abstract class CriticalHandle : CriticalFinalizerObject, IDisposable
+    // This class should not be serializable - it's a handle
+    public abstract partial class CriticalHandle : CriticalFinalizerObject, IDisposable
     {
-        protected IntPtr handle;    // This must be protected so derived classes can use out params.
+        // ! Do not add or rearrange fields as the EE depends on this layout.
+        //------------------------------------------------------------------
+        protected IntPtr handle;    // This must be protected so derived classes can use out params. 
         private bool _isClosed;     // Set by SetHandleAsInvalid or Close/Dispose/finalization.
 
         // Creates a CriticalHandle class.  Users must then set the Handle property or allow P/Invoke marshaling to set it implicitly.
         protected CriticalHandle(IntPtr invalidHandleValue)
         {
             handle = invalidHandleValue;
-            _isClosed = false;
         }
 
         ~CriticalHandle()
@@ -166,28 +151,18 @@ namespace System.Runtime.InteropServices
             // Save last error from P/Invoke in case the implementation of
             // ReleaseHandle trashes it (important because this ReleaseHandle could
             // occur implicitly as part of unmarshaling another P/Invoke).
-            int lastError = PInvokeMarshal.GetLastWin32Error();
+            int lastError = Marshal.GetLastWin32Error();
 
-            ReleaseHandle();
+            if (!ReleaseHandle())
+                ReleaseHandleFailed();
 
-            PInvokeMarshal.SetLastWin32Error(lastError);
-
+            Marshal.SetLastWin32Error(lastError);
             GC.SuppressFinalize(this);
         }
 
         protected void SetHandle(IntPtr handle)
         {
             this.handle = handle;
-        }
-
-        internal void SetHandleInternal(IntPtr handle)
-        {
-        	SetHandle(handle);
-        }
-
-        internal IntPtr GetHandleInternal()
-        {
-        	return this.handle;
         }
 
         // Returns whether the handle has been explicitly marked as closed
@@ -238,7 +213,7 @@ namespace System.Runtime.InteropServices
         // you can deal with the failure and still free the handle).
         // The boolean returned should be true for success and false if a
         // catastrophic error occurred and you wish to trigger a diagnostic for
-        // debugging purposes (the SafeHandleCriticalFailure MDA).
+        // debugging purposes.
         protected abstract bool ReleaseHandle();
     }
 }

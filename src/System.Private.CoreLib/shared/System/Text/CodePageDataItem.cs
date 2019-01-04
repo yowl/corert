@@ -1,4 +1,4 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
@@ -11,16 +11,16 @@ namespace System.Text
         public string WebName { get; }
         public string HeaderName { get; }
         public string BodyName { get; }
-        public string EnglishName { get; }
+        public string DisplayName { get; }
         public uint Flags { get; }
 
         internal CodePageDataItem(
-            int codePage, 
-            int uiFamilyCodePage, 
-            string webName, 
-            string headerName, 
-            string bodyName, 
-            string englishName, 
+            int codePage,
+            int uiFamilyCodePage,
+            string webName,
+            string headerName,
+            string bodyName,
+            string displayName,
             uint flags)
         {
             CodePage = codePage;
@@ -28,7 +28,7 @@ namespace System.Text
             WebName = webName;
             HeaderName = headerName;
             BodyName = bodyName;
-            EnglishName = englishName;
+            DisplayName = displayName;
             Flags = flags;
         }
     }

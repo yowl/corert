@@ -6,11 +6,6 @@ namespace System.Globalization
 {
     public partial class CultureInfo : IFormatProvider
     {
-        private static CultureInfo GetUserDefaultCultureCacheOverride()
-        {
-            return null; // ICU doesn't provide a user override
-        }
-
         internal static CultureInfo GetUserDefaultCulture()
         {
             if (GlobalizationMode.Invariant)
@@ -20,8 +15,7 @@ namespace System.Globalization
             string localeName;
             if (CultureData.GetDefaultLocaleName(out localeName))
             {
-                cultureInfo = GetCultureByName(localeName, true);
-                cultureInfo._isReadOnly = true;
+                cultureInfo = GetCultureByName(localeName);
             }
             else
             {
@@ -33,7 +27,7 @@ namespace System.Globalization
 
         private static CultureInfo GetUserDefaultUICulture()
         {
-            return s_userDefaultCulture ?? InitializeUserDefaultCulture();
+            return InitializeUserDefaultCulture();
         }
     }
 }

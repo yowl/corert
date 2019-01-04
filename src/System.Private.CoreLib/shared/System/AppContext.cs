@@ -4,8 +4,8 @@
 
 using System.Collections.Generic;
 using System.Reflection;
-using System.Runtime;
 using System.Runtime.ExceptionServices;
+using System.Runtime.Loader;
 using System.Runtime.Versioning;
 using System.Threading;
 
@@ -16,14 +16,6 @@ namespace System
         private static readonly Dictionary<string, object> s_dataStore = new Dictionary<string, object>();
         private static Dictionary<string, bool> s_switches;
         private static string s_defaultBaseDirectory;
-        // AppDomain lives in CoreFX, but some of this class's events need to pass in AppDomains, so people registering those
-        // events need to first pass in an AppDomain that we stash here to pass back in the events.
-        private static object s_appDomain;
-
-        public static void SetAppDomain(object appDomain)
-        {
-            s_appDomain = appDomain;
-        }
 
         public static string BaseDirectory
         {
@@ -31,7 +23,7 @@ namespace System
             {
                 // The value of APP_CONTEXT_BASE_DIRECTORY key has to be a string and it is not allowed to be any other type. 
                 // Otherwise the caller will get invalid cast exception
-                return (string)GetData("APP_CONTEXT_BASE_DIRECTORY") ?? 
+                return (string)GetData("APP_CONTEXT_BASE_DIRECTORY") ??
                     (s_defaultBaseDirectory ?? (s_defaultBaseDirectory = GetBaseDirectoryCore()));
             }
         }
@@ -70,26 +62,19 @@ namespace System
             }
         }
 
+#pragma warning disable CS0067 // events raised by the VM
         public static event UnhandledExceptionEventHandler UnhandledException;
 
         public static event System.EventHandler<FirstChanceExceptionEventArgs> FirstChanceException;
+#pragma warning restore CS0067
 
         public static event System.EventHandler ProcessExit;
 
-        private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+        internal static void OnProcessExit()
         {
-            UnhandledException?.Invoke(sender, e);
-        }
+            AssemblyLoadContext.OnProcessExit();
 
-        [RuntimeExport("OnFirstChanceException")]
-        internal static void OnFirstChanceException(object e)
-        {
-            FirstChanceException?.Invoke(s_appDomain, new FirstChanceExceptionEventArgs((Exception)e));
-        }
-
-        private static void OnProcessExit(object sender, EventArgs e)
-        {
-            ProcessExit?.Invoke(sender, e);
+            ProcessExit?.Invoke(null /* AppDomain */, EventArgs.Empty);
         }
 
         /// <summary>
@@ -115,10 +100,9 @@ namespace System
             }
 
             string value = GetData(switchName) as string;
-            if (value != null)
+            if (value != null && bool.TryParse(value, out isEnabled))
             {
-                if (bool.TryParse(value, out isEnabled))
-                    return true;
+               return true;
             }
 
             isEnabled = false;

@@ -28,9 +28,7 @@
 
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Runtime.Serialization;
 using System.Threading;
-
 #if ENABLE_WINRT
 using Internal.Runtime.Augments;
 #endif
@@ -43,10 +41,6 @@ namespace System.Globalization
         //                        Internal Information                        //
         //--------------------------------------------------------------------//
 
-        //--------------------------------------------------------------------//
-        // Data members to be serialized:
-        //--------------------------------------------------------------------//
-
         // We use an RFC4646 type string to construct CultureInfo.
         // This string is stored in _name and is authoritative.
         // We use the _cultureData to get the data for our object
@@ -54,8 +48,8 @@ namespace System.Globalization
         private bool _isReadOnly;
         private CompareInfo _compareInfo;
         private TextInfo _textInfo;
-        internal NumberFormatInfo numInfo;
-        internal DateTimeFormatInfo dateTimeInfo;
+        internal NumberFormatInfo _numInfo;
+        internal DateTimeFormatInfo _dateTimeInfo;
         private Calendar _calendar;
         //
         // The CultureData instance that we are going to read data from.
@@ -74,13 +68,11 @@ namespace System.Globalization
         //      en-US           en-US           en-US           en-US
         //      de-de_phoneb    de-DE_phoneb    de-DE           de-DE_phoneb
         //      fj-fj (custom)  fj-FJ           fj-FJ           en-US (if specified sort is en-US)
-        //      en              en
+        //      en              en              
         //
-        // Note that in Silverlight we ask the OS for the text and sort behavior, so the
+        // Note that in Silverlight we ask the OS for the text and sort behavior, so the 
         // textinfo and compareinfo names are the same as the name
 
-        // Note that the name used to be serialized for Everett; it is now serialized
-        // because alternate sorts can have alternate names.
         // This has a de-DE, de-DE_phoneb or fj-FJ style name
         internal string _name;
 
@@ -93,15 +85,20 @@ namespace System.Globalization
         // Otherwise its the sort name, ie: de-DE or de-DE_phoneb
         private string _sortName;
 
-
         //--------------------------------------------------------------------//
         //
         // Static data members
         //
         //--------------------------------------------------------------------//
 
+        //Get the current user default culture.  This one is almost always used, so we create it by default.
         private static volatile CultureInfo s_userDefaultCulture;
+
+        //The culture used in the user interface. This is mostly used to load correct localized resources.
         private static volatile CultureInfo s_userDefaultUICulture;
+        //
+        // All of the following will be created on demand.
+        //
 
         // WARNING: We allow diagnostic tools to directly inspect these three members (s_InvariantCultureInfo, s_DefaultThreadCurrentUICulture and s_DefaultThreadCurrentCulture)
         // See https://github.com/dotnet/corert/blob/master/Documentation/design-docs/diagnostics/diagnostics-tools-contract.md for more details. 
@@ -120,21 +117,34 @@ namespace System.Globalization
         [ThreadStatic]
         private static CultureInfo s_currentThreadUICulture;
 
-        private static readonly Lock s_lock = new Lock();
-        private static volatile LowLevelDictionary<string, CultureInfo> s_NameCachedCultures;
-        private static volatile LowLevelDictionary<int, CultureInfo> s_LcidCachedCultures;
+        private static AsyncLocal<CultureInfo> s_asyncLocalCurrentCulture;
+        private static AsyncLocal<CultureInfo> s_asyncLocalCurrentUICulture;
+
+        private static void AsyncLocalSetCurrentCulture(AsyncLocalValueChangedArgs<CultureInfo> args)
+        {
+            s_currentThreadCulture = args.CurrentValue;
+        }
+
+        private static void AsyncLocalSetCurrentUICulture(AsyncLocalValueChangedArgs<CultureInfo> args)
+        {
+            s_currentThreadUICulture = args.CurrentValue;
+        }
+
+        private static readonly object _lock = new object();
+        private static volatile Dictionary<string, CultureInfo> s_NameCachedCultures;
+        private static volatile Dictionary<int, CultureInfo> s_LcidCachedCultures;       
 
         //The parent culture.
         private CultureInfo _parent;
 
         // LOCALE constants of interest to us internally and privately for LCID functions
         // (ie: avoid using these and use names if possible)
-        internal const int LOCALE_NEUTRAL = 0x0000;
-        private const int LOCALE_USER_DEFAULT = 0x0400;
-        private const int LOCALE_SYSTEM_DEFAULT = 0x0800;
+        internal const int LOCALE_NEUTRAL        = 0x0000;
+        private  const int LOCALE_USER_DEFAULT   = 0x0400;
+        private  const int LOCALE_SYSTEM_DEFAULT = 0x0800;
         internal const int LOCALE_CUSTOM_UNSPECIFIED = 0x1000;
-        internal const int LOCALE_CUSTOM_DEFAULT = 0x0c00;
-        internal const int LOCALE_INVARIANT = 0x007F;
+        internal const int LOCALE_CUSTOM_DEFAULT  = 0x0c00;
+        internal const int LOCALE_INVARIANT       = 0x007F;
 
         private static CultureInfo InitializeUserDefaultCulture()
         {
@@ -154,7 +164,6 @@ namespace System.Globalization
         //
         ////////////////////////////////////////////////////////////////////////
 
-
         public CultureInfo(string name)
             : this(name, true)
         {
@@ -172,11 +181,12 @@ namespace System.Globalization
             _cultureData = CultureData.GetCultureData(name, useUserOverride);
 
             if (_cultureData == null)
-                throw new CultureNotFoundException(
-                    nameof(name), name, SR.Argument_CultureNotSupported);
+            {
+                throw new CultureNotFoundException(nameof(name), name, SR.Argument_CultureNotSupported);
+            }
 
             _name = _cultureData.CultureName;
-            _isInherited = !this.EETypePtr.FastEquals(EETypePtr.EETypePtrOf<CultureInfo>());
+            _isInherited = (this.GetType() != typeof(System.Globalization.CultureInfo));
         }
 
         private CultureInfo(CultureData cultureData, bool isReadOnly = false)
@@ -198,7 +208,7 @@ namespace System.Globalization
             }
 
             return new CultureInfo(cultureData);
-        } 
+        }
 
         public CultureInfo(int culture) : this(culture, true)
         {
@@ -259,15 +269,14 @@ namespace System.Globalization
         // We do this to try to return the system UI language and the default user languages
         // This method will fallback if this fails (like Invariant)
         //
-        // TODO: It would appear that this is only ever called with userOveride = true
-        // and this method only has one caller.  Can we fold it into the caller?
-        private static CultureInfo GetCultureByName(string name, bool userOverride)
+        private static CultureInfo GetCultureByName(string name)
         {
             CultureInfo ci = null;
             // Try to get our culture
             try
             {
-                ci = userOverride ? new CultureInfo(name) : CultureInfo.GetCultureInfo(name);
+                ci = new CultureInfo(name);
+                ci._isReadOnly = true;
             }
             catch (ArgumentException)
             {
@@ -336,7 +345,7 @@ namespace System.Globalization
                 return culture;
             }
 
-            return (new CultureInfo(culture._cultureData.SSPECIFICCULTURE));
+            return new CultureInfo(culture._cultureData.SSPECIFICCULTURE);
         }
 
         internal static bool VerifyCultureName(string cultureName, bool throwException)
@@ -398,18 +407,28 @@ namespace System.Globalization
         {
             get
             {
-                CultureInfo ci = GetUserDefaultCultureCacheOverride();
-                if (ci != null)
+#if ENABLE_WINRT
+                WinRTInteropCallbacks callbacks = WinRTInterop.UnsafeCallbacks;
+                if (callbacks != null && callbacks.IsAppxModel())
                 {
-                    return ci;
+                    return (CultureInfo)callbacks.GetUserDefaultCulture();
                 }
+#endif
+#if FEATURE_APPX
+                if (ApplicationModel.IsUap)
+                {
+                    CultureInfo culture = GetCultureInfoForUserPreferredLanguageInAppX();
+                    if (culture != null)
+                        return culture;
+                }
+#endif
 
                 if (s_currentThreadCulture != null)
                 {
                     return s_currentThreadCulture;
                 }
 
-                ci = s_DefaultThreadCurrentCulture;
+                CultureInfo ci = s_DefaultThreadCurrentCulture;
                 if (ci != null)
                 {
                     return ci;
@@ -433,8 +452,22 @@ namespace System.Globalization
                     return;
                 }
 #endif
+#if FEATURE_APPX
+                if (ApplicationModel.IsUap)
+                {
+                    if (SetCultureInfoForUserPreferredLanguageInAppX(value))
+                    {
+                        // successfully set the culture, otherwise fallback to legacy path
+                        return;
+                    }
+                }
+#endif
 
-                s_currentThreadCulture = value;
+                if (s_asyncLocalCurrentCulture == null)
+                {
+                    Interlocked.CompareExchange(ref s_asyncLocalCurrentCulture, new AsyncLocal<CultureInfo>(AsyncLocalSetCurrentCulture), null);
+                }
+                s_asyncLocalCurrentCulture.Value = value;
             }
         }
 
@@ -442,24 +475,34 @@ namespace System.Globalization
         {
             get
             {
-                CultureInfo ci = GetUserDefaultCultureCacheOverride();
-                if (ci != null)
+#if ENABLE_WINRT
+                WinRTInteropCallbacks callbacks = WinRTInterop.UnsafeCallbacks;
+                if (callbacks != null && callbacks.IsAppxModel())
                 {
-                    return ci;
+                    return (CultureInfo)callbacks.GetUserDefaultCulture();
                 }
+#endif
+#if FEATURE_APPX
+                if (ApplicationModel.IsUap)
+                {
+                    CultureInfo culture = GetCultureInfoForUserPreferredLanguageInAppX();
+                    if (culture != null)
+                        return culture;
+                }
+#endif
 
                 if (s_currentThreadUICulture != null)
                 {
                     return s_currentThreadUICulture;
                 }
 
-                ci = s_DefaultThreadCurrentUICulture;
+                CultureInfo ci = s_DefaultThreadCurrentUICulture;
                 if (ci != null)
                 {
                     return ci;
                 }
 
-                return s_userDefaultUICulture ?? InitializeUserDefaultUICulture();
+                return UserDefaultUICulture;
             }
 
             set
@@ -479,15 +522,25 @@ namespace System.Globalization
                     return;
                 }
 #endif
+#if FEATURE_APPX
+                if (ApplicationModel.IsUap)
+                {
+                    if (SetCultureInfoForUserPreferredLanguageInAppX(value))
+                    {
+                        // successfully set the culture, otherwise fallback to legacy path
+                        return;
+                    }
+                }
+#endif
 
-                s_currentThreadUICulture = value;
+                if (s_asyncLocalCurrentUICulture == null)
+                {
+                    Interlocked.CompareExchange(ref s_asyncLocalCurrentUICulture, new AsyncLocal<CultureInfo>(AsyncLocalSetCurrentUICulture), null);
+                }
+
+                // this one will set s_currentThreadUICulture too
+                s_asyncLocalCurrentUICulture.Value = value;
             }
-        }
-
-        internal static void ResetThreadCulture()
-        {
-            s_currentThreadCulture = null;
-            s_currentThreadUICulture = null;
         }
 
         internal static CultureInfo UserDefaultUICulture => s_userDefaultUICulture ?? InitializeUserDefaultUICulture();
@@ -545,7 +598,7 @@ namespace System.Globalization
             get
             {
                 Debug.Assert(s_InvariantCultureInfo != null);
-                return (s_InvariantCultureInfo);
+                return s_InvariantCultureInfo;
             }
         }
 
@@ -613,7 +666,7 @@ namespace System.Globalization
             {
                 types |= CultureTypes.ReplacementCultures;
             }
-            return (CultureData.GetCultures(types));
+            return CultureData.GetCultures(types);
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -774,27 +827,11 @@ namespace System.Globalization
                 {
                     // Since CompareInfo's don't have any overrideable properties, get the CompareInfo from
                     // the Non-Overridden CultureInfo so that we only create one CompareInfo per culture
-                    CompareInfo temp = UseUserOverride
-                                        ? GetCultureInfo(_name).CompareInfo
-                                        : new CompareInfo(this);
-                    if (OkayToCacheClassWithCompatibilityBehavior)
-                    {
-                        _compareInfo = temp;
-                    }
-                    else
-                    {
-                        return temp;
-                    }
+                    _compareInfo = UseUserOverride
+                                    ? GetCultureInfo(_name).CompareInfo
+                                    : new CompareInfo(this);
                 }
-                return (_compareInfo);
-            }
-        }
-
-        private static bool OkayToCacheClassWithCompatibilityBehavior
-        {
-            get
-            {
-                return true;
+                return _compareInfo;
             }
         }
 
@@ -814,17 +851,9 @@ namespace System.Globalization
                     // Make a new textInfo
                     TextInfo tempTextInfo = new TextInfo(_cultureData);
                     tempTextInfo.SetReadOnlyState(_isReadOnly);
-
-                    if (OkayToCacheClassWithCompatibilityBehavior)
-                    {
-                        _textInfo = tempTextInfo;
-                    }
-                    else
-                    {
-                        return tempTextInfo;
-                    }
+                    _textInfo = tempTextInfo;
                 }
-                return (_textInfo);
+                return _textInfo;
             }
         }
 
@@ -832,7 +861,7 @@ namespace System.Globalization
         //
         //  Equals
         //
-        //  Implements Object.Equals().  Returns a boolean indicating whether
+        //  Implements object.Equals().  Returns a boolean indicating whether
         //  or not object refers to the same CultureInfo as the current instance.
         //
         ////////////////////////////////////////////////////////////////////////
@@ -850,10 +879,10 @@ namespace System.Globalization
                 // using CompareInfo to verify the data passed through the constructor
                 // CultureInfo(String cultureName, String textAndCompareCultureName)
 
-                return (this.Name.Equals(that.Name) && this.CompareInfo.Equals(that.CompareInfo));
+                return this.Name.Equals(that.Name) && this.CompareInfo.Equals(that.CompareInfo);
             }
 
-            return (false);
+            return false;
         }
 
 
@@ -861,7 +890,7 @@ namespace System.Globalization
         //
         //  GetHashCode
         //
-        //  Implements Object.GetHashCode().  Returns the hash code for the
+        //  Implements object.GetHashCode().  Returns the hash code for the
         //  CultureInfo.  The hash code is guaranteed to be the same for CultureInfo A
         //  and B where A.Equals(B) is true.
         //
@@ -869,7 +898,7 @@ namespace System.Globalization
 
         public override int GetHashCode()
         {
-            return (this.Name.GetHashCode() + this.CompareInfo.GetHashCode());
+            return this.Name.GetHashCode() + this.CompareInfo.GetHashCode();
         }
 
 
@@ -877,7 +906,7 @@ namespace System.Globalization
         //
         //  ToString
         //
-        //  Implements Object.ToString().  Returns the name of the CultureInfo,
+        //  Implements object.ToString().  Returns the name of the CultureInfo,
         //  eg. "de-DE_phoneb", "en-US", or "fj-FJ".
         //
         ////////////////////////////////////////////////////////////////////////
@@ -892,10 +921,10 @@ namespace System.Globalization
         public virtual object GetFormat(Type formatType)
         {
             if (formatType == typeof(NumberFormatInfo))
-                return (NumberFormat);
+                return NumberFormat;
             if (formatType == typeof(DateTimeFormatInfo))
-                return (DateTimeFormat);
-            return (null);
+                return DateTimeFormat;
+            return null;
         }
 
         public virtual bool IsNeutralCulture
@@ -935,22 +964,22 @@ namespace System.Globalization
         {
             get
             {
-                if (numInfo == null)
+                if (_numInfo == null)
                 {
                     NumberFormatInfo temp = new NumberFormatInfo(_cultureData);
                     temp.isReadOnly = _isReadOnly;
-                    Interlocked.CompareExchange(ref numInfo, temp, null);
+                    Interlocked.CompareExchange(ref _numInfo, temp, null);
                 }
-                return (numInfo);
+                return _numInfo;
             }
             set
             {
                 if (value == null)
                 {
-                    throw new ArgumentNullException(nameof(value), SR.ArgumentNull_Obj);
+                    throw new ArgumentNullException(nameof(value));
                 }
                 VerifyWritable();
-                numInfo = value;
+                _numInfo = value;
             }
         }
 
@@ -966,24 +995,24 @@ namespace System.Globalization
         {
             get
             {
-                if (dateTimeInfo == null)
+                if (_dateTimeInfo == null)
                 {
                     // Change the calendar of DTFI to the specified calendar of this CultureInfo.
                     DateTimeFormatInfo temp = new DateTimeFormatInfo(_cultureData, this.Calendar);
                     temp._isReadOnly = _isReadOnly;
-                    Interlocked.CompareExchange(ref dateTimeInfo, temp, null);
+                    Interlocked.CompareExchange(ref _dateTimeInfo, temp, null);
                 }
-                return (dateTimeInfo);
+                return _dateTimeInfo;
             }
 
             set
             {
                 if (value == null)
                 {
-                    throw new ArgumentNullException(nameof(value), SR.ArgumentNull_Obj);
+                    throw new ArgumentNullException(nameof(value));
                 }
                 VerifyWritable();
-                dateTimeInfo = value;
+                _dateTimeInfo = value;
             }
         }
 
@@ -1016,7 +1045,7 @@ namespace System.Globalization
         {
             if (calType == CalendarId.GREGORIAN)
             {
-                return (new GregorianCalendar());
+                return new GregorianCalendar();
             }
             return GetCalendarInstanceRare(calType);
         }
@@ -1034,25 +1063,25 @@ namespace System.Globalization
                 case CalendarId.GREGORIAN_ARABIC:           // Gregorian Arabic calendar
                 case CalendarId.GREGORIAN_XLIT_ENGLISH:     // Gregorian Transliterated English calendar
                 case CalendarId.GREGORIAN_XLIT_FRENCH:      // Gregorian Transliterated French calendar
-                    return (new GregorianCalendar((GregorianCalendarTypes)calType));
+                    return new GregorianCalendar((GregorianCalendarTypes)calType);
                 case CalendarId.TAIWAN:                     // Taiwan Era calendar
-                    return (new TaiwanCalendar());
+                    return new TaiwanCalendar();
                 case CalendarId.JAPAN:                      // Japanese Emperor Era calendar
-                    return (new JapaneseCalendar());
+                    return new JapaneseCalendar();
                 case CalendarId.KOREA:                      // Korean Tangun Era calendar
-                    return (new KoreanCalendar());
+                    return new KoreanCalendar();
                 case CalendarId.THAI:                       // Thai calendar
-                    return (new ThaiBuddhistCalendar());
+                    return new ThaiBuddhistCalendar();
                 case CalendarId.HIJRI:                      // Hijri (Arabic Lunar) calendar
-                    return (new HijriCalendar());
+                    return new HijriCalendar();
                 case CalendarId.HEBREW:                     // Hebrew (Lunar) calendar
-                    return (new HebrewCalendar());
+                    return new HebrewCalendar();
                 case CalendarId.UMALQURA:
-                    return (new UmAlQuraCalendar());
+                    return new UmAlQuraCalendar();
                 case CalendarId.PERSIAN:
-                    return (new PersianCalendar());
+                    return new PersianCalendar();
             }
-            return (new GregorianCalendar());
+            return new GregorianCalendar();
         }
 
         /*=================================Calendar==========================
@@ -1061,7 +1090,6 @@ namespace System.Globalization
         **Returns:
         **Arguments:
         **Exceptions:
-        **  ArgumentNull_Obj if the set value is null.
         ============================================================================*/
         public virtual Calendar Calendar
         {
@@ -1078,7 +1106,7 @@ namespace System.Globalization
                     newObj.SetReadOnlyState(_isReadOnly);
                     _calendar = newObj;
                 }
-                return (_calendar);
+                return _calendar;
             }
         }
 
@@ -1103,7 +1131,7 @@ namespace System.Globalization
                 {
                     cals[i] = GetCalendarInstance(calID[i]);
                 }
-                return (cals);
+                return cals;
             }
         }
 
@@ -1124,7 +1152,7 @@ namespace System.Globalization
                 temp._isReadOnly = true;
                 _consoleFallbackCulture = temp;
             }
-            return (temp);
+            return temp;
         }
 
         public virtual object Clone()
@@ -1136,13 +1164,13 @@ namespace System.Globalization
             //they've already been allocated.  If this is a derived type, we'll take a more generic codepath.
             if (!_isInherited)
             {
-                if (this.dateTimeInfo != null)
+                if (_dateTimeInfo != null)
                 {
-                    ci.dateTimeInfo = (DateTimeFormatInfo)this.dateTimeInfo.Clone();
+                    ci._dateTimeInfo = (DateTimeFormatInfo)_dateTimeInfo.Clone();
                 }
-                if (this.numInfo != null)
+                if (_numInfo != null)
                 {
-                    ci.numInfo = (NumberFormatInfo)this.numInfo.Clone();
+                    ci._numInfo = (NumberFormatInfo)_numInfo.Clone();
                 }
             }
             else
@@ -1161,7 +1189,7 @@ namespace System.Globalization
                 ci._calendar = (Calendar)_calendar.Clone();
             }
 
-            return (ci);
+            return ci;
         }
 
         public static CultureInfo ReadOnly(CultureInfo ci)
@@ -1173,7 +1201,7 @@ namespace System.Globalization
 
             if (ci.IsReadOnly)
             {
-                return (ci);
+                return ci;
             }
             CultureInfo newInfo = (CultureInfo)(ci.MemberwiseClone());
 
@@ -1183,13 +1211,13 @@ namespace System.Globalization
                 //they've already been allocated.  If this is a derived type, we'll take a more generic codepath.
                 if (!ci._isInherited)
                 {
-                    if (ci.dateTimeInfo != null)
+                    if (ci._dateTimeInfo != null)
                     {
-                        newInfo.dateTimeInfo = DateTimeFormatInfo.ReadOnly(ci.dateTimeInfo);
+                        newInfo._dateTimeInfo = DateTimeFormatInfo.ReadOnly(ci._dateTimeInfo);
                     }
-                    if (ci.numInfo != null)
+                    if (ci._numInfo != null)
                     {
-                        newInfo.numInfo = NumberFormatInfo.ReadOnly(ci.numInfo);
+                        newInfo._numInfo = NumberFormatInfo.ReadOnly(ci._numInfo);
                     }
                 }
                 else
@@ -1213,7 +1241,7 @@ namespace System.Globalization
             // We should set the read-only flag here.  Otherwise, info.DateTimeFormat will not be able to set.
             newInfo._isReadOnly = true;
 
-            return (newInfo);
+            return newInfo;
         }
 
 
@@ -1221,7 +1249,7 @@ namespace System.Globalization
         {
             get
             {
-                return (_isReadOnly);
+                return _isReadOnly;
             }
         }
 
@@ -1249,7 +1277,7 @@ namespace System.Globalization
             CultureInfo retval;
 
             // Temporary hashtable for the names.
-            LowLevelDictionary<string, CultureInfo> tempNameHT = s_NameCachedCultures;
+            Dictionary<string, CultureInfo> tempNameHT = s_NameCachedCultures;
 
             if (name != null)
             {
@@ -1264,7 +1292,7 @@ namespace System.Globalization
             // We expect the same result for both hashtables, but will test individually for added safety.
             if (tempNameHT == null)
             {
-                tempNameHT = new LowLevelDictionary<string, CultureInfo>();
+                tempNameHT = new Dictionary<string, CultureInfo>();
             }
             else
             {
@@ -1272,7 +1300,7 @@ namespace System.Globalization
                 if (lcid == -1 || lcid == 0)
                 {
                     bool ret;
-                    using (LockHolder.Hold(s_lock))
+                    lock (_lock)
                     {
                         ret = tempNameHT.TryGetValue(lcid == 0 ? name : name + '\xfffd' + altName, out retval);
                     }
@@ -1285,12 +1313,12 @@ namespace System.Globalization
             }
 
             // Next, the Lcid table.
-            LowLevelDictionary<int, CultureInfo> tempLcidHT = s_LcidCachedCultures;
+            Dictionary<int, CultureInfo> tempLcidHT = s_LcidCachedCultures;
 
             if (tempLcidHT == null)
             {
                 // Case insensitive is not an issue here, save the constructor call.
-                tempLcidHT = new LowLevelDictionary<int, CultureInfo>();
+                tempLcidHT = new Dictionary<int, CultureInfo>();
             }
             else
             {
@@ -1298,7 +1326,7 @@ namespace System.Globalization
                 if (lcid > 0)
                 {
                     bool ret;
-                    using (LockHolder.Hold(s_lock))
+                    lock (_lock)
                     {
                         ret = tempLcidHT.TryGetValue(lcid, out retval);
                     }
@@ -1339,7 +1367,7 @@ namespace System.Globalization
 
             if (lcid == -1)
             {
-                using (LockHolder.Hold(s_lock))
+                lock (_lock)
                 {
                     // This new culture will be added only to the name hash table.
                     tempNameHT[name + '\xfffd' + altName] = retval;
@@ -1354,14 +1382,14 @@ namespace System.Globalization
                 string newName = CultureData.AnsiToLower(retval._name);
 
                 // We add this new culture info object to both tables.
-                using (LockHolder.Hold(s_lock))
+                lock (_lock)
                 {
                     tempNameHT[newName] = retval;
                 }
-            }
+            } 
             else
             {
-                using (LockHolder.Hold(s_lock))
+                lock (_lock)
                 {
                     tempLcidHT[lcid] = retval;
                 }
@@ -1392,7 +1420,6 @@ namespace System.Globalization
             {
                 throw new ArgumentOutOfRangeException(nameof(culture), SR.ArgumentOutOfRange_NeedPosNum);
             }
-
             CultureInfo retval = GetCultureInfoHelper(culture, null, null);
             if (null == retval)
             {
