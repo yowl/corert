@@ -317,6 +317,8 @@ internal static class Program
 
         TestThreadStaticsForSingleThread();
 
+        ThreadTest();
+
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
         System.Diagnostics.Debugger.Break();
@@ -793,6 +795,34 @@ internal static class Program
             PrintLine("Was: " + secondInstanceOfFirstClassStatic.ToString());
         }
         Thread.Sleep(10);
+    }
+
+    private static unsafe void ThreadTest()
+    {
+//        p_thread pThread;
+////        int attr = 0;
+//        int arg = 0;
+//        int join;
+        PrintLine("creating thread"); //3 = ESRCH (no thread found)
+
+        Thread t3 = new Thread(() => StartUpB());
+        PrintLine("starting thread"); //3 = ESRCH (no thread found)
+        t3.Start();
+        PrintLine("joining thread"); //3 = ESRCH (no thread found)
+        t3.Join();
+        PrintLine("thread ended"); //3 = ESRCH (no thread found)
+        //        var startFuncPtr = Marshal.GetFunctionPointerForDelegate<ThreadStartFunc>(startDelegate);
+        //        var t = pthread_create((IntPtr)(&pThread), (IntPtr)(0), System.Runtime.InteropServices.AddrofIntrinsics.AddrOf<ThreadStartFunc>(ThreadStart), (IntPtr)(&arg));
+        //        PrintString("thread created:");
+        //        PrintLine(t.ToString());
+        //        PrintString("thread pThread:");
+        //        join = pthread_join((IntPtr)(&pThread), (IntPtr)0);
+        //        PrintString("join result:");
+    }
+
+    private static void StartUpB()
+    {
+        PrintLine("hello from thread"); //3 = ESRCH (no thread found)
     }
 
     [DllImport("*")]
