@@ -9,7 +9,6 @@ using System.Collections.Generic;
 #if PLATFORM_WINDOWS
 using CpObj;
 #endif
-
 internal static class Program
 {
     private static int staticInt;
@@ -301,6 +300,10 @@ internal static class Program
         TestValueTypeElementIndexing();
         
         TestArrayItfDispatch();
+
+        TestMetaData();
+        
+        TestTryFinally();
 
         int rvaFieldValue = ILHelpers.ILHelpersTest.StaticInitedInt;
         if (rvaFieldValue == 0x78563412)
@@ -731,6 +734,107 @@ internal static class Program
 
     [System.Runtime.InteropServices.DllImport("*")]
     private static extern void CallMe(int x);
+    private static void TestMetaData()
+    {
+
+        var typeGetType = Type.GetType("System.Char, System.Private.CoreLib");
+        if (typeGetType == null)
+        {
+            PrintLine("type == null.  Simple class metadata test: Failed");
+        }
+        else
+        {
+            if (typeGetType.FullName != "System.Char")
+            {
+                PrintLine("type != System.Char.  Simple class metadata test: Failed");
+            }
+            else PrintLine("Simple class metadata test: Ok.");
+        }
+
+        var typeofChar = typeof(Char);
+        if (typeofChar == null)
+        {
+            PrintLine("type == null.  Simple class metadata test: Failed");
+        }
+        else
+        {
+            if (typeofChar.FullName != "System.Char")
+            {
+                PrintLine("type != System.Char.  Simple class metadata test: Failed");
+            }
+            else PrintLine("Simple class metadata test (typeof(Char)): Ok.");
+        }
+
+        var gentT = new Gen<int>();
+        var genParamType = gentT.TestTypeOf();
+        PrintString("type of generic parameter: ");
+        if (genParamType.FullName != "System.Int32")
+        {
+            PrintString("expected System.Int32 but was " + genParamType.FullName);
+            PrintLine(" Failed.");
+        }
+        else
+        {
+            PrintLine("Ok.");
+        }
+
+        var arrayType = typeof(object[]);
+        PrintString("type of array: ");
+        if (arrayType.FullName != "System.Object[]")
+        {
+            PrintString("expected System.Object[] but was " + arrayType.FullName);
+            PrintLine(" Failed.");
+        }
+        else
+        {
+            PrintLine("Ok.");
+        }
+
+        var genericType = typeof(List<object>);
+        PrintString("type of generic : ");
+        if (genericType.FullName != "System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]")
+        {
+            PrintString("expected System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]] but was " + genericType.FullName);
+            PrintLine(" Failed.");
+        }
+        else
+        {
+            PrintLine("Ok.");
+        }
+    }
+
+    /// <summary>
+    /// Ensures all of the blocks of a try/finally function are hit when there aren't exceptions
+    /// </summary>
+    private static void TestTryFinally()
+    {
+        PrintString("Try/Finally test: ");
+        uint result = TryFinallyInner();
+        if (result == 1111)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed. Result: " + result.ToString());
+        }
+    }
+
+    private static uint TryFinallyInner()
+    {
+        uint result = 1;
+        try
+        {
+            result += 10;
+        }
+        finally
+        {
+            result += 100;
+        }
+        result += 1000;
+
+        return result;
+    }
 
     private static void TestThreadStaticsForSingleThread()
     {
@@ -1011,6 +1115,14 @@ public sealed class MySealedClass
         Program.PrintLine("MySealedClass.ToString called. Data:");
         Program.PrintLine(_data.ToString());
         return _data.ToString();
+    }
+}
+
+public class Gen<T>
+{
+    internal Type TestTypeOf()
+    {
+        return typeof(T);
     }
 }
 

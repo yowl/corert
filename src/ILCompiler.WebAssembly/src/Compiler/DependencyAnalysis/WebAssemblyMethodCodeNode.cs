@@ -59,8 +59,17 @@ namespace ILCompiler.DependencyAnalysis
         {
             var dependencies = new DependencyList();
 
-            foreach (Object node in _dependencies)
-                dependencies.Add(node, "Wasm code ");
+            if (_method.HasInstantiation && !factory.CanNecessaryTypeSymbol(_method.OwningType))
+            {
+                dependencies.Add(new DependencyListEntry(factory.MethodEntrypoint(_method), "Target of unboxing"));
+            }
+            else
+            {
+                foreach (Object node in _dependencies)
+                    dependencies.Add(node, "Wasm code ");
+
+                CodeBasedDependencyAlgorithm.AddDependenciesDueToMethodCodePresence(ref dependencies, factory, _method);
+            }
 
             return dependencies;
         }
