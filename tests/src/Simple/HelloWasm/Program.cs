@@ -17,7 +17,7 @@ internal static class Program
     private static unsafe int Main(string[] args)
     {
         PrintLine("Starting");
-
+        new TestCall().Sleep();
         Add(1, 2);
         int tempInt = 0;
         int tempInt2 = 0;
@@ -1248,6 +1248,28 @@ class AnotherClassWithFourThreadStatics
         classStatic5++;
     }
 }
+
+class TestCall
+{
+    public void Sleep()
+    {
+        Wait(1, true, null, true);
+    }
+
+    public int Wait(int timeoutMilliseconds, bool interruptible, WaitHandle[] waitHandlesForAbandon, bool isSleep)
+    {
+        if (waitHandlesForAbandon == null)
+        {
+            Program.PrintLine("null");
+        }
+        else
+        {
+            Program.PrintLine("not null");
+        }
+        return 0;
+    }
+}
+
 
 namespace System.Runtime.InteropServices
 {

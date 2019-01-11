@@ -3316,11 +3316,10 @@ namespace Internal.IL
             ISymbolNode threadStaticIndexSymbol = _compilation.NodeFactory.TypeThreadStaticIndex(type);
             LLVMValueRef threadStaticIndex = LoadAddressOfSymbolNode(threadStaticIndexSymbol);
 
+            StackEntry typeManagerSlotEntry = new LoadExpressionEntry(StackValueKind.ValueType, "typeManagerSlot", threadStaticIndex, GetWellKnownType(WellKnownType.Int32));
             LLVMValueRef typeTlsIndexPtr =
                 LLVM.BuildGEP(_builder, threadStaticIndex, new LLVMValueRef[] { BuildConstInt32(1) }, "typeTlsIndexPtr"); // index is the second field after the ptr.
             StackEntry tlsIndexExpressionEntry = new LoadExpressionEntry(StackValueKind.ValueType, "typeTlsIndex", typeTlsIndexPtr, GetWellKnownType(WellKnownType.Int32));
-
-            LLVMValueRef typeIndirectionSection = LoadAddressOfSymbolNode(_compilation.NodeFactory.TypeManagerIndirection);
 
             if (_compilation.TypeSystemContext.HasLazyStaticConstructor(type))
             {
@@ -3336,8 +3335,7 @@ namespace Internal.IL
 
                 returnExp = CallRuntime("System.Runtime.CompilerServices", _compilation.TypeSystemContext, ClassConstructorRunner, "CheckStaticClassConstructionReturnThreadStaticBase", new StackEntry[]
                                                                              {
-                                                                                 new AddressExpressionEntry(StackValueKind.NativeInt, "typeManagerSlot",
-                                                                                     typeIndirectionSection, GetWellKnownType(WellKnownType.IntPtr)),
+                                                                                 typeManagerSlotEntry,
                                                                                  tlsIndexExpressionEntry,
                                                                                  classConstructionContext
                                                                              });
@@ -3348,10 +3346,7 @@ namespace Internal.IL
             {
                 returnExp = CallRuntime("Internal.Runtime", _compilation.TypeSystemContext, ThreadStatics, "GetThreadStaticBaseForType", new StackEntry[]
                                                                                                                              {
-                                                                                                                                 new AddressExpressionEntry(
-                                                                                                                                     StackValueKind.NativeInt, "typeManagerSlot",
-                                                                                                                                     typeIndirectionSection,
-                                                                                                                                     GetWellKnownType(WellKnownType.IntPtr)),
+                                                                                                                                 typeManagerSlotEntry,
                                                                                                                                  tlsIndexExpressionEntry
                                                                                                                              });
                 return threadStaticIndexSymbol;

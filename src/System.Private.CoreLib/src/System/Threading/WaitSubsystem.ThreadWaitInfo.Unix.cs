@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Internal.Runtime.Augments;
 
 namespace System.Threading
@@ -257,8 +258,46 @@ namespace System.Threading
                 }
             }
 
+            public struct TwoByteStr
+            {
+                public byte first;
+                public byte second;
+            }
+            [DllImport("*")]
+            private static unsafe extern int printf(byte* str, byte* unused);
+
+            private static unsafe void PrintString(string s)
+            {
+                int length = s.Length;
+                fixed (char* curChar = s)
+                {
+                    for (int i = 0; i < length; i++)
+                    {
+                        TwoByteStr curCharStr = new TwoByteStr();
+                        curCharStr.first = (byte)(*(curChar + i));
+                        printf((byte*)&curCharStr, null);
+                    }
+                }
+            }
+
+            public static void PrintLine(string s)
+            {
+                PrintString(s);
+                PrintString("\n");
+            }
+
             public int Wait(int timeoutMilliseconds, bool interruptible, WaitHandle[] waitHandlesForAbandon, bool isSleep)
             {
+                PrintLine("in Wait");
+                if (waitHandlesForAbandon == null)
+                {
+                    PrintLine("waitHandlesForAbandon null");
+                }
+                else
+                {
+                    PrintLine("waitHandlesForAbandon not null");
+
+                }
                 if (isSleep)
                 {
                     s_lock.VerifyIsNotLocked();
@@ -268,11 +307,14 @@ namespace System.Threading
                 {
                     s_lock.VerifyIsLocked();
                 }
+                PrintLine("after  if");
                 Debug.Assert(_thread == RuntimeThread.CurrentThread);
+                PrintLine("after  _thread == RuntimeThread.CurrentThread");
 
                 Debug.Assert(timeoutMilliseconds >= -1);
+                PrintLine("after  timeoutMilliseconds >= -1");
                 Debug.Assert(timeoutMilliseconds != 0); // caller should have taken care of it
-
+                PrintLine("after  timeoutMilliseconds != 0");
                 _thread.SetWaitSleepJoinState();
 
                 /// <see cref="_waitMonitor"/> must be acquired before <see cref="s_lock"/> is released, to ensure that there is
@@ -390,7 +432,7 @@ namespace System.Threading
                     RuntimeThread
                         .CurrentThread
                         .WaitInfo
-                        .Wait(timeoutMilliseconds, interruptible, waitHandlesForAbandon: null, isSleep: true);
+                        .Wait(timeoutMilliseconds, interruptible, null, true);
                 Debug.Assert(waitResult == WaitHandle.WaitTimeout);
             }
 
