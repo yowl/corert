@@ -5,6 +5,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
+using System.Diagnostics;
 #if PLATFORM_WINDOWS
 using CpObj;
 #endif
@@ -322,6 +323,8 @@ internal static class Program
         TestArrayItfDispatch();
 
         TestTryFinally();
+
+        TestParamsWithMixedTypesAndExceptionRegions();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -653,6 +656,28 @@ internal static class Program
             PrintLine("Failed.");
         }
     }
+
+    private static void TestParamsWithMixedTypesAndExceptionRegions()
+    {
+        new MixedParamFuncClass().MixedParamFunc(1, null);
+    }
+
+    class MixedParamFuncClass
+    {
+        public void MixedParamFunc(int firstInt, object shadowStackParam)
+        {
+            try
+            {
+                Debug.Assert(shadowStackParam == null);
+            }
+            catch (Exception )
+            {
+                throw;
+            }
+        }
+    }
+
+
 
     struct OddLengthStruct
     {
