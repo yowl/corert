@@ -150,6 +150,7 @@ namespace System.Threading
 
         public static SafeWaitHandle NewEvent(bool initiallySignaled, EventResetMode resetMode)
         {
+            Debug.Assert((resetMode == EventResetMode.AutoReset) || (resetMode == EventResetMode.ManualReset));
             return NewHandle(WaitableObject.NewEvent(initiallySignaled, resetMode));
         }
 

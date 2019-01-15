@@ -19,6 +19,8 @@ internal static class Program
     {
         PrintLine("Starting");
 
+        new System.Threading.EventWaitHandle(true, System.Threading.EventResetMode.AutoReset);
+
         Add(1, 2);
         int tempInt = 0;
         int tempInt2 = 0;
@@ -666,6 +668,7 @@ internal static class Program
     {
         public void MixedParamFunc(int firstInt, object shadowStackParam)
         {
+            int p1 = firstInt;
             try
             {
                 Debug.Assert(shadowStackParam == null);
@@ -673,6 +676,11 @@ internal static class Program
             catch (Exception )
             {
                 throw;
+            }
+            if (p1 != 1)
+            {
+                PrintLine("Failed.");
+//                MixedParamFunc(firstInt, shadowStackParam);
             }
         }
     }

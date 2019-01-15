@@ -3,11 +3,19 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Internal.Runtime.Augments;
 
 namespace System.Threading
 {
-    internal static partial class WaitSubsystem
+
+public struct TwoByteStr
+{
+    public byte first;
+    public byte second;
+}
+
+internal static partial class WaitSubsystem
     {
         /// <summary>
         /// A synchronization object that can participate in <see cref="WaitSubsystem"/>'s wait operations.
@@ -47,8 +55,32 @@ namespace System.Threading
                 _ownershipInfo = ownershipInfo;
             }
 
+            [DllImport("*")]
+            private static unsafe extern int printf(byte* str, byte* unused);
+
+            private static unsafe void PrintString(string s)
+            {
+                int length = s.Length;
+                fixed (char* curChar = s)
+                {
+                    for (int i = 0; i < length; i++)
+                    {
+                        TwoByteStr curCharStr = new TwoByteStr();
+                        curCharStr.first = (byte)(*(curChar + i));
+                        printf((byte*)&curCharStr, null);
+                    }
+                }
+            }
+
+            public static void PrintLine(string s)
+            {
+                PrintString(s);
+                PrintString("\n");
+            }
+
             public static WaitableObject NewEvent(bool initiallySignaled, EventResetMode resetMode)
             {
+                PrintLine(resetMode.ToString());
                 Debug.Assert((resetMode == EventResetMode.AutoReset) || (resetMode == EventResetMode.ManualReset));
 
                 return

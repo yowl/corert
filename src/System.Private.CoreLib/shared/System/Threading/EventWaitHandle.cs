@@ -4,6 +4,7 @@
 
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace System.Threading
 {
@@ -19,11 +20,40 @@ namespace System.Threading
         {
         }
 
+
+//        [DllImport("*")]
+//        private static unsafe extern int printf(byte* str, byte* unused);
+//
+//        private static unsafe void PrintString(string s)
+//        {
+//            int length = s.Length;
+//            fixed (char* curChar = s)
+//            {
+//                for (int i = 0; i < length; i++)
+//                {
+//                    TwoByteStr curCharStr = new TwoByteStr();
+//                    curCharStr.first = (byte)(*(curChar + i));
+//                    printf((byte*)&curCharStr, null);
+//                }
+//            }
+//        }
+//
+//        public static void PrintLine(string s)
+//        {
+//            PrintString(s);
+//            PrintString("\n");
+//        }
+
         public EventWaitHandle(bool initialState, EventResetMode mode, string name, out bool createdNew)
         {
             if (mode != EventResetMode.AutoReset && mode != EventResetMode.ManualReset)
                 throw new ArgumentException(SR.Argument_InvalidFlag, nameof(mode));
 
+            PrintLine("EventWaitHandle ctor");
+            if (mode != 0)
+            {
+                PrintLine(mode.ToString());
+            }
             CreateEventCore(initialState, mode, name, out createdNew);
         }
 
