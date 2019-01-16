@@ -677,7 +677,6 @@ internal static class Program
                 {
                     ok = false;
                 }
-                Debug.Assert(shadowStackParam == null);
             }
             catch (Exception )
             {

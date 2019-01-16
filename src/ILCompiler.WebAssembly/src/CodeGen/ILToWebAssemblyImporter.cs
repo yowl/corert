@@ -1422,19 +1422,9 @@ namespace Internal.IL
                 potentialRealArgIndex++;
 
                 // if this is a shadow stack arg, then only count other shadow stack args as stack args come later
-                if (!CanStoreTypeOnStack(_signature[index]))
+                if (!CanStoreVariableOnStack(_signature[i]) && (CanStoreTypeOnStack(_signature[index]) || !CanStoreTypeOnStack(_signature[i])))
                 {
-                    if (!CanStoreTypeOnStack(_signature[i]) && !CanStoreVariableOnStack(_signature[i]))
-                    {
-                        offset = PadNextOffset(_signature[i], offset);
-                    }
-                }
-                else
-                {
-                    if (!CanStoreVariableOnStack(_signature[i]))
-                    {
-                        offset = PadNextOffset(_signature[i], offset);
-                    }
+                    offset = PadNextOffset(_signature[i], offset);
                 }
             }
 
