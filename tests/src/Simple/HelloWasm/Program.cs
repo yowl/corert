@@ -22,7 +22,7 @@ internal static class Program
         int tempInt = 0;
         int tempInt2 = 0;
         (*(&tempInt)) = 9;
-        if(tempInt == 9)
+        if (tempInt == 9)
         {
             PrintLine("Hello from C#!");
         }
@@ -30,12 +30,12 @@ internal static class Program
         int* targetAddr = (tempInt > 0) ? (&tempInt2) : (&tempInt);
 
         (*targetAddr) = 1;
-        if(tempInt2 == 1 && tempInt == 9)
+        if (tempInt2 == 1 && tempInt == 9)
         {
             PrintLine("basic block stack entry Test: Ok.");
         }
 
-        if(ILHelpers.ILHelpersTest.InlineAssignByte() == 100)
+        if (ILHelpers.ILHelpersTest.InlineAssignByte() == 100)
         {
             PrintLine("Inline assign byte Test: Ok.");
         }
@@ -45,7 +45,7 @@ internal static class Program
         }
 
         int dupTestInt = 9;
-        if(ILHelpers.ILHelpersTest.DupTest(ref dupTestInt) == 209 && dupTestInt == 209)
+        if (ILHelpers.ILHelpersTest.DupTest(ref dupTestInt) == 209 && dupTestInt == 209)
         {
             PrintLine("dup test: Ok.");
         }
@@ -68,20 +68,20 @@ internal static class Program
         {
             PrintLine("value type int field test: Ok.");
         }
-        
+
         staticInt = 5;
         if (staticInt == 5)
         {
             PrintLine("static int field test: Ok.");
         }
 
-        if(threadStaticInt == 0)
+        if (threadStaticInt == 0)
         {
             PrintLine("thread static int initial value field test: Ok.");
         }
 
         threadStaticInt = 9;
-        if(threadStaticInt == 9)
+        if (threadStaticInt == 9)
         {
             PrintLine("thread static int field test: Ok.");
         }
@@ -89,7 +89,7 @@ internal static class Program
         StaticCtorTest();
 
         var boxedInt = (object)tempInt;
-        if(((int)boxedInt) == 9)
+        if (((int)boxedInt) == 9)
         {
             PrintLine("box test: Ok.");
         }
@@ -98,7 +98,7 @@ internal static class Program
             PrintLine("box test: Failed. Value:");
             PrintLine(boxedInt.ToString());
         }
-        
+
         var boxedStruct = (object)new BoxStubTest { Value = "Boxed Stub Test: Ok." };
         PrintLine(boxedStruct.ToString());
 
@@ -143,7 +143,7 @@ internal static class Program
         {
             PrintLine("unsignedShift test: Ok.");
         }
-        
+
         var switchTest0 = SwitchOp(5, 5, 0);
         if (switchTest0 == 10)
         {
@@ -173,14 +173,14 @@ internal static class Program
 #endif
 
         Func<int> staticDelegate = StaticDelegateTarget;
-        if(staticDelegate() == 7)
+        if (staticDelegate() == 7)
         {
             PrintLine("Static delegate test: Ok.");
         }
 
         tempObj.TestInt = 8;
         Func<int> instanceDelegate = tempObj.InstanceDelegateTarget;
-        if(instanceDelegate() == 8)
+        if (instanceDelegate() == 8)
         {
             PrintLine("Instance delegate test: Ok.");
         }
@@ -189,7 +189,7 @@ internal static class Program
         virtualDelegate();
 
         var arrayTest = new BoxStubTest[] { new BoxStubTest { Value = "Hello" }, new BoxStubTest { Value = "Array" }, new BoxStubTest { Value = "Test" } };
-        foreach(var element in arrayTest)
+        foreach (var element in arrayTest)
             PrintLine(element.Value);
 
         arrayTest[1].Value = "Array load/store test: Ok.";
@@ -198,9 +198,9 @@ internal static class Program
         int ii = 0;
         arrayTest[ii++].Value = "dup ref test: Ok.";
         PrintLine(arrayTest[0].Value);
-        
+
         var largeArrayTest = new long[] { Int64.MaxValue, 0, Int64.MinValue, 0 };
-        if(largeArrayTest[0] == Int64.MaxValue &&
+        if (largeArrayTest[0] == Int64.MaxValue &&
             largeArrayTest[1] == 0 &&
             largeArrayTest[2] == Int64.MinValue &&
             largeArrayTest[3] == 0)
@@ -209,7 +209,7 @@ internal static class Program
         }
 
         var smallArrayTest = new long[] { Int16.MaxValue, 0, Int16.MinValue, 0 };
-        if(smallArrayTest[0] == Int16.MaxValue &&
+        if (smallArrayTest[0] == Int16.MaxValue &&
             smallArrayTest[1] == 0 &&
             smallArrayTest[2] == Int16.MinValue &&
             smallArrayTest[3] == 0)
@@ -247,7 +247,7 @@ internal static class Program
         PrintLine(((BoxStubTest[])arrayCastingTest)[1].Value);
         PrintLine(((BoxStubTest[])arrayCastingTest)[2].Value);
         if (!(arrayCastingTest is CastingTestClass[]))
-        {   
+        {
             PrintLine("Type casting with isinst & castclass to array test: Ok.");
         }
 
@@ -298,11 +298,11 @@ internal static class Program
         TestConstrainedClassCalls();
 
         TestValueTypeElementIndexing();
-        
+
         TestArrayItfDispatch();
 
         TestMetaData();
-        
+
         TestTryFinally();
 
         int rvaFieldValue = ILHelpers.ILHelpersTest.StaticInitedInt;
@@ -332,7 +332,7 @@ internal static class Program
     }
 
     private static int StaticDelegateTarget()
-    {         
+    {
         return 7;
     }
 
@@ -349,7 +349,7 @@ internal static class Program
             }
         }
     }
-    
+
     public static void PrintLine(string s)
     {
         PrintString(s);
@@ -385,21 +385,21 @@ internal static class Program
     {
         return a >> b;
     }
-    
+
     private static int SwitchOp(int a, int b, int mode)
     {
-        switch(mode)
+        switch (mode)
         {
-          case 0:
-            return a + b;
-          case 1:
-            return a * b;
-          case 2:
-            return a / b;
-          case 3:
-            return a - b;
-          default:
-            return 0;
+            case 0:
+                return a + b;
+            case 1:
+                return a * b;
+            case 2:
+                return a / b;
+            case 3:
+                return a - b;
+            default:
+                return 0;
         }
     }
 
@@ -431,16 +431,16 @@ internal static class Program
     {
         var ldindTarget = new TwoByteStr { first = byte.MaxValue, second = byte.MinValue };
         var ldindField = &ldindTarget.first;
-        if((*ldindField) == byte.MaxValue)
+        if ((*ldindField) == byte.MaxValue)
         {
             ldindTarget.second = byte.MaxValue;
             *ldindField = byte.MinValue;
             //ensure there isnt any overwrite of nearby fields
-            if(ldindTarget.first == byte.MinValue && ldindTarget.second == byte.MaxValue)
+            if (ldindTarget.first == byte.MinValue && ldindTarget.second == byte.MaxValue)
             {
                 PrintLine("ldind test: Ok.");
             }
-            else if(ldindTarget.first != byte.MinValue)
+            else if (ldindTarget.first != byte.MinValue)
             {
                 PrintLine("ldind test: Failed didnt update target.");
             }
@@ -514,7 +514,7 @@ internal static class Program
             PrintLine("NonBeforeFieldInit test: Ok.");
         }
         else
-        { 
+        {
             PrintLine("NonBeforeFieldInitType cctor not run");
         }
     }
@@ -535,7 +535,7 @@ internal static class Program
             PrintString(stringDirectToString);
             PrintLine("\"");
         }
-       
+
         // Generic calls on methods not defined on object
         uint dataFromBase = GenericGetData<MyBase>(new MyBase(11));
         PrintString("Generic call to base class test: ");
@@ -930,40 +930,6 @@ internal static class Program
 
         PrintString("Second class should not be overwritten: "); // catches a type of bug where beacuse the 2 types share the same number and types of ThreadStatics, the first class can end up overwriting the second
         secondClassStatic = new AnotherClassWithFourThreadStatics().GetStatic();
-            PrintLine("Failed.");
-            PrintLine("Was: " + secondInstanceOfFirstClassStatic.ToString());
-        }
-        Thread.Sleep(10);
-    }
-
-    private static unsafe void ThreadTest()
-    {
-//        p_thread pThread;
-////        int attr = 0;
-//        int arg = 0;
-//        int join;
-        PrintLine("creating thread"); //3 = ESRCH (no thread found)
-
-        Thread t3 = new Thread(() => StartUpB());
-        PrintLine("starting thread"); //3 = ESRCH (no thread found)
-        t3.Start();
-        PrintLine("joining thread"); //3 = ESRCH (no thread found)
-        t3.Join();
-        PrintLine("thread ended"); //3 = ESRCH (no thread found)
-        //        var startFuncPtr = Marshal.GetFunctionPointerForDelegate<ThreadStartFunc>(startDelegate);
-        //        var t = pthread_create((IntPtr)(&pThread), (IntPtr)(0), System.Runtime.InteropServices.AddrofIntrinsics.AddrOf<ThreadStartFunc>(ThreadStart), (IntPtr)(&arg));
-        //        PrintString("thread created:");
-        //        PrintLine(t.ToString());
-        //        PrintString("thread pThread:");
-        //        join = pthread_join((IntPtr)(&pThread), (IntPtr)0);
-        //        PrintString("join result:");
-    }
-
-    private static void StartUpB()
-    {
-        PrintLine("hello from thread"); //3 = ESRCH (no thread found)
-    }
-
         if (secondClassStatic == 13)
         {
             PrintLine("Ok.");
@@ -986,6 +952,34 @@ internal static class Program
             PrintLine("Was: " + secondInstanceOfFirstClassStatic.ToString());
         }
         Thread.Sleep(10);
+    }
+
+    private static unsafe void ThreadTest()
+    {
+        //        p_thread pThread;
+        ////        int attr = 0;
+        //        int arg = 0;
+        //        int join;
+        PrintLine("creating thread"); //3 = ESRCH (no thread found)
+
+        Thread t3 = new Thread(() => StartUpB());
+        PrintLine("starting thread"); //3 = ESRCH (no thread found)
+        t3.Start();
+        PrintLine("joining thread"); //3 = ESRCH (no thread found)
+        t3.Join();
+        PrintLine("thread ended"); //3 = ESRCH (no thread found)
+                                   //        var startFuncPtr = Marshal.GetFunctionPointerForDelegate<ThreadStartFunc>(startDelegate);
+                                   //        var t = pthread_create((IntPtr)(&pThread), (IntPtr)(0), System.Runtime.InteropServices.AddrofIntrinsics.AddrOf<ThreadStartFunc>(ThreadStart), (IntPtr)(&arg));
+                                   //        PrintString("thread created:");
+                                   //        PrintLine(t.ToString());
+                                   //        PrintString("thread pThread:");
+                                   //        join = pthread_join((IntPtr)(&pThread), (IntPtr)0);
+                                   //        PrintString("join result:");
+    }
+
+    private static void StartUpB()
+    {
+        PrintLine("hello from thread"); //3 = ESRCH (no thread found)
     }
 
     [DllImport("*")]
@@ -1021,7 +1015,7 @@ public class TestClass
 
     public TestClass(int number)
     {
-        if(number != 1337)
+        if (number != 1337)
             throw new Exception();
     }
 
@@ -1035,8 +1029,8 @@ public class TestClass
     {
         Program.PrintLine("Virtual Slot Test: Ok If second");
     }
-	
-	public virtual void TestVirtualMethod2(string str)
+
+    public virtual void TestVirtualMethod2(string str)
     {
         Program.PrintLine("Virtual Slot Test 2: Ok");
     }
@@ -1063,7 +1057,7 @@ public class TestDerivedClass : TestClass
         Program.PrintLine("Virtual Slot Test: Ok");
         base.TestVirtualMethod(str);
     }
-    
+
     public override string ToString()
     {
         throw new Exception();
@@ -1258,54 +1252,6 @@ class ClassWithSealedVTable : ISomeItf
 interface ISomeItf
 {
     int GetValue();
-}
-
-class ClassWithFourThreadStatics
-{
-    [ThreadStatic] static int classStatic;
-    [ThreadStatic] static int classStatic2 = 2;
-    [ThreadStatic] static int classStatic3;
-    [ThreadStatic] static int classStatic4;
-    [ThreadStatic] static int classStatic5;
-
-    public int GetStatic()
-    {
-        return classStatic2;
-    }
-
-    public void IncrementStatics()
-    {
-        classStatic++;
-        classStatic2++;
-        classStatic3++;
-        classStatic4++;
-        classStatic5++;
-    }
-}
-
-class AnotherClassWithFourThreadStatics
-{
-    [ThreadStatic] static int classStatic = 13;
-    [ThreadStatic] static int classStatic2;
-    [ThreadStatic] static int classStatic3;
-    [ThreadStatic] static int classStatic4;
-    [ThreadStatic] static int classStatic5;
-
-    public int GetStatic()
-    {
-        return classStatic;
-    }
-
-    /// <summary>
-    /// stops field unused compiler error, but never called
-    /// </summary>
-    public void IncrementStatics()
-    {
-        classStatic2++;
-        classStatic3++;
-        classStatic4++;
-        classStatic5++;
-    }
 }
 
 class ClassWithFourThreadStatics
