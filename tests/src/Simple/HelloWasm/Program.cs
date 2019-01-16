@@ -661,29 +661,43 @@ internal static class Program
 
     private static void TestArgsWithMixedTypesAndExceptionRegions()
     {
-        new MixedArgFuncClass().MixedArgFunc(1, null);
+        new MixedArgFuncClass().MixedArgFunc(1, null, 2, null);
     }
 
     class MixedArgFuncClass
     {
-        public void MixedArgFunc(int firstInt, object shadowStackParam)
+        public void MixedArgFunc(int firstInt, object shadowStackArg, int secondInt, object secondShadowStackArg)
         {
             PrintString("MixedParamFuncWithExceptionRegions does not overwrite args : ");
             bool ok = true;
             int p1 = firstInt;
             try // add a try/catch to get _exceptionRegions.Length > 0 and copy stack args to shadow stack
             {
-                if (shadowStackParam != null)
+                if (shadowStackArg != null)
                 {
                     ok = false;
                 }
             }
-            catch (Exception )
+            catch (Exception)
             {
                 throw;
             }
             if (p1 != 1)
             {
+                PrintString("p1 not 1, was ");
+                PrintLine(p1.ToString());
+                ok = false;
+            }
+
+            if (secondInt != 2)
+            {
+                PrintString("secondInt not 2, was ");
+                PrintLine(secondInt.ToString());
+                ok = false;
+            }
+            if (secondShadowStackArg != null)
+            {
+                PrintLine("secondShadowStackArg != null");
                 ok = false;
             }
             if (ok)
