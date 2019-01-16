@@ -318,9 +318,10 @@ internal static class Program
 
         TestNativeCallback();
 
-        TestThreadStaticsForSingleThread();
+        TestArgsWithMixedTypesAndExceptionRegions();
 
         ThreadTest();
+        TestThreadStaticsForSingleThread();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -836,6 +837,58 @@ internal static class Program
         return result;
     }
 
+    private static void TestArgsWithMixedTypesAndExceptionRegions()
+    {
+        new MixedArgFuncClass().MixedArgFunc(1, null, 2, null);
+    }
+
+    class MixedArgFuncClass
+    {
+        public void MixedArgFunc(int firstInt, object shadowStackArg, int secondInt, object secondShadowStackArg)
+        {
+            PrintString("MixedParamFuncWithExceptionRegions does not overwrite args : ");
+            bool ok = true;
+            int p1 = firstInt;
+            try // add a try/catch to get _exceptionRegions.Length > 0 and copy stack args to shadow stack
+            {
+                if (shadowStackArg != null)
+                {
+                    ok = false;
+                }
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+            if (p1 != 1)
+            {
+                PrintString("p1 not 1, was ");
+                PrintLine(p1.ToString());
+                ok = false;
+            }
+
+            if (secondInt != 2)
+            {
+                PrintString("secondInt not 2, was ");
+                PrintLine(secondInt.ToString());
+                ok = false;
+            }
+            if (secondShadowStackArg != null)
+            {
+                PrintLine("secondShadowStackArg != null");
+                ok = false;
+            }
+            if (ok)
+            {
+                PrintLine("Ok.");
+            }
+            else
+            {
+                PrintLine("Failed.");
+            }
+        }
+    }
+
     private static void TestThreadStaticsForSingleThread()
     {
         var firstClass = new ClassWithFourThreadStatics();
@@ -877,24 +930,6 @@ internal static class Program
 
         PrintString("Second class should not be overwritten: "); // catches a type of bug where beacuse the 2 types share the same number and types of ThreadStatics, the first class can end up overwriting the second
         secondClassStatic = new AnotherClassWithFourThreadStatics().GetStatic();
-        if (secondClassStatic == 13)
-        {
-            PrintLine("Ok.");
-        }
-        else
-        {
-            PrintLine("Failed.");
-            PrintLine("Was: " + secondClassStatic.ToString());
-        }
-
-        PrintString("First class 2nd instance should share static: ");
-        int secondInstanceOfFirstClassStatic = new ClassWithFourThreadStatics().GetStatic();
-        if (secondInstanceOfFirstClassStatic == 3)
-        {
-            PrintLine("Ok.");
-        }
-        else
-        {
             PrintLine("Failed.");
             PrintLine("Was: " + secondInstanceOfFirstClassStatic.ToString());
         }
@@ -927,6 +962,30 @@ internal static class Program
     private static void StartUpB()
     {
         PrintLine("hello from thread"); //3 = ESRCH (no thread found)
+    }
+
+        if (secondClassStatic == 13)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+            PrintLine("Was: " + secondClassStatic.ToString());
+        }
+
+        PrintString("First class 2nd instance should share static: ");
+        int secondInstanceOfFirstClassStatic = new ClassWithFourThreadStatics().GetStatic();
+        if (secondInstanceOfFirstClassStatic == 3)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+            PrintLine("Was: " + secondInstanceOfFirstClassStatic.ToString());
+        }
+        Thread.Sleep(10);
     }
 
     [DllImport("*")]
@@ -1199,6 +1258,54 @@ class ClassWithSealedVTable : ISomeItf
 interface ISomeItf
 {
     int GetValue();
+}
+
+class ClassWithFourThreadStatics
+{
+    [ThreadStatic] static int classStatic;
+    [ThreadStatic] static int classStatic2 = 2;
+    [ThreadStatic] static int classStatic3;
+    [ThreadStatic] static int classStatic4;
+    [ThreadStatic] static int classStatic5;
+
+    public int GetStatic()
+    {
+        return classStatic2;
+    }
+
+    public void IncrementStatics()
+    {
+        classStatic++;
+        classStatic2++;
+        classStatic3++;
+        classStatic4++;
+        classStatic5++;
+    }
+}
+
+class AnotherClassWithFourThreadStatics
+{
+    [ThreadStatic] static int classStatic = 13;
+    [ThreadStatic] static int classStatic2;
+    [ThreadStatic] static int classStatic3;
+    [ThreadStatic] static int classStatic4;
+    [ThreadStatic] static int classStatic5;
+
+    public int GetStatic()
+    {
+        return classStatic;
+    }
+
+    /// <summary>
+    /// stops field unused compiler error, but never called
+    /// </summary>
+    public void IncrementStatics()
+    {
+        classStatic2++;
+        classStatic3++;
+        classStatic4++;
+        classStatic5++;
+    }
 }
 
 class ClassWithFourThreadStatics
