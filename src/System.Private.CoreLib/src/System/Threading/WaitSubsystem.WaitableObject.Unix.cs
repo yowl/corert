@@ -55,32 +55,8 @@ internal static partial class WaitSubsystem
                 _ownershipInfo = ownershipInfo;
             }
 
-            [DllImport("*")]
-            private static unsafe extern int printf(byte* str, byte* unused);
-
-            private static unsafe void PrintString(string s)
-            {
-                int length = s.Length;
-                fixed (char* curChar = s)
-                {
-                    for (int i = 0; i < length; i++)
-                    {
-                        TwoByteStr curCharStr = new TwoByteStr();
-                        curCharStr.first = (byte)(*(curChar + i));
-                        printf((byte*)&curCharStr, null);
-                    }
-                }
-            }
-
-            public static void PrintLine(string s)
-            {
-                PrintString(s);
-                PrintString("\n");
-            }
-
             public static WaitableObject NewEvent(bool initiallySignaled, EventResetMode resetMode)
             {
-                PrintLine(resetMode.ToString());
                 Debug.Assert((resetMode == EventResetMode.AutoReset) || (resetMode == EventResetMode.ManualReset));
 
                 return

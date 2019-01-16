@@ -226,12 +226,6 @@ namespace Internal.IL
                 argNames = _debugInformation.GetParameterNames()?.ToArray();
             }
 
-            if (_method.Name == "MixedParamFunc")
-            {
-
-            }
-
-
             for (int i = 0; i < _signature.Length; i++)
             {
                 if (CanStoreTypeOnStack(_signature[i]))
@@ -258,13 +252,6 @@ namespace Internal.IL
                     else
                     {
                         storageAddr = CastIfNecessary(LoadVarAddress(argOffset, LocalVarKind.Argument, out _), LLVM.PointerType(LLVM.TypeOf(argValue), 0));
-//                        var varBase = GetArgumentVarBase();
-//                        if (varBase > 0)
-//                        {
-//                            storageAddr = LLVM.BuildGEP(_builder, storageAddr,
-//                                new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (uint)(varBase), LLVMMisc.False) },
-//                                $"{LocalVarKind.Argument}{argOffset}_");
-//                        }
                     }
 
                     LLVM.BuildStore(_builder, argValue, storageAddr);
@@ -824,6 +811,7 @@ namespace Internal.IL
             {
                 varCountBase = 0;
                 varBase = 0;
+
                 if (!_signature.IsStatic)
                 {
                     varCountBase = 1;
@@ -876,19 +864,6 @@ namespace Internal.IL
                 new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (uint)(varBase + varOffset), LLVMMisc.False) },
                 $"{kind}{index}_");
 
-        }
-
-        int GetArgumentVarBase()
-        {
-            var argBase = 0;
-            for (var i = 0; i < _signature.Length; i++)
-            {
-                if (CanStoreTypeOnStack(_signature[i]) && _exceptionRegions.Length > 0)
-                {
-                    argBase += PadNextOffset(_signature[i], argBase);
-                }
-            }
-            return argBase.AlignUp(_pointerSize);
         }
 
         private StackValueKind GetStackValueKind(TypeDesc type)
@@ -1428,14 +1403,38 @@ namespace Internal.IL
             int potentialRealArgIndex = 0;
 
             offset = thisSize;
+
+            if (!CanStoreVariableOnStack(argType) && CanStoreTypeOnStack(argType))
+            {
+                // this is an arg that was passed on the stack and is now copied to the shadow stack: move past args that are passed on shadow stack
+                for (int i = 0; i < _signature.Length; i++)
+                {
+                    if (!CanStoreTypeOnStack(_signature[i]))
+                    {
+                        offset = PadNextOffset(_signature[i], offset);
+                    }
+                }
+            }
+
             for (int i = 0; i < index; i++)
             {
                 // We could compact the set of argSlots to only those that we'd keep on the stack, but currently don't
                 potentialRealArgIndex++;
 
-                if (!CanStoreVariableOnStack(_signature[i]))
+                // if this is a shadow stack arg, then only count other shadow stack args as stack args come later
+                if (!CanStoreTypeOnStack(_signature[index]))
                 {
-                    offset = PadNextOffset(_signature[i], offset);
+                    if (!CanStoreTypeOnStack(_signature[i]) && !CanStoreVariableOnStack(_signature[i]))
+                    {
+                        offset = PadNextOffset(_signature[i], offset);
+                    }
+                }
+                else
+                {
+                    if (!CanStoreVariableOnStack(_signature[i]))
+                    {
+                        offset = PadNextOffset(_signature[i], offset);
+                    }
                 }
             }
 

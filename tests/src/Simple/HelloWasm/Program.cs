@@ -326,7 +326,7 @@ internal static class Program
 
         TestTryFinally();
 
-        TestParamsWithMixedTypesAndExceptionRegions();
+        TestArgsWithMixedTypesAndExceptionRegions();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -659,18 +659,24 @@ internal static class Program
         }
     }
 
-    private static void TestParamsWithMixedTypesAndExceptionRegions()
+    private static void TestArgsWithMixedTypesAndExceptionRegions()
     {
-        new MixedParamFuncClass().MixedParamFunc(1, null);
+        new MixedArgFuncClass().MixedArgFunc(1, null);
     }
 
-    class MixedParamFuncClass
+    class MixedArgFuncClass
     {
-        public void MixedParamFunc(int firstInt, object shadowStackParam)
+        public void MixedArgFunc(int firstInt, object shadowStackParam)
         {
+            PrintString("MixedParamFuncWithExceptionRegions does not overwrite args : ");
+            bool ok = true;
             int p1 = firstInt;
-            try
+            try // add a try/catch to get _exceptionRegions.Length > 0 and copy stack args to shadow stack
             {
+                if (shadowStackParam != null)
+                {
+                    ok = false;
+                }
                 Debug.Assert(shadowStackParam == null);
             }
             catch (Exception )
@@ -679,8 +685,15 @@ internal static class Program
             }
             if (p1 != 1)
             {
+                ok = false;
+            }
+            if (ok)
+            {
+                PrintLine("Ok.");
+            }
+            else
+            {
                 PrintLine("Failed.");
-//                MixedParamFunc(firstInt, shadowStackParam);
             }
         }
     }
