@@ -18,6 +18,7 @@ using System.Collections.Generic;
 
 using Internal.Reflection.Core;
 using Internal.Reflection.Core.Execution;
+using Internal.Reflection.Core.NonPortable;
 
 using Internal.Reflection.Tracing;
 using System.Security;
@@ -27,7 +28,7 @@ namespace System.Reflection.Runtime.Assemblies
     //
     // The runtime's implementation of an Assembly. 
     //
-    internal abstract partial class RuntimeAssembly : Assembly, IEquatable<RuntimeAssembly>
+    internal abstract partial class RuntimeAssembly : Assembly, IEquatable<RuntimeAssembly>, IRuntimeImplemented
     {
         public bool Equals(RuntimeAssembly other)
         {
@@ -106,13 +107,9 @@ namespace System.Reflection.Runtime.Assemblies
         public sealed override event ModuleResolveEventHandler ModuleResolve;
 #pragma warning restore 0067
 
-        public sealed override bool ReflectionOnly
-        {
-            get
-            {
-                return false; // ReflectionOnly loading not supported.
-            }
-        }
+        public sealed override bool ReflectionOnly => false; // ReflectionOnly loading not supported.
+
+        public sealed override bool IsCollectible => false; // Unloading not supported.
 
         internal abstract RuntimeAssemblyName RuntimeAssemblyName { get; }
 
@@ -327,6 +324,3 @@ namespace System.Reflection.Runtime.Assemblies
         }
     }
 }
-
-
-

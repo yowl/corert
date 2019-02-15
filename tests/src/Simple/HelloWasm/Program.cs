@@ -3,13 +3,14 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.Threading;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.Reflection;
+
 #if PLATFORM_WINDOWS
 using CpObj;
 #endif
-
 internal static class Program
 {
     private static int staticInt;
@@ -19,13 +20,11 @@ internal static class Program
     {
         PrintLine("Starting");
 
-        new System.Threading.EventWaitHandle(true, System.Threading.EventResetMode.AutoReset);
-
         Add(1, 2);
         int tempInt = 0;
         int tempInt2 = 0;
         (*(&tempInt)) = 9;
-        if (tempInt == 9)
+        if(tempInt == 9)
         {
             PrintLine("Hello from C#!");
         }
@@ -33,12 +32,12 @@ internal static class Program
         int* targetAddr = (tempInt > 0) ? (&tempInt2) : (&tempInt);
 
         (*targetAddr) = 1;
-        if (tempInt2 == 1 && tempInt == 9)
+        if(tempInt2 == 1 && tempInt == 9)
         {
             PrintLine("basic block stack entry Test: Ok.");
         }
 
-        if (ILHelpers.ILHelpersTest.InlineAssignByte() == 100)
+        if(ILHelpers.ILHelpersTest.InlineAssignByte() == 100)
         {
             PrintLine("Inline assign byte Test: Ok.");
         }
@@ -48,7 +47,7 @@ internal static class Program
         }
 
         int dupTestInt = 9;
-        if (ILHelpers.ILHelpersTest.DupTest(ref dupTestInt) == 209 && dupTestInt == 209)
+        if(ILHelpers.ILHelpersTest.DupTest(ref dupTestInt) == 209 && dupTestInt == 209)
         {
             PrintLine("dup test: Ok.");
         }
@@ -71,20 +70,20 @@ internal static class Program
         {
             PrintLine("value type int field test: Ok.");
         }
-
+        
         staticInt = 5;
         if (staticInt == 5)
         {
             PrintLine("static int field test: Ok.");
         }
 
-        if (threadStaticInt == 0)
+        if(threadStaticInt == 0)
         {
             PrintLine("thread static int initial value field test: Ok.");
         }
 
         threadStaticInt = 9;
-        if (threadStaticInt == 9)
+        if(threadStaticInt == 9)
         {
             PrintLine("thread static int field test: Ok.");
         }
@@ -92,7 +91,7 @@ internal static class Program
         StaticCtorTest();
 
         var boxedInt = (object)tempInt;
-        if (((int)boxedInt) == 9)
+        if(((int)boxedInt) == 9)
         {
             PrintLine("box test: Ok.");
         }
@@ -101,7 +100,7 @@ internal static class Program
             PrintLine("box test: Failed. Value:");
             PrintLine(boxedInt.ToString());
         }
-
+        
         var boxedStruct = (object)new BoxStubTest { Value = "Boxed Stub Test: Ok." };
         PrintLine(boxedStruct.ToString());
 
@@ -146,7 +145,7 @@ internal static class Program
         {
             PrintLine("unsignedShift test: Ok.");
         }
-
+        
         var switchTest0 = SwitchOp(5, 5, 0);
         if (switchTest0 == 10)
         {
@@ -176,14 +175,14 @@ internal static class Program
 #endif
 
         Func<int> staticDelegate = StaticDelegateTarget;
-        if (staticDelegate() == 7)
+        if(staticDelegate() == 7)
         {
             PrintLine("Static delegate test: Ok.");
         }
 
         tempObj.TestInt = 8;
         Func<int> instanceDelegate = tempObj.InstanceDelegateTarget;
-        if (instanceDelegate() == 8)
+        if(instanceDelegate() == 8)
         {
             PrintLine("Instance delegate test: Ok.");
         }
@@ -192,7 +191,7 @@ internal static class Program
         virtualDelegate();
 
         var arrayTest = new BoxStubTest[] { new BoxStubTest { Value = "Hello" }, new BoxStubTest { Value = "Array" }, new BoxStubTest { Value = "Test" } };
-        foreach (var element in arrayTest)
+        foreach(var element in arrayTest)
             PrintLine(element.Value);
 
         arrayTest[1].Value = "Array load/store test: Ok.";
@@ -201,9 +200,9 @@ internal static class Program
         int ii = 0;
         arrayTest[ii++].Value = "dup ref test: Ok.";
         PrintLine(arrayTest[0].Value);
-
+        
         var largeArrayTest = new long[] { Int64.MaxValue, 0, Int64.MinValue, 0 };
-        if (largeArrayTest[0] == Int64.MaxValue &&
+        if(largeArrayTest[0] == Int64.MaxValue &&
             largeArrayTest[1] == 0 &&
             largeArrayTest[2] == Int64.MinValue &&
             largeArrayTest[3] == 0)
@@ -212,15 +211,13 @@ internal static class Program
         }
 
         var smallArrayTest = new long[] { Int16.MaxValue, 0, Int16.MinValue, 0 };
-        if (smallArrayTest[0] == Int16.MaxValue &&
+        if(smallArrayTest[0] == Int16.MaxValue &&
             smallArrayTest[1] == 0 &&
             smallArrayTest[2] == Int16.MinValue &&
             smallArrayTest[3] == 0)
         {
             PrintLine("Small array load/store test: Ok.");
         }
-
-        TestNonIntAlignedStructArray();
 
         IntPtr returnedIntPtr = NewobjValueType();
         if (returnedIntPtr.ToInt32() == 3)
@@ -252,7 +249,7 @@ internal static class Program
         PrintLine(((BoxStubTest[])arrayCastingTest)[1].Value);
         PrintLine(((BoxStubTest[])arrayCastingTest)[2].Value);
         if (!(arrayCastingTest is CastingTestClass[]))
-        {
+        {   
             PrintLine("Type casting with isinst & castclass to array test: Ok.");
         }
 
@@ -272,34 +269,16 @@ internal static class Program
         if (testMdArrayInstantiation != null && testMdArrayInstantiation.GetLength(0) == 2 && testMdArrayInstantiation.GetLength(1) == 2)
             PrintLine("Multi-dimension array instantiation test: Ok.");
 
-        int intToCast = 1;
-        double castedDouble = (double)intToCast;
-        if (castedDouble == 1d)
+        FloatDoubleTest();
+
+        long l = 0x1;
+        if (l > 0x7FF0000000000000)
         {
-            PrintLine("(double) cast test: Ok.");
+            PrintLine("long comparison: Failed");
         }
         else
         {
-            var toInt = (int)castedDouble;
-            //            PrintLine("expected 1m, but was " + castedDouble.ToString());  // double.ToString is not compiling at the time of writing, but this would be better output
-            PrintLine($"(double) cast test : Failed. Back to int on next line");
-            PrintLine(toInt.ToString());
-        }
-
-        if (1f < 2d && 1d < 2f && 1f == 1d)
-        {
-            PrintLine("different width float comparisons: Ok.");
-        }
-
-        // floats are 7 digits precision, so check some double more precise to make sure there is no loss occurring through some inadvertent cast to float
-        if (10.23456789d != 10.234567891d)
-        {
-            PrintLine("double precision comparison: Ok.");
-        }
-
-        if (12.34567f == 12.34567f && 12.34567f != 12.34568f)
-        {
-            PrintLine("float comparison: Ok.");
+            PrintLine("long comparison: Ok");
         }
 
         // Create a ByReference<char> through the ReadOnlySpan ctor and call the ByReference.Value via the indexer.
@@ -321,12 +300,29 @@ internal static class Program
         TestConstrainedClassCalls();
 
         TestValueTypeElementIndexing();
-
+        
         TestArrayItfDispatch();
 
+        TestMetaData();
+        
         TestTryFinally();
 
+        int rvaFieldValue = ILHelpers.ILHelpersTest.StaticInitedInt;
+        if (rvaFieldValue == 0x78563412)
+        {
+            PrintLine("RVA static field test: Ok.");
+        }
+        else
+        {
+            PrintLine("RVA static field test: Failed.");
+            PrintLine(rvaFieldValue.ToString());
+        }
+
+        TestNativeCallback();
+
         TestArgsWithMixedTypesAndExceptionRegions();
+
+        TestThreadStaticsForSingleThread();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -337,7 +333,7 @@ internal static class Program
     }
 
     private static int StaticDelegateTarget()
-    {
+    {         
         return 7;
     }
 
@@ -354,7 +350,7 @@ internal static class Program
             }
         }
     }
-
+    
     public static void PrintLine(string s)
     {
         PrintString(s);
@@ -390,21 +386,21 @@ internal static class Program
     {
         return a >> b;
     }
-
+    
     private static int SwitchOp(int a, int b, int mode)
     {
-        switch (mode)
+        switch(mode)
         {
-            case 0:
-                return a + b;
-            case 1:
-                return a * b;
-            case 2:
-                return a / b;
-            case 3:
-                return a - b;
-            default:
-                return 0;
+          case 0:
+            return a + b;
+          case 1:
+            return a * b;
+          case 2:
+            return a / b;
+          case 3:
+            return a - b;
+          default:
+            return 0;
         }
     }
 
@@ -436,16 +432,16 @@ internal static class Program
     {
         var ldindTarget = new TwoByteStr { first = byte.MaxValue, second = byte.MinValue };
         var ldindField = &ldindTarget.first;
-        if ((*ldindField) == byte.MaxValue)
+        if((*ldindField) == byte.MaxValue)
         {
             ldindTarget.second = byte.MaxValue;
             *ldindField = byte.MinValue;
             //ensure there isnt any overwrite of nearby fields
-            if (ldindTarget.first == byte.MinValue && ldindTarget.second == byte.MaxValue)
+            if(ldindTarget.first == byte.MinValue && ldindTarget.second == byte.MaxValue)
             {
                 PrintLine("ldind test: Ok.");
             }
-            else if (ldindTarget.first != byte.MinValue)
+            else if(ldindTarget.first != byte.MinValue)
             {
                 PrintLine("ldind test: Failed didnt update target.");
             }
@@ -519,7 +515,7 @@ internal static class Program
             PrintLine("NonBeforeFieldInit test: Ok.");
         }
         else
-        {
+        { 
             PrintLine("NonBeforeFieldInitType cctor not run");
         }
     }
@@ -540,7 +536,7 @@ internal static class Program
             PrintString(stringDirectToString);
             PrintLine("\"");
         }
-
+       
         // Generic calls on methods not defined on object
         uint dataFromBase = GenericGetData<MyBase>(new MyBase(11));
         PrintString("Generic call to base class test: ");
@@ -659,6 +655,376 @@ internal static class Program
         }
     }
 
+    private static void FloatDoubleTest()
+    {
+        int intToCast = 1;
+        double castedDouble = (double)intToCast;
+        if (castedDouble == 1d)
+        {
+            PrintLine("(double) cast test: Ok.");
+        }
+        else
+        {
+            var toInt = (int)castedDouble;
+            //            PrintLine("expected 1m, but was " + castedDouble.ToString());  // double.ToString is not compiling at the time of writing, but this would be better output
+            PrintLine($"(double) cast test : Failed. Back to int on next line");
+            PrintLine(toInt.ToString());
+        }
+
+        if (1f < 2d && 1d < 2f && 1f == 1d)
+        {
+            PrintLine("different width float comparisons: Ok.");
+        }
+
+        // floats are 7 digits precision, so check some double more precise to make sure there is no loss occurring through some inadvertent cast to float
+        if (10.23456789d != 10.234567891d)
+        {
+            PrintLine("double precision comparison: Ok.");
+        }
+
+        if (12.34567f == 12.34567f && 12.34567f != 12.34568f)
+        {
+            PrintLine("float comparison: Ok.");
+        }
+
+        PrintString("Test comparison of float constant: ");
+        var maxFloat = Single.MaxValue;
+        if (maxFloat == Single.MaxValue)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+
+        PrintString("Test comparison of double constant: ");
+        var maxDouble = Double.MaxValue;
+        if (maxDouble == Double.MaxValue)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+    }
+
+    private static bool callbackResult;
+    private static unsafe void TestNativeCallback()
+    {
+        CallMe(123);
+        PrintString("Native callback test: ");
+        if (callbackResult)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+    }
+
+    [System.Runtime.InteropServices.NativeCallable(EntryPoint = "CallMe")]
+    private static void _CallMe(int x)
+    {
+        if (x == 123)
+        {
+            callbackResult = true;
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("*")]
+    private static extern void CallMe(int x);
+
+    private static void TestMetaData()
+    {
+
+        var typeGetType = Type.GetType("System.Char, System.Private.CoreLib");
+        if (typeGetType == null)
+        {
+            PrintLine("type == null.  Simple class metadata test: Failed");
+        }
+        else
+        {
+            if (typeGetType.FullName != "System.Char")
+            {
+                PrintLine("type != System.Char.  Simple class metadata test: Failed");
+            }
+            else PrintLine("Simple class metadata test: Ok.");
+        }
+
+        var typeofChar = typeof(Char);
+        if (typeofChar == null)
+        {
+            PrintLine("type == null.  Simple struct metadata test: Failed");
+        }
+        else
+        {
+            if (typeofChar.FullName != "System.Char")
+            {
+                PrintLine("type != System.Char.  Simple struct metadata test: Failed");
+            }
+            else PrintLine("Simple struct metadata test (typeof(Char)): Ok.");
+        }
+
+        var gentT = new Gen<int>();
+        var genParamType = gentT.TestTypeOf();
+        PrintString("type of generic parameter: ");
+        if (genParamType.FullName != "System.Int32")
+        {
+            PrintString("expected System.Int32 but was " + genParamType.FullName);
+            PrintLine(" Failed.");
+        }
+        else
+        {
+            PrintLine("Ok.");
+        }
+
+        var arrayType = typeof(object[]);
+        PrintString("type of array: ");
+        if (arrayType.FullName != "System.Object[]")
+        {
+            PrintString("expected System.Object[] but was " + arrayType.FullName);
+            PrintLine(" Failed.");
+        }
+        else
+        {
+            PrintLine("Ok.");
+        }
+
+        var genericType = typeof(List<object>);
+        PrintString("type of generic : ");
+        if (genericType.FullName != "System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]")
+        {
+            PrintString("expected System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]] but was " + genericType.FullName);
+            PrintLine(" Failed.");
+        }
+        else
+        {
+            PrintLine("Ok.");
+        }
+
+        PrintString("Type GetFields length: ");
+        var x = new ClassForMetaTests();
+        var s = x.StringField;  
+        var i = x.IntField;
+        var classForMetaTestsType = typeof(ClassForMetaTests);
+        FieldInfo[] fields = classForMetaTestsType.GetFields();
+        if (fields.Length == 3)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine(" Failed.");
+        }
+
+        PrintString("Type get string field via reflection: ");
+        var stringFieldInfo = classForMetaTestsType.GetField("StringField");
+        if ((string)stringFieldInfo.GetValue(x) == s)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+        PrintString("Type get int field via reflection: ");
+        var intFieldInfo = classForMetaTestsType.GetField("IntField");
+        if ((int)intFieldInfo.GetValue(x) == i)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+
+        PrintString("Type get static int field via reflection: ");
+        var staticIntFieldInfo = classForMetaTestsType.GetField("StaticIntField");
+        if ((int)staticIntFieldInfo.GetValue(x) == 23)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+
+        PrintString("Type set string field via reflection: ");
+        stringFieldInfo.SetValue(x, "bcd");
+        if (x.StringField == "bcd")
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+
+        PrintString("Type set int field via reflection: ");
+        intFieldInfo.SetValue(x, 456);
+        if (x.IntField == 456)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+
+        PrintString("Type set static int field via reflection: ");
+        staticIntFieldInfo.SetValue(x, 987);
+        if (ClassForMetaTests.StaticIntField == 987)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+        var st = new StructForMetaTests();
+        st.StringField = "xyz";
+        var fieldStructType = typeof(StructForMetaTests);
+        var structStringFieldInfo = fieldStructType.GetField("StringField");
+        PrintString("Struct get string field via reflection: ");
+        if ((string)structStringFieldInfo.GetValue(st) == "xyz")
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+
+        PrintString("Class get+invoke ctor via reflection: ");
+        var ctor = classForMetaTestsType.GetConstructor(new Type[0]);
+        ClassForMetaTests instance = (ClassForMetaTests)ctor.Invoke(null);
+        if (instance.IntField == 12)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+
+        instance.ReturnTrueIf1(0); // force method output
+        instance.ReturnTrueIf1AndThis(0, null); // force method output
+        ClassForMetaTests.ReturnsParam(null); // force method output
+
+        PrintString("Class get+invoke simple method via reflection: ");
+        var mtd = classForMetaTestsType.GetMethod("ReturnTrueIf1");
+        bool shouldBeTrue = (bool)mtd.Invoke(instance, new object[] {1});
+        bool shouldBeFalse = (bool)mtd.Invoke(instance, new object[] {2});
+        if (shouldBeTrue && !shouldBeFalse)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+
+        PrintString("Class get+invoke method with ref param via reflection: ");
+        var mtdWith2Params = classForMetaTestsType.GetMethod("ReturnTrueIf1AndThis");
+        shouldBeTrue = (bool)mtdWith2Params.Invoke(instance, new object[] { 1, instance });
+        shouldBeFalse = (bool)mtdWith2Params.Invoke(instance, new object[] { 1, new ClassForMetaTests() });
+        if (shouldBeTrue && !shouldBeFalse)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+
+
+        PrintString("Class get+invoke static method with ref param via reflection: ");
+        var staticMtd = classForMetaTestsType.GetMethod("ReturnsParam");
+        var retVal = (ClassForMetaTests)staticMtd.Invoke(null, new object[] { instance });
+        if (Object.ReferenceEquals(retVal, instance))
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+        }
+    }
+
+    public class ClassForMetaTests
+    {
+        // used via reflection
+#pragma warning disable 0169
+        public int IntField;
+        public string StringField;
+#pragma warning restore 0169
+        public static int StaticIntField;
+
+        public ClassForMetaTests()
+        {
+            StringField = "ab";
+            IntField = 12;
+            StaticIntField = 23;
+        }
+
+        public bool ReturnTrueIf1(int i)
+        {
+            return i == 1;
+        }
+
+        public bool ReturnTrueIf1AndThis(int i, object anInstance)
+        {
+            return i == 1 && object.ReferenceEquals(this, anInstance);
+        }
+
+        public static object ReturnsParam(object p1)
+        {
+            return p1;
+        }
+    }
+
+    public struct StructForMetaTests
+    {
+        public string StringField;
+    }
+
+
+    /// <summary>
+    /// Ensures all of the blocks of a try/finally function are hit when there aren't exceptions
+    /// </summary>
+    private static void TestTryFinally()
+    {
+        PrintString("Try/Finally test: ");
+        uint result = TryFinallyInner();
+        if (result == 1111)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed. Result: " + result.ToString());
+        }
+    }
+
+    private static uint TryFinallyInner()
+    {
+        uint result = 1;
+        try
+        {
+            result += 10;
+        }
+        finally
+        {
+            result += 100;
+        }
+        result += 1000;
+
+        return result;
+    }
+
     private static void TestArgsWithMixedTypesAndExceptionRegions()
     {
         new MixedArgFuncClass().MixedArgFunc(1, null, 2, null);
@@ -711,112 +1077,69 @@ internal static class Program
         }
     }
 
-
-
-    struct OddLengthStruct
+    private static void TestThreadStaticsForSingleThread()
     {
-        public UInt16 a, b, c;
-    }
-
-    private static unsafe void TestNonIntAlignedStructArray()
-    {
-        PrintString("Non-int aligned struct array: ");
-
-        OddLengthStruct firstOdd = new OddLengthStruct { a = 1, b = 2, c = 3 };
-        OddLengthStruct secondOdd = new OddLengthStruct { a = 4, b = 5, c = 6 };
-
-        OddLengthStruct[] someOddStructs = new OddLengthStruct[2];
-        someOddStructs[0] = firstOdd;
-        someOddStructs[1] = secondOdd;
-
-        bool success = true;
-        if (someOddStructs[0].a != 1 || someOddStructs[0].b != 2 || someOddStructs[0].c != 3)
-        {
-            PrintLine("Failed reading from first index");
-            success = false;
-        }
-        if (someOddStructs[1].a != 4 || someOddStructs[1].b != 5 || someOddStructs[1].c != 6)
-        {
-            PrintLine("Failed reading from second index");
-            success = false;
-        }
-
-        fixed (OddLengthStruct* pArrStart = someOddStructs)
-        {
-            UInt16* pArr = (ushort*)pArrStart;
-            for (int i = 0; i < 6; i++)
-            {
-                if (*pArr != i + 1)
-                {
-                    PrintLine("Failed reading as ushort pointer");
-                    success = false;
-                }
-                pArr++;
-            }
-        }
-
-        fixed (OddLengthStruct* pArrStart2 = someOddStructs)
-        {
-            byte* pArr2 = (byte*)pArrStart2;
-            for (int i = 0; i < 12; i++)
-            {
-                if (i % 2 == 0)
-                {
-                    if (*pArr2 != ((i / 2) + 1))
-                    {
-                        PrintLine("Failed reading as byte pointer");
-                        success = false;
-                    }
-                }
-                else
-                {
-                    if (*pArr2 != 0)
-                    {
-                        PrintLine("Failed reading as byte pointer");
-                        success = false;
-                    }
-                }
-                pArr2++;
-            }
-        }
-
-        if (success)
-        {
-            PrintLine("Ok.");
-        }
-    }
-
-    /// <summary>
-    /// Ensures all of the blocks of a try/finally function are hit when there aren't exceptions
-    /// </summary>
-    private static void TestTryFinally()
-    {
-        PrintString("Try/Finally test: ");
-        uint result = TryFinallyInner();
-        if (result == 1111)
+        var firstClass = new ClassWithFourThreadStatics();
+        int firstClassStatic = firstClass.GetStatic();
+        PrintString("Static should be initialised: ");
+        if (firstClassStatic == 2)
         {
             PrintLine("Ok.");
         }
         else
         {
-            PrintLine("Failed. Result: " + result.ToString());
+            PrintLine("Failed.");
+            PrintLine("Was: " + firstClassStatic.ToString());
         }
-    }
-
-    private static uint TryFinallyInner()
-    {
-        uint result = 1;
-        try
+        PrintString("Second class with same statics should be initialised: ");
+        int secondClassStatic = new AnotherClassWithFourThreadStatics().GetStatic();
+        if (secondClassStatic == 13)
         {
-            result += 10;
+            PrintLine("Ok.");
         }
-        finally
+        else
         {
-            result += 100;
+            PrintLine("Failed.");
+            PrintLine("Was: " + secondClassStatic.ToString());
         }
-        result += 1000;
 
-        return result;
+        PrintString("First class increment statics: ");
+        firstClass.IncrementStatics();
+        firstClassStatic = firstClass.GetStatic();
+        if (firstClassStatic == 3)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+            PrintLine("Was: " + firstClassStatic.ToString());
+        }
+
+        PrintString("Second class should not be overwritten: "); // catches a type of bug where beacuse the 2 types share the same number and types of ThreadStatics, the first class can end up overwriting the second
+        secondClassStatic = new AnotherClassWithFourThreadStatics().GetStatic();
+        if (secondClassStatic == 13)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+            PrintLine("Was: " + secondClassStatic.ToString());
+        }
+
+        PrintString("First class 2nd instance should share static: ");
+        int secondInstanceOfFirstClassStatic = new ClassWithFourThreadStatics().GetStatic();
+        if (secondInstanceOfFirstClassStatic == 3)
+        {
+            PrintLine("Ok.");
+        }
+        else
+        {
+            PrintLine("Failed.");
+            PrintLine("Was: " + secondInstanceOfFirstClassStatic.ToString());
+        }
+        Thread.Sleep(10);
     }
 
     [DllImport("*")]
@@ -1008,6 +1331,14 @@ public sealed class MySealedClass
     }
 }
 
+public class Gen<T>
+{
+    internal Type TestTypeOf()
+    {
+        return typeof(T);
+    }
+}
+
 public class MyUnsealedClass
 {
     uint _data;
@@ -1081,4 +1412,83 @@ class ClassWithSealedVTable : ISomeItf
 interface ISomeItf
 {
     int GetValue();
+}
+
+class ClassWithFourThreadStatics
+{
+    [ThreadStatic] static int classStatic;
+    [ThreadStatic] static int classStatic2 = 2;
+    [ThreadStatic] static int classStatic3;
+    [ThreadStatic] static int classStatic4;
+    [ThreadStatic] static int classStatic5;
+
+    public int GetStatic()
+    {
+        return classStatic2;
+    }
+
+    public void IncrementStatics()
+    {
+        classStatic++;
+        classStatic2++;
+        classStatic3++;
+        classStatic4++;
+        classStatic5++;
+    }
+}
+
+class AnotherClassWithFourThreadStatics
+{
+    [ThreadStatic] static int classStatic = 13;
+    [ThreadStatic] static int classStatic2;
+    [ThreadStatic] static int classStatic3;
+    [ThreadStatic] static int classStatic4;
+    [ThreadStatic] static int classStatic5;
+
+    public int GetStatic()
+    {
+        return classStatic;
+    }
+
+    /// <summary>
+    /// stops field unused compiler error, but never called
+    /// </summary>
+    public void IncrementStatics()
+    {
+        classStatic2++;
+        classStatic3++;
+        classStatic4++;
+        classStatic5++;
+    }
+}
+
+namespace System.Runtime.InteropServices
+{
+    /// <summary>
+    /// Any method marked with NativeCallableAttribute can be directly called from
+    /// native code. The function token can be loaded to a local variable using LDFTN
+    /// and passed as a callback to native method.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method)]
+    public sealed class NativeCallableAttribute : Attribute
+    {
+        public NativeCallableAttribute()
+        {
+        }
+
+        /// <summary>
+        /// Optional. If omitted, compiler will choose one for you.
+        /// </summary>
+        public CallingConvention CallingConvention;
+
+        /// <summary>
+        /// Optional. If omitted, then the method is native callable, but no EAT is emitted.
+        /// </summary>
+        public string EntryPoint;
+    }
+
+    [AttributeUsage((System.AttributeTargets.Method | System.AttributeTargets.Class))]
+    internal class McgIntrinsicsAttribute : Attribute
+    {
+    }
 }

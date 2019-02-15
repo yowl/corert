@@ -30,21 +30,21 @@ namespace System.Buffers.Binary
         /// <summary>
         /// Reverses a primitive value - performs an endianness swap
         /// </summary> 
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static short ReverseEndianness(short value)
-        {
-            return (short)((value & 0x00FF) << 8 | (value & 0xFF00) >> 8);
-        }
+        public static short ReverseEndianness(short value) => (short)ReverseEndianness((ushort)value);
 
         /// <summary>
         /// Reverses a primitive value - performs an endianness swap
         /// </summary> 
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int ReverseEndianness(int value) => (int)ReverseEndianness((uint)value);
 
         /// <summary>
         /// Reverses a primitive value - performs an endianness swap
         /// </summary> 
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static long ReverseEndianness(long value) => (long)ReverseEndianness((ulong)value);
 
@@ -54,7 +54,7 @@ namespace System.Buffers.Binary
         /// rather than having to skip byte fields.
         /// </summary> 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static byte ReverseEndianness(byte value)
+        public static byte ReverseEndianness(byte value) 
         {
             return value;
         }
@@ -63,6 +63,7 @@ namespace System.Buffers.Binary
         /// Reverses a primitive value - performs an endianness swap
         /// </summary> 
         [CLSCompliant(false)]
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ushort ReverseEndianness(ushort value)
         {
@@ -80,6 +81,7 @@ namespace System.Buffers.Binary
         /// Reverses a primitive value - performs an endianness swap
         /// </summary> 
         [CLSCompliant(false)]
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static uint ReverseEndianness(uint value)
         {
@@ -103,16 +105,15 @@ namespace System.Buffers.Binary
             // Testing shows that throughput increases if the AND
             // is performed before the ROL / ROR.
 
-            uint mask_xx_zz = (value & 0x00FF00FFU);
-            uint mask_ww_yy = (value & 0xFF00FF00U);
-            return ((mask_xx_zz >> 8) | (mask_xx_zz << 24))
-                + ((mask_ww_yy << 8) | (mask_ww_yy >> 24));
+            return BitOps.RotateRight(value & 0x00FF00FFu, 8) // xx zz
+                + BitOps.RotateLeft(value & 0xFF00FF00u, 8); // ww yy
         }
 
         /// <summary>
         /// Reverses a primitive value - performs an endianness swap
         /// </summary> 
         [CLSCompliant(false)]
+        [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ulong ReverseEndianness(ulong value)
         {

@@ -6,6 +6,58 @@
             "classes": null,
             "methods": [
                 {
+                    "name": "System.Collections.Tests.Dictionary_Generic_Tests_Keys_AsICollection.ICollection_NonGeneric_SyncRoot",
+                    "reason": "outdated"
+                },
+                {
+                    "name": "System.Collections.Tests.Dictionary_IDictionary_NonGeneric_Tests.ICollection_NonGeneric_SyncRoot",
+                    "reason": "outdated"
+                },
+                {
+                    "name": "System.Collections.Tests.Dictionary_Generic_Tests_Values_AsICollection.ICollection_NonGeneric_SyncRoot",
+                    "reason": "outdated"
+                },
+                {
+                    "name": "System.Collections.Tests.SortedList_Generic_Tests_Keys_AsICollection.ICollection_NonGeneric_SyncRoot",
+                    "reason": "waiting on corefx update"
+                },
+                {
+                    "name": "System.Collections.Tests.SortedList_Generic_Tests_Values_AsICollection.ICollection_NonGeneric_SyncRoot",
+                    "reason": "waiting on corefx update"
+                },
+                {
+                    "name": "System.Collections.Tests.SortedSet_ICollection_NonGeneric_Tests.ICollection_NonGeneric_SyncRoot",
+                    "reason": "waiting on corefx update"
+                },
+                {
+                    "name": "System.Collections.Tests.Stack_ICollection_NonGeneric_Tests.ICollection_NonGeneric_SyncRoot",
+                    "reason": "waiting on corefx update"
+                },
+                {
+                    "name": "System.Collections.Tests.Queue_ICollection_NonGeneric_Tests.ICollection_NonGeneric_SyncRoot",
+                    "reason": "waiting on corefx update"
+                },
+                {
+                    "name": "System.Collections.Tests.LinkedList_ICollection_NonGeneric_Tests.ICollection_NonGeneric_SyncRoot",
+                    "reason": "waiting on corefx update"
+                },
+                {
+                    "name": "System.Collections.Tests.SortedDictionary_IDictionary_NonGeneric_Tests.ICollection_NonGeneric_SyncRoot",
+                    "reason": "waiting on corefx update"
+                },
+                {
+                    "name": "System.Collections.Tests.SortedDictionary_Generic_Tests_Keys_AsICollection.ICollection_NonGeneric_SyncRoot",
+                    "reason": "waiting on corefx update"
+                },
+                {
+                    "name": "System.Collections.Tests.SortedDictionary_Generic_Tests_Values_AsICollection.ICollection_NonGeneric_SyncRoot",
+                    "reason": "waiting on corefx update"
+                },
+                {
+                    "name": "System.Collections.Tests.SortedList_IDictionary_NonGeneric_Tests.ICollection_NonGeneric_SyncRoot",
+                    "reason": "waiting on corefx update"
+                },
+                {
                     "name": "System.Collections.Tests.SortedList_Generic_Tests_string_string.ICollection_Generic_Remove_DefaultValueContainedInCollection",
                     "reason": "$BlockedFromReflection_0_5b449e4c"
                 },
@@ -560,6 +612,30 @@
             "classes": null,
             "methods": [
                 {
+                    "name": "System.Tests.MathFTests.Min",
+                    "reason": "outdated"
+                },
+                {
+                    "name": "System.Tests.MathFTests.Max",
+                    "reason": "outdated"
+                },
+                {
+                    "name": "System.Tests.MathTests.Min_Single",
+                    "reason": "outdated"
+                },
+                {
+                    "name": "System.Tests.MathTests.Min_Double",
+                    "reason": "outdated"
+                },
+                {
+                    "name": "System.Tests.MathTests.Max_Single",
+                    "reason": "outdated"
+                },
+                {
+                    "name": "System.Tests.MathTests.Max_Double",
+                    "reason": "outdated"
+                },
+                {
                     "name": "System.Reflection.Tests.AssemblyNameProxyTests.GetAssemblyName_AssemblyNameProxy",
                     "reason": "Xunit.Sdk.ThrowsException"
                 },
@@ -863,9 +939,17 @@
                     "name": "System.Tests.BitConverterArray.ConvertFromChar",
                     "reason": "System.ArgumentException"
                 },
-                { 
+                {
                     "name": "System.Tests.ConvertToStringTests.FromBoxedObject",
                     "reason": "https://github.com/dotnet/coreclr/pull/19775"
+                },
+                {
+                    "name": "System.Tests.ConvertToDoubleTests.FromString",
+                    "reason": "https://github.com/dotnet/coreclr/pull/20707"
+                },
+                {
+                    "name": "System.Tests.ConvertToSingleTests.FromString",
+                    "reason": "https://github.com/dotnet/coreclr/pull/20707"
                 }
             ]
         }
@@ -876,6 +960,46 @@
             "namespaces": null,
             "classes": null,
             "methods": [
+                {
+                    "name": "System.Tests.TimeSpanTests.Total_Days_Hours_Minutes_Seconds_Milliseconds",
+                    "reason": "outdated"
+                },
+                {
+                    "name": "System.Tests.TimeSpanTests.Parse_Invalid",
+                    "reason": "Temporary disabling till merging the PR https://github.com/dotnet/corefx/pull/34561"
+                },
+                {
+                    "name": "System.Tests.TimeSpanTests.Parse_Span",
+                    "reason": "Temporary disabling till merging the PR https://github.com/dotnet/corefx/pull/34561"
+                },
+                {
+                    "name": "System.Tests.TimeSpanTests.Parse_Span_Invalid",
+                    "reason": "Temporary disabling till merging the PR https://github.com/dotnet/corefx/pull/34561"
+                },
+                {
+                    "name": "System.Tests.TimeSpanTests.Parse",
+                    "reason": "Temporary disabling till merging the PR https://github.com/dotnet/corefx/pull/34561"
+                },
+                {
+                    "name": "System.Text.Tests.StringBuilderTests.Equals",
+                    "reason": "Because of a change in StringBuilder, this test is outdated."
+                },
+                {
+                    "name": "System.Tests.DecimalTests.Remainder",
+                    "reason": "https://github.com/dotnet/coreclr/issues/12605"
+                },
+                {
+                    "name": "System.Tests.DecimalTests.Remainder_Invalid",
+                    "reason": "https://github.com/dotnet/coreclr/issues/12605"
+                },
+                {
+                    "name": "System.Tests.DecimalTests+BigIntegerMod.Test",
+                    "reason": "https://github.com/dotnet/coreclr/issues/12605"
+                },
+                {
+                    "name": "System.Tests.DecimalTests.Round_InvalidMidpointRounding_ThrowsArgumentException",
+                    "reason": "outdated"
+                },
                 {
                     "name": "System.Reflection.Tests.MethodInfoTests.TestEquality2",
                     "reason": "Xunit.Sdk.EqualException"

@@ -399,11 +399,9 @@ namespace System
                         continue;
                     }
 
-                    AggregateException currentInnerAsAggregate = currentInnerException as AggregateException;
-
                     // If this exception is an aggregate, keep it around for later.  Otherwise,
                     // simply add it to the list of flattened exceptions to be returned.
-                    if (currentInnerAsAggregate != null)
+                    if (currentInnerException is AggregateException currentInnerAsAggregate)
                     {
                         exceptionsToFlatten.Add(currentInnerAsAggregate);
                     }
@@ -471,7 +469,7 @@ namespace System
         /// because DebuggerDisplay should be a single property access or parameterless method call, so that the debugger 
         /// can use a fast path without using the expression evaluator.
         /// 
-        /// See http://msdn.microsoft.com/en-us/library/x810d419.aspx
+        /// See https://docs.microsoft.com/en-us/visualstudio/debugger/using-the-debuggerdisplay-attribute
         /// </summary>
         private int InnerExceptionCount
         {

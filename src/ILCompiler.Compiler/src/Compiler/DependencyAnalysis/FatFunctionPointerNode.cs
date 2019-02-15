@@ -19,6 +19,8 @@ namespace ILCompiler.DependencyAnalysis
     {
         private bool _isUnboxingStub;
 
+        public bool IsUnboxingStub => _isUnboxingStub;
+
         public FatFunctionPointerNode(MethodDesc methodRepresented, bool isUnboxingStub)
         {
             // We should not create these for methods that don't have a canonical method body
@@ -55,13 +57,6 @@ namespace ILCompiler.DependencyAnalysis
         public override bool StaticDependenciesAreComputed => true;
 
         protected override string GetName(NodeFactory factory) => this.GetMangledName(factory.NameMangler);
-
-        protected override DependencyList ComputeNonRelocationBasedDependencies(NodeFactory factory)
-        {
-            DependencyList result = new DependencyList();
-            result.Add(new DependencyListEntry(factory.ShadowConcreteMethod(Method, _isUnboxingStub), "Method represented"));
-            return result;
-        }
 
         public override ObjectData GetData(NodeFactory factory, bool relocsOnly = false)
         {

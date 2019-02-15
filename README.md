@@ -3,14 +3,14 @@ This repo contains the .NET Core runtime optimized for ahead of time compilation
 
 ## Try Our Samples
 
-If you would like to give CoreRT a try, we publish daily snapshots of CoreRT to MyGet. Using CoreRT is as simple as adding a new package reference to your .NET Core project and publishing it. Check out one of our samples: a "[Hello World](samples/HelloWorld)" console app, a simple [ASP.NET Core](samples/WebApi/) app, or a [MonoGame](samples/MonoGame/) game. The `README.md` file in each sample's directory will guide you through the process step by step.
+If you would like to give CoreRT a try, we publish daily snapshots of CoreRT to MyGet. Using CoreRT is as simple as adding a new package reference to your .NET Core project and publishing it. Check out one of our samples: a "[Hello World](samples/HelloWorld)" console app, a simple [ASP.NET Core](samples/WebApi/) app, a [MonoGame](samples/MonoGame/) game or a [native library](samples/NativeLibrary). The `README.md` file in each sample's directory will guide you through the process step by step.
 
 ## Platform Support
 
 This is a work in progress. The current state of platform support:
 - Windows, MacOS and Linux x64 w/ RyuJIT codegen: Simple apps. Check our [ASP.NET Core](samples/WebApi/) and [MonoGame](samples/MonoGame/) samples.
 - Linux ARM w/ RyuJIT codegen: ElmSharp Hello Tizen application ([detailed status](https://github.com/dotnet/corert/issues/4856))
-- CppCodeGen (targets all platforms that support C++): Simple C# programs. The big missing features are [reflection](https://github.com/dotnet/corert/issues/2035), [garbage collection](https://github.com/dotnet/corert/issues/2033) and [exception handling](https://github.com/dotnet/corert/issues/910).
+- CppCodeGen (targets all platforms that support C++): Simple C# programs. The big missing features are [garbage collection](https://github.com/dotnet/corert/issues/2033) and [exception handling](https://github.com/dotnet/corert/issues/910).
 - WebAssembly: Early prototype that compiles and runs very trivial programs only. Many features are [not yet implemented](https://github.com/dotnet/corert/issues?q=is%3Aissue+is%3Aopen+label%3Aarch-wasm).
 
 ## How to Engage, Contribute and Provide Feedback

@@ -31,7 +31,7 @@ namespace ILCompiler
         public NodeFactory NodeFactory => _nodeFactory;
         public CompilerTypeSystemContext TypeSystemContext => NodeFactory.TypeSystemContext;
         public Logger Logger => _logger;
-        internal PInvokeILProvider PInvokeILProvider { get; }
+        public PInvokeILProvider PInvokeILProvider { get; }
 
         private readonly TypeGetTypeMethodThunkCache _typeGetTypeMethodThunks;
         private readonly AssemblyGetExecutingAssemblyMethodThunkCache _assemblyGetExecutingAssemblyMethodThunks;
@@ -94,6 +94,12 @@ namespace ILCompiler
 
         protected abstract void CompileInternal(string outputFile, ObjectDumper dumper);
 
+        public virtual bool CanInline(MethodDesc caller, MethodDesc callee)
+        {
+            // No restrictions on inlining by default
+            return true;
+        }
+
         public DelegateCreationInfo GetDelegateCtor(TypeDesc delegateType, MethodDesc target, bool followVirtualDispatch)
         {
             // If we're creating a delegate to a virtual method that cannot be overriden, devirtualize.
@@ -108,7 +114,7 @@ namespace ILCompiler
         /// <summary>
         /// Gets an object representing the static data for RVA mapped fields from the PE image.
         /// </summary>
-        public ObjectNode GetFieldRvaData(FieldDesc field)
+        public virtual ObjectNode GetFieldRvaData(FieldDesc field)
         {
             if (field.GetType() == typeof(PInvokeLazyFixupField))
             {
@@ -215,6 +221,7 @@ namespace ILCompiler
                 case ReadyToRunHelperId.TypeHandle:
                 case ReadyToRunHelperId.NecessaryTypeHandle:
                 case ReadyToRunHelperId.DefaultConstructor:
+                case ReadyToRunHelperId.TypeHandleForCasting:
                     return ((TypeDesc)targetOfLookup).IsRuntimeDeterminedSubtype;
 
                 case ReadyToRunHelperId.MethodDictionary:
@@ -239,6 +246,13 @@ namespace ILCompiler
                     return NodeFactory.ConstructedTypeSymbol((TypeDesc)targetOfLookup);
                 case ReadyToRunHelperId.NecessaryTypeHandle:
                     return NodeFactory.NecessaryTypeSymbol((TypeDesc)targetOfLookup);
+                case ReadyToRunHelperId.TypeHandleForCasting:
+                    {
+                        var type = (TypeDesc)targetOfLookup;
+                        if (type.IsNullable)
+                            targetOfLookup = type.Instantiation[0];
+                        return NodeFactory.NecessaryTypeSymbol((TypeDesc)targetOfLookup);
+                    }
                 case ReadyToRunHelperId.MethodDictionary:
                     return NodeFactory.MethodGenericDictionary((MethodDesc)targetOfLookup);
                 case ReadyToRunHelperId.MethodEntry:
@@ -283,6 +297,32 @@ namespace ILCompiler
                 contextSource = GenericContextSource.ThisObject;
             }
 
+            //
+            // Some helpers represent logical concepts that might not be something that can be looked up in a dictionary
+            //
+
+            // Downgrade type handle for casting to a normal type handle if possible
+            if (lookupKind == ReadyToRunHelperId.TypeHandleForCasting)
+            {
+                var type = (TypeDesc)targetOfLookup;
+                if (!type.IsRuntimeDeterminedType ||
+                    (!((RuntimeDeterminedType)type).CanonicalType.IsCanonicalDefinitionType(CanonicalFormKind.Universal) &&
+                    !((RuntimeDeterminedType)type).CanonicalType.IsNullable))
+                {
+                    if (type.IsNullable)
+                    {
+                        targetOfLookup = type.Instantiation[0];
+                    }
+                    lookupKind = ReadyToRunHelperId.NecessaryTypeHandle;
+                }
+            }
+
+            // We don't have separate entries for necessary type handles to avoid possible duplication
+            if (lookupKind == ReadyToRunHelperId.NecessaryTypeHandle)
+            {
+                lookupKind = ReadyToRunHelperId.TypeHandle;
+            }
+
             // Can we do a fixed lookup? Start by checking if we can get to the dictionary.
             // Context source having a vtable with fixed slots is a prerequisite.
             if (contextSource == GenericContextSource.MethodParameter
@@ -320,7 +360,21 @@ namespace ILCompiler
             }
 
             // Fixed lookup not possible - use helper.
-            return GenericDictionaryLookup.CreateHelperLookup(contextSource);
+            return GenericDictionaryLookup.CreateHelperLookup(contextSource, lookupKind, targetOfLookup);
+        }
+
+        /// <summary>
+        /// Gets the type of System.Type descendant that implements runtime types.
+        /// </summary>
+        public virtual TypeDesc GetTypeOfRuntimeType()
+        {
+            ModuleDesc reflectionCoreModule = TypeSystemContext.GetModuleForSimpleName("System.Private.Reflection.Core", false);
+            if (reflectionCoreModule != null)
+            {
+                return reflectionCoreModule.GetKnownType("System.Reflection.Runtime.TypeInfos", "RuntimeTypeInfo");
+            }
+
+            return null;
         }
 
         CompilationResults ICompilation.Compile(string outputFile, ObjectDumper dumper)
@@ -353,11 +407,15 @@ namespace ILCompiler
 
             public void AddCompilationRoot(MethodDesc method, string reason, string exportName = null)
             {
-                IMethodNode methodEntryPoint = _factory.CanonicalEntrypoint(method);
+                MethodDesc canonMethod = method.GetCanonMethodTarget(CanonicalFormKind.Specific);
+                IMethodNode methodEntryPoint = _factory.MethodEntrypoint(canonMethod);
                 _graph.AddRoot(methodEntryPoint, reason);
 
                 if (exportName != null)
                     _factory.NodeAliases.Add(methodEntryPoint, exportName);
+
+                if (canonMethod != method && method.HasInstantiation)
+                    _graph.AddRoot(_factory.MethodGenericDictionary(method), reason);
             }
 
             public void AddCompilationRoot(TypeDesc type, string reason)
@@ -410,10 +468,17 @@ namespace ILCompiler
             {
                 Debug.Assert(method.IsVirtual);
 
-                // Virtual method use is tracked on the slot defining method only.
-                MethodDesc slotDefiningMethod = MetadataVirtualMethodAlgorithm.FindSlotDefiningMethodForVirtualMethod(method);
-                if (!_factory.VTable(slotDefiningMethod.OwningType).HasFixedSlots)
-                    _graph.AddRoot(_factory.VirtualMethodUse(slotDefiningMethod), reason);
+                if (method.HasInstantiation)
+                {
+                    _graph.AddRoot(_factory.GVMDependencies(method), reason);
+                }
+                else
+                {
+                    // Virtual method use is tracked on the slot defining method only.
+                    MethodDesc slotDefiningMethod = MetadataVirtualMethodAlgorithm.FindSlotDefiningMethodForVirtualMethod(method);
+                    if (!_factory.VTable(slotDefiningMethod.OwningType).HasFixedSlots)
+                        _graph.AddRoot(_factory.VirtualMethodUse(slotDefiningMethod), reason);
+                }
 
                 if (method.IsAbstract)
                 {

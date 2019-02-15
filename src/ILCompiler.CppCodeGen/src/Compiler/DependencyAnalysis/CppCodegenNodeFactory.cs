@@ -28,6 +28,14 @@ namespace ILCompiler.DependencyAnalysis
 
         protected override IMethodNode CreateMethodEntrypointNode(MethodDesc method)
         {
+            if (method.IsInternalCall)
+            {
+                if (method.IsArrayAddressMethod())
+                {
+                    return MethodEntrypoint(((ArrayType)method.OwningType).GetArrayMethod(ArrayMethodKind.AddressWithHiddenArg));
+                }
+            }
+
             if (CompilationModuleGroup.ContainsMethodBody(method, false))
             {
                 return new CppMethodCodeNode(method);
@@ -45,8 +53,7 @@ namespace ILCompiler.DependencyAnalysis
 
         protected override ISymbolNode CreateReadyToRunHelperNode(ReadyToRunHelperKey helperCall)
         {
-            // TODO: this is wrong: this returns an assembly stub node
-            return new ReadyToRunHelperNode(this, helperCall.HelperId, helperCall.Target);
+            throw new NotSupportedException();
         }
     }
 }

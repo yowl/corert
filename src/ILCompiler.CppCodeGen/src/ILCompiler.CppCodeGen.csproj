@@ -18,6 +18,9 @@
     <Compile Include="..\..\Common\src\TypeSystem\IL\ILImporter.cs">
       <Link>IL\ILImporter.cs</Link>
     </Compile>
+    <Compile Include="..\..\Common\src\TypeSystem\IL\StackValueKind.cs">
+      <Link>IL\StackValueKind.cs</Link>
+    </Compile>
     <Compile Include="..\..\Common\src\System\Collections\Generic\ArrayBuilder.cs">
       <Link>Common\ArrayBuilder.cs</Link>
     </Compile>
@@ -26,6 +29,9 @@
     </Compile>
     <Compile Include="..\..\Common\src\TypeSystem\IL\HelperExtensions.cs">
       <Link>IL\HelperExtensions.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Common\src\Internal\Runtime\RuntimeConstants.cs">
+      <Link>Runtime\RuntimeConstants.cs</Link>
     </Compile>
     <Compile Include="Compiler\DependencyAnalysis\CppCodegenNodeFactory.cs" />
     <Compile Include="Compiler\DependencyAnalysis\CppMethodCodeNode.cs" />

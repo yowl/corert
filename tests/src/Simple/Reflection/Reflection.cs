@@ -30,13 +30,18 @@ internal class ReflectionTest
 #if !OPTIMIZED_MODE_WITHOUT_SCANNER
         TestContainment.Run();
         TestInterfaceMethod.Run();
+        // Need to implement RhGetCodeTarget for CppCodeGen
+#if !CODEGEN_CPP
         TestByRefLikeTypeMethod.Run();
 #endif
+#endif
+
         TestAttributeInheritance.Run();
         TestStringConstructor.Run();
         TestAssemblyAndModuleAttributes.Run();
         TestAttributeExpressions.Run();
         TestParameterAttributes.Run();
+        TestPropertyAndEventAttributes.Run();
         TestNecessaryEETypeReflection.Run();
 
         //
@@ -45,8 +50,9 @@ internal class ReflectionTest
         TestCreateDelegate.Run();
         TestInstanceFields.Run();
         TestReflectionInvoke.Run();
+#if !CODEGEN_CPP
         TestByRefReturnInvoke.Run();
-
+#endif
         return 100;
     }
 
@@ -307,6 +313,81 @@ internal class ReflectionTest
             var attribute = method.GetParameters()[0].GetCustomAttribute<ParameterAttribute>();
             if (attribute.MemberName != nameof(Method))
                 throw new Exception();
+        }
+    }
+
+    class TestPropertyAndEventAttributes
+    {
+        [Property("MyProperty")]
+        public static int Property
+        {
+#if OPTIMIZED_MODE_WITHOUT_SCANNER
+            [MethodImpl(MethodImplOptions.NoInlining)]
+#endif
+            get;
+#if OPTIMIZED_MODE_WITHOUT_SCANNER
+            [MethodImpl(MethodImplOptions.NoInlining)]
+#endif
+            set;
+        }
+
+        class PropertyAttribute : Attribute
+        {
+            public PropertyAttribute(string value)
+            {
+                Value = value;
+            }
+
+            public string Value { get; }
+        }
+
+        [Event("MyEvent")]
+        public static event Action Event
+        {
+#if OPTIMIZED_MODE_WITHOUT_SCANNER
+            [MethodImpl(MethodImplOptions.NoInlining)]
+#endif
+            add { }
+#if OPTIMIZED_MODE_WITHOUT_SCANNER
+            [MethodImpl(MethodImplOptions.NoInlining)]
+#endif
+            remove { }
+        }
+
+        class EventAttribute : Attribute
+        {
+            public EventAttribute(string value)
+            {
+                Value = value;
+            }
+
+            public string Value { get; }
+        }
+
+        public static void Run()
+        {
+            Console.WriteLine(nameof(TestPropertyAndEventAttributes));
+
+            // Ensure things we reflect on are in the static callgraph
+            if (string.Empty.Length > 0)
+            {
+                Property = 123;
+                Event += null;
+            }
+
+            {
+                PropertyInfo property = typeof(TestPropertyAndEventAttributes).GetProperty(nameof(Property));
+                var attribute = property.GetCustomAttribute<PropertyAttribute>();
+                if (attribute.Value != "MyProperty")
+                    throw new Exception();
+            }
+
+            {
+                EventInfo @event = typeof(TestPropertyAndEventAttributes).GetEvent(nameof(Event));
+                var attribute = @event.GetCustomAttribute<EventAttribute>();
+                if (attribute.Value != "MyEvent")
+                    throw new Exception();
+            }
         }
     }
 
@@ -611,9 +692,12 @@ internal class ReflectionTest
             if (!HasTypeHandle(usedNestedType))
                 throw new Exception($"{nameof(NeverUsedContainerType.UsedNestedType)} should have an EEType");
 
+            // Need to implement exceptions for CppCodeGen
+#if !CODEGEN_CPP
             // But the containing type doesn't need an EEType
             if (HasTypeHandle(neverUsedContainerType))
                 throw new Exception($"{nameof(NeverUsedContainerType)} should not have an EEType");
+#endif
         }
     }
 
