@@ -40,7 +40,6 @@ namespace Internal.IL
         public LLVMModuleRef Module { get; }
         public static LLVMContextRef Context { get; private set; }
         private static Dictionary<TypeDesc, LLVMTypeRef> LlvmStructs { get; } = new Dictionary<TypeDesc, LLVMTypeRef>();
-        private static MetadataFieldLayoutAlgorithm LayoutAlgorithm { get; } = new MetadataFieldLayoutAlgorithm();
         private readonly MethodDesc _method;
         private readonly MethodIL _methodIL;
         private readonly MethodSignature _signature;
@@ -1269,47 +1268,11 @@ namespace Internal.IL
         {
             Debug.Assert(type.IsValueType);
             Debug.Assert(primitiveType.IsPrimitive);
-
-            if(type.GetElementSize().AsInt != primitiveType.GetElementSize().AsInt)
+            DefType defType = type as DefType;
+            if (defType != null && defType.IsHfa)
             {
-                return false;
+                return defType.HfaElementType == primitiveType;
             }
-
-            FieldDesc[] fields = type.GetFields().ToArray();
-            int instanceFieldCount = 0;
-            bool foundPrimitive = false;
-
-            foreach (FieldDesc field in fields)
-            {
-                if(field.IsStatic)
-                {
-                    continue;
-                }
-
-                instanceFieldCount++;
-
-                // If there's more than one field, figuring out whether this is a primitive gets complicated, so assume it's not
-                if (instanceFieldCount > 1)
-                {
-                    break;
-                }
-
-                TypeDesc fieldType = field.FieldType;
-                if (fieldType == primitiveType)
-                {
-                    foundPrimitive = true;
-                }
-                else if (fieldType.IsValueType && !fieldType.IsPrimitive && StructIsWrappedPrimitive(fieldType, primitiveType))
-                {
-                    foundPrimitive = true;
-                }
-            }
-
-            if(instanceFieldCount == 1 && foundPrimitive)
-            {
-                return true;
-            }
-
             return false;
         }
 
@@ -2201,35 +2164,9 @@ namespace Internal.IL
             {
                 return null;
             }
-        }
 
-        private LLVMBasicBlockRef GetOrCreateLandingPad(ExceptionRegion tryRegion, LLVMValueRef funclet)
-        {
-            Tuple<int, IntPtr> landingPadKey = Tuple.Create(tryRegion.ILRegion.TryOffset, funclet.Pointer);
-            if (_landingPads.TryGetValue(landingPadKey, out LLVMBasicBlockRef landingPad))
-            {
-                return landingPad;
-            }
-
-            if (GxxPersonality.Pointer.Equals(IntPtr.Zero))
-            {
-                GxxPersonality = LLVM.AddFunction(Module, "__gxx_personality_v0", LLVMTypeRef.FunctionType(LLVM.Int32Type(), new LLVMTypeRef[0], true));
-            }
-
-            landingPad = LLVM.AppendBasicBlock(_currentFunclet, "LandingPad" + tryRegion.ILRegion.TryOffset.ToString("X"));
-            _landingPads[landingPadKey] = landingPad;
-
-            LLVMBuilderRef landingPadBuilder = LLVM.CreateBuilder();
-            LLVM.PositionBuilderAtEnd(landingPadBuilder, landingPad);
-            LLVMValueRef pad = LLVM.BuildLandingPad(landingPadBuilder, LLVM.PointerType(LLVM.Int8Type(), 0), GxxPersonality, 1, "");
-            LLVM.AddClause(pad, LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0)));
-            EmitTrapCall(landingPadBuilder);
-            LLVM.DisposeBuilder(landingPadBuilder);
-
-            return landingPad;
-        }
-
-        // do we need this, i.e. did it appear after morgans exception redo
+            // HandleCall got split into 2 methods by hippiehunter on 17/10
+            // Landing Pad and code at end of HandleCall added by morganbr in last commit on 22/10
             List<LLVMValueRef> llvmArgs = new List<LLVMValueRef>();
             llvmArgs.Add(castShadowStack);
             if (needsReturnSlot)
@@ -2285,6 +2222,31 @@ namespace Internal.IL
             return llvmReturn;
         }
 
+        private LLVMBasicBlockRef GetOrCreateLandingPad(ExceptionRegion tryRegion, LLVMValueRef funclet)
+        {
+            Tuple<int, IntPtr> landingPadKey = Tuple.Create(tryRegion.ILRegion.TryOffset, funclet.Pointer);
+            if (_landingPads.TryGetValue(landingPadKey, out LLVMBasicBlockRef landingPad))
+            {
+                return landingPad;
+            }
+
+            if (GxxPersonality.Pointer.Equals(IntPtr.Zero))
+            {
+                GxxPersonality = LLVM.AddFunction(Module, "__gxx_personality_v0", LLVMTypeRef.FunctionType(LLVM.Int32Type(), new LLVMTypeRef[0], true));
+            }
+
+            landingPad = LLVM.AppendBasicBlock(_currentFunclet, "LandingPad" + tryRegion.ILRegion.TryOffset.ToString("X"));
+            _landingPads[landingPadKey] = landingPad;
+
+            LLVMBuilderRef landingPadBuilder = LLVM.CreateBuilder();
+            LLVM.PositionBuilderAtEnd(landingPadBuilder, landingPad);
+            LLVMValueRef pad = LLVM.BuildLandingPad(landingPadBuilder, LLVM.PointerType(LLVM.Int8Type(), 0), GxxPersonality, 1, "");
+            LLVM.AddClause(pad, LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0)));
+            EmitTrapCall(landingPadBuilder);
+            LLVM.DisposeBuilder(landingPadBuilder);
+
+            return landingPad;
+        }
         private void AddMethodReference(MethodDesc method)
         {
             _dependencies.Add(_compilation.NodeFactory.MethodEntrypoint(method));
