@@ -89,7 +89,7 @@ namespace Internal.IL
             public bool HandlerStart;
 
             public LLVMBasicBlockRef Block;
-            public List<LLVMBasicBlockRef> LLVMBlocks = new List<LLVMBasicBlockRef>(1);
+            public readonly List<LLVMBasicBlockRef> LLVMBlocks = new List<LLVMBasicBlockRef>(1);
         }
 
         private class ExceptionRegion
@@ -182,11 +182,6 @@ namespace Internal.IL
                     LLVM.DeleteFunction(funclet);
                 }
 
-                foreach (LLVMValueRef funclet in _exceptionFunclets)
-                {
-                    LLVM.DeleteFunction(funclet);
-                }
-
                 LLVM.PositionBuilderAtEnd(_builder, trapBlock);
                 EmitTrapCall();
                 throw;
@@ -244,10 +239,6 @@ namespace Internal.IL
                 argNames = _debugInformation.GetParameterNames()?.ToArray();
             }
 
-            if (_method.Name == "MixedArgFunc")
-            {
-
-            }
             for (int i = 0; i < _signature.Length; i++)
             {
                 if (CanStoreTypeOnStack(_signature[i]))
@@ -853,7 +844,6 @@ namespace Internal.IL
             {
                 varCountBase = 0;
                 varBase = 0;
-
                 if (!_signature.IsStatic)
                 {
                     varCountBase = 1;
@@ -2034,7 +2024,8 @@ namespace Internal.IL
             PushNonNull(HandleCall(callee, signature, argumentValues, opcode, constrainedType, calliTarget));
         }
 
-        private ExpressionEntry HandleCall(MethodDesc callee, MethodSignature signature, StackEntry[] argumentValues, ILOpcode opcode = ILOpcode.call, TypeDesc constrainedType = null, LLVMValueRef calliTarget = default(LLVMValueRef), TypeDesc forcedReturnType = null)
+        private ExpressionEntry HandleCall(MethodDesc callee, MethodSignature signature, StackEntry[] argumentValues, ILOpcode opcode = ILOpcode.call,
+            TypeDesc constrainedType = null, LLVMValueRef calliTarget = default(LLVMValueRef), TypeDesc forcedReturnType = null)
         {
             if (opcode == ILOpcode.callvirt && callee.IsVirtual)
             {
@@ -2073,7 +2064,7 @@ namespace Internal.IL
 
             int offset = GetTotalParameterOffset() + GetTotalLocalOffset();
             LLVMValueRef shadowStack = LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_currentFunclet),
-                new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (uint)offset, LLVMMisc.False) },
+                new LLVMValueRef[] {LLVM.ConstInt(LLVM.Int32Type(), (uint)offset, LLVMMisc.False)},
                 String.Empty);
             var castShadowStack = LLVM.BuildPointerCast(_builder, shadowStack, LLVM.PointerType(LLVM.Int8Type(), 0), "castshadowstack");
 
@@ -2128,7 +2119,6 @@ namespace Internal.IL
                 }
             }
 
-
             LLVMValueRef llvmReturn;
 
             ExceptionRegion currentTryRegion = GetCurrentTryRegion();
@@ -2164,6 +2154,34 @@ namespace Internal.IL
             {
                 return null;
             }
+        }
+
+        // this overload of HandleCall only used from ThrowIfNull
+        private LLVMValueRef HandleCall(MethodDesc callee, MethodSignature signature, StackEntry[] argumentValues,
+            ILOpcode opcode, TypeDesc constrainedType, LLVMValueRef calliTarget, int offset, LLVMValueRef baseShadowStack, LLVMBuilderRef builder, bool needsReturnSlot,
+            LLVMValueRef castReturnAddress)
+        {
+            if (opcode == ILOpcode.callvirt && callee.IsVirtual)
+            {
+                AddVirtualMethodReference(callee);
+            }
+            else if (callee != null)
+            {
+                AddMethodReference(callee);
+            }
+
+            LLVMValueRef fn;
+            if (opcode == ILOpcode.calli)
+            {
+                fn = calliTarget;
+            }
+            else
+            {
+                fn = LLVMFunctionForMethod(callee, signature.IsStatic ? null : argumentValues[0], opcode == ILOpcode.callvirt, constrainedType);
+            }
+
+            LLVMValueRef shadowStack = LLVM.BuildGEP(builder, baseShadowStack, new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (uint)offset, LLVMMisc.False) }, String.Empty);
+            var castShadowStack = LLVM.BuildPointerCast(builder, shadowStack, LLVM.PointerType(LLVM.Int8Type(), 0), "castshadowstack");
 
             // HandleCall got split into 2 methods by hippiehunter on 17/10
             // Landing Pad and code at end of HandleCall added by morganbr in last commit on 22/10
@@ -2247,6 +2265,7 @@ namespace Internal.IL
 
             return landingPad;
         }
+
         private void AddMethodReference(MethodDesc method)
         {
             _dependencies.Add(_compilation.NodeFactory.MethodEntrypoint(method));
@@ -3875,8 +3894,8 @@ namespace Internal.IL
         private void EmitTrapCall(LLVMBuilderRef builder = default(LLVMBuilderRef))
         {
             if (builder.Pointer == IntPtr.Zero)
+            {
                 builder = _builder;
-
             }
 
             if (TrapFunction.Pointer == IntPtr.Zero)
