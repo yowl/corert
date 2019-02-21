@@ -276,6 +276,8 @@ internal static class Program
 
         TestForWrappedPrimitiveStruct();
 
+        TestTryCatch();
+
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
         System.Diagnostics.Debugger.Break();
@@ -884,6 +886,21 @@ internal static class Program
         result += 1000;
 
         return result;
+    }
+
+    private static void TestTryCatch()
+    {
+        bool caught;
+        StartTest("Catch not called when no exception test");
+        try
+        {
+            new Exception();
+        }
+        catch (Exception)
+        {
+            caught = true;
+        }
+        EndTest(!caught);
     }
 
     private static void TestArgsWithMixedTypesAndExceptionRegions()
