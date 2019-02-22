@@ -2294,7 +2294,7 @@ namespace Internal.IL
                     ;;         R9:   ExInfo
                 */
                 LLVM.SetCleanup(pad, true); // TODO: is this needed
-                var exPtr = LLVMPInvokes.LLVMBuildExtractValue(landingPadBuilder, pad, 0, "ex");
+                var exPtr = LLVM.BuildExtractValue(landingPadBuilder, pad, 0, "ex");
                 // params are:
                 // object exception, uint idxStart,
                 // ref StackFrameIterator frameIter, out uint tryRegionIdx, out byte* pHandler
