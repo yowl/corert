@@ -890,11 +890,35 @@ internal static class Program
 
     private static void TestTryCatch()
     {
-        bool caught;
+        // break out the individual tests to their own methods to make looking at the funclets easier
+        TestTryCatchNoException();
+
+        TestTryCatchThrowException(new Exception());
+    }
+
+    private static void TestTryCatchNoException()
+    {
+        bool caught = false;
         StartTest("Catch not called when no exception test");
         try
         {
             new Exception();
+        }
+        catch (Exception)
+        {
+            caught = true;
+        }
+        EndTest(!caught);
+    }
+
+    // pass the exception to avoid a call/invoke for that ctor in this function
+    private static void TestTryCatchThrowException(Exception e)
+    {
+        bool caught = false;
+        StartTest("Catch called when exception thrown test");
+        try
+        {
+            throw e;
         }
         catch (Exception)
         {
