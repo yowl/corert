@@ -276,6 +276,8 @@ internal static class Program
 
         TestForWrappedPrimitiveStruct();
 
+        TestVirtualMethodUse();
+
         TestTryCatch();
 
         // This test should remain last to get other results before stopping the debugger
@@ -925,6 +927,28 @@ internal static class Program
             caught = true;
         }
         EndTest(!caught);
+    }
+
+    private static void TestVirtualMethodUse()
+    {
+        StartTest("TestVirtualMethodUse test");
+
+        TestGenItf implInt = new TestGenItf();
+        implInt.Log<object>(new object());
+        EndTest(true);
+    }
+
+    public interface ITestGenItf
+    {
+        bool Log<TState>(TState state);
+    }
+
+    public class TestGenItf : ITestGenItf
+    {
+        public bool Log<TState>(TState state)
+        {
+            return true;
+        }
     }
 
     private static void TestArgsWithMixedTypesAndExceptionRegions()

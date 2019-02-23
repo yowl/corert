@@ -93,8 +93,10 @@ namespace Internal.IL
 
         private class ExceptionRegion
         {
+            // TODO: what was the intention here, store something else?   If not, then delete this class?
             public ILExceptionRegion ILRegion;
         }
+
         private ExceptionRegion[] _exceptionRegions;
 
         public ILImporter(WebAssemblyCodegenCompilation compilation, MethodDesc method, MethodIL methodIL, string mangledName)
@@ -2030,7 +2032,7 @@ namespace Internal.IL
         private ExpressionEntry HandleCall(MethodDesc callee, MethodSignature signature, StackEntry[] argumentValues, ILOpcode opcode = ILOpcode.call,
             TypeDesc constrainedType = null, LLVMValueRef calliTarget = default(LLVMValueRef), TypeDesc forcedReturnType = null)
         {
-            if (opcode == ILOpcode.callvirt && callee.IsVirtual)
+            if (opcode == ILOpcode.callvirt && callee.IsVirtual && !callee.HasInstantiation)
             {
                 AddVirtualMethodReference(callee);
             }
@@ -2301,15 +2303,15 @@ namespace Internal.IL
                 var arguments = new StackEntry[] { new ExpressionEntry(StackValueKind.ValueType, "exPtr", exPtr),
                                                      new ExpressionEntry(StackValueKind.Int32, "idxStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0, false)) /* if this doesnt work, try MaxTryRegionIdx */
                                                      };
-                var handler = CallRuntime(_compilation.TypeSystemContext, "EH", "FindFirstPassHandler", arguments, null);
-                LLVMValueRef[] args = new LLVMValueRef[]
-                                      {
-                                          exPtr,
-                                          handler.RawLLVMValue, // TODO: push this for GC
-                                          LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0)),
-                                          LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0))
-                                      };
-                LLVM.BuildCall(landingPadBuilder, RhpCallCatchFunclet, args, "");
+//                var handler = CallRuntime(_compilation.TypeSystemContext, "EH", "FindFirstPassHandler", arguments, null);
+//                LLVMValueRef[] args = new LLVMValueRef[]
+//                                      {
+//                                          exPtr,
+//                                          handler.RawLLVMValue, // TODO: push this for GC
+//                                          LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0)),
+//                                          LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0))
+//                                      };
+//                LLVM.BuildCall(landingPadBuilder, RhpCallCatchFunclet, args, "");
 //                LLVM.BuildBr(landingPadBuilder, GetBasicBlockForExceptionRegionHandler(tryRegion));
             }
             EmitTrapCall(landingPadBuilder);
@@ -3985,6 +3987,160 @@ namespace Internal.IL
         public override string ToString()
         {
             return _method.ToString();
+        }
+
+        private void CreateEHData(WebAssemblyMethodCodeNode methodCodeNodeNeedingCode)
+        {
+            //TODO : uncomment
+//            var relocs = _relocs.ToArray();
+//            Array.Sort(relocs, (x, y) => (x.Offset - y.Offset));
+//
+//            var objectData = new ObjectNode.ObjectData(_code,
+//                relocs,
+//                _compilation.NodeFactory.Target.MinimumFunctionAlignment,
+//                new ISymbolDefinitionNode[] { _methodCodeNode });
+            ObjectNode.ObjectData ehInfo = _exceptionRegions != null ? EncodeEHInfo() : null;
+            //TODO: is this just for debugging, what happens if we dont have it
+            //            DebugEHClauseInfo[] debugEHClauseInfos = null;
+            //            if (_ehClauses != null)
+            //            {
+            //                debugEHClauseInfos = new DebugEHClauseInfo[_ehClauses.Length];
+            //                for (int i = 0; i < _ehClauses.Length; i++)
+            //                {
+            //                    var clause = _ehClauses[i];
+            //                    debugEHClauseInfos[i] = new DebugEHClauseInfo(clause.TryOffset, clause.TryLength,
+            //                        clause.HandlerOffset, clause.HandlerLength);
+            //                }
+            //            }
+
+            // TODO: guessing we dont need this 
+            //            _methodCodeNode.SetCode(objectData);
+
+            // TODO: guessing we dont need these yet 
+            //            _methodCodeNode.InitializeFrameInfos(_frameInfos);
+            //            _methodCodeNode.InitializeDebugEHClauseInfos(debugEHClauseInfos);
+            //            _methodCodeNode.InitializeGCInfo(_gcInfo);
+            methodCodeNodeNeedingCode.InitializeEHInfo(ehInfo);
+            //
+            //            _methodCodeNode.InitializeDebugLocInfos(_debugLocInfos);
+            //            _methodCodeNode.InitializeDebugVarInfos(_debugVarInfos);
+        }
+
+        private ObjectNode.ObjectData EncodeEHInfo()
+        {
+            var builder = new ObjectDataBuilder();
+            builder.RequireInitialAlignment(1);
+
+            int totalClauses = _exceptionRegions.Length;
+
+            // Count the number of special markers that will be needed
+            for (int i = 1; i < _exceptionRegions.Length; i++)
+            {
+                ref ExceptionRegion clause = ref _exceptionRegions[i];
+                ref ExceptionRegion previousClause = ref _exceptionRegions[i - 1];
+
+
+                //TODO: reinstante SAMETRY?
+//                if ((previousClause.TryOffset == clause.TryOffset) &&
+//                    (previousClause.TryLength == clause.TryLength) &&
+//                    ((clause.Flags & CORINFO_EH_CLAUSE_FLAGS.CORINFO_EH_CLAUSE_SAMETRY) == 0))
+//                {
+                    totalClauses++;
+//                }
+            }
+
+            builder.EmitCompressedUInt((uint)totalClauses);
+
+            for (int i = 0; i < _exceptionRegions.Length; i++)
+            {
+                ref ExceptionRegion clause = ref _exceptionRegions[i];
+
+                if (i > 0)
+                {
+                    ref ExceptionRegion previousClause = ref _exceptionRegions[i - 1];
+
+                    //TODO: reinstante SAMETRY?
+                    // If the previous clause has same try offset and length as the current clause,
+                    // but belongs to a different try block (CORINFO_EH_CLAUSE_SAMETRY is not set),
+                    // emit a special marker to allow runtime distinguish this case.
+//                    if ((previousClause.TryOffset == clause.TryOffset) &&
+//                        (previousClause.TryLength == clause.TryLength) &&
+//                        ((clause.Flags & CORINFO_EH_CLAUSE_FLAGS.CORINFO_EH_CLAUSE_SAMETRY) == 0))
+//                    {
+//                        builder.EmitCompressedUInt(0);
+//                        builder.EmitCompressedUInt((uint)RhEHClauseKind.RH_EH_CLAUSE_FAULT);
+//                        builder.EmitCompressedUInt(0);
+//                    }
+                }
+
+                RhEHClauseKind clauseKind;
+
+                if (((clause.ILRegion.Kind & ILExceptionRegionKind.Fault) != 0) ||
+                    ((clause.ILRegion.Kind & ILExceptionRegionKind.Finally) != 0))
+                {
+                    clauseKind = RhEHClauseKind.RH_EH_CLAUSE_FAULT;
+                }
+                else
+                if ((clause.ILRegion.Kind & ILExceptionRegionKind.Filter) != 0)
+                {
+                    clauseKind = RhEHClauseKind.RH_EH_CLAUSE_FILTER;
+                }
+                else
+                {
+                    clauseKind = RhEHClauseKind.RH_EH_CLAUSE_TYPED;
+                }
+
+                builder.EmitCompressedUInt((uint)clause.ILRegion.TryOffset);
+
+                // clause.TryLength returned by the JIT is actually end offset... // TODO: does this apply to Wasm ExceptionRegion?
+                // https://github.com/dotnet/coreclr/issues/3585
+                int tryLength = (int)clause.ILRegion.TryLength - (int)clause.ILRegion.TryOffset;
+                builder.EmitCompressedUInt((uint)((tryLength << 2) | (int)clauseKind));
+
+                switch (clauseKind)
+                {
+                    case RhEHClauseKind.RH_EH_CLAUSE_TYPED:
+                        {
+                            builder.EmitCompressedUInt((uint)clause.ILRegion.HandlerOffset);
+
+                            var type = (TypeDesc)_methodIL.GetObject(clause.ILRegion.ClassToken); // TODO: dropping the filter offset that could be in this c union for RyuJit
+
+                            // Once https://github.com/dotnet/corert/issues/3460 is done, this should be an assert.
+                            // Throwing InvalidProgram is not great, but we want to do *something* if this happens
+                            // because doing nothing means problems at runtime. This is not worth piping a
+                            // a new exception with a fancy message for.
+                            if (type.IsCanonicalSubtype(CanonicalFormKind.Any))
+                                ThrowHelper.ThrowInvalidProgramException();
+
+                            var typeSymbol = _compilation.NodeFactory.NecessaryTypeSymbol(type);
+
+                            RelocType rel = (_compilation.NodeFactory.Target.IsWindows) ?
+                                RelocType.IMAGE_REL_BASED_ABSOLUTE :
+                                RelocType.IMAGE_REL_BASED_REL32;
+
+                            if (_compilation.NodeFactory.Target.Abi == TargetAbi.Jit)
+                                rel = RelocType.IMAGE_REL_BASED_REL32;
+
+                            builder.EmitReloc(typeSymbol, rel);
+                        }
+                        break;
+                    case RhEHClauseKind.RH_EH_CLAUSE_FAULT:
+                        builder.EmitCompressedUInt((uint)clause.ILRegion.HandlerOffset);
+                        break;
+                    case RhEHClauseKind.RH_EH_CLAUSE_FILTER:
+                        builder.EmitCompressedUInt((uint)clause.ILRegion.HandlerOffset);
+                        builder.EmitCompressedUInt((uint)clause.ILRegion.ClassToken); // TODO: dropping the filter offset that could be in this c union for RyuJit
+                        break;
+                }
+            }
+
+            return builder.ToObjectData();
+        }
+        enum RhEHClauseKind
+        {
+            RH_EH_CLAUSE_TYPED = 0,
+            RH_EH_CLAUSE_FAULT = 1,
+            RH_EH_CLAUSE_FILTER = 2
         }
     }
 }

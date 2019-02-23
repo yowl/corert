@@ -84,7 +84,7 @@ namespace Internal.IL
                     ilImporter.SetParameterNames(parameters);*/
 
                 ilImporter.Import();
-
+                ilImporter.CreateEHData(methodCodeNodeNeedingCode);
                 methodCodeNodeNeedingCode.CompilationCompleted = true;
             }
             catch (Exception e)
@@ -135,6 +135,5 @@ namespace Internal.IL
 
             return null;
         }
-
     }
 }
