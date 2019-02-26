@@ -276,6 +276,8 @@ internal static class Program
         TestDispose();
 
         TestGenericVirtualMethodCall();
+        
+        TestInitObjDouble();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -960,6 +962,13 @@ internal static class Program
         EndTest(disposable.Disposed);
     }
 
+    private static void TestInitObjDouble()
+    {
+        StartTest("Init struct with double field test");
+        StructWithDouble strt = new StructWithDouble();
+        EndTest(strt.DoubleField == 0d);
+    }
+
     [DllImport("*")]
     private static unsafe extern int printf(byte* str, byte* unused);
 }
@@ -1148,6 +1157,11 @@ public sealed class MySealedClass
         Program.PrintLine(_data.ToString());
         return _data.ToString();
     }
+}
+
+public struct StructWithDouble
+{
+    public double DoubleField;
 }
 
 public class Gen<T>
