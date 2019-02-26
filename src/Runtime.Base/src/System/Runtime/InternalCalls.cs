@@ -6,6 +6,8 @@
 // This is where we group together all the internal calls.
 //
 
+using System;
+using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
@@ -461,5 +463,19 @@ namespace System.Runtime
         // the caller allocated.
         [DllImport(Redhawk.BaseName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int RhpEndNoGCRegion();
+
+        [RuntimeExport("InvokeJSUnmarshalled")]
+        public static bool InvokeJSUnmarshalled(out string exception, string functionIdentifier, IntPtr arg0, IntPtr arg1, IntPtr arg2)
+        {
+            exception = null;
+            return true;
+        }
+
+        [RuntimeExport("InvokeJS")]
+        public static string InvokeJS(string str, out int exceptional_result)
+        {
+            exceptional_result = 0;
+            return "";
+        }
     }
 }

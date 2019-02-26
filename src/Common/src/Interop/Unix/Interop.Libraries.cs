@@ -12,18 +12,3 @@ internal static partial class Interop
     }
 }
 
-
-namespace WebAssembly
-{
-    namespace JSInterop
-    {
-        internal static class InternalCalls
-        {
-            public static bool InvokeJSUnmarshalled(out string exception, string functionIdentifier, IntPtr arg0, IntPtr arg1, IntPtr arg2)
-            {
-                exception = null;
-                return true;
-            }
-        }
-    }
-}

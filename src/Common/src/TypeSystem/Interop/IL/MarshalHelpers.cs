@@ -70,7 +70,10 @@ namespace Internal.TypeSystem.Interop
                                                 isAnsi, /*    isAnsi */
                                                 MarshallerType.Field,
                                                 out elementMarshallerKind);
+            if(marshallerKind == MarshallerKind.Invalid)
+            {
 
+            }
             return GetNativeTypeFromMarshallerKind(type,
                 marshallerKind,
                 elementMarshallerKind,

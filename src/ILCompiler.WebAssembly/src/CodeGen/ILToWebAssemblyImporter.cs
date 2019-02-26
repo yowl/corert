@@ -1534,6 +1534,34 @@ namespace Internal.IL
                 return;
             }
 
+            if (callee.IsInternalCall)
+            {
+                if (callee.Name == "InvokeJSUnmarshalled")
+                {
+                    var parameterCount = callee.Signature.Length + (callee.Signature.IsStatic ? 0 : 1);
+                    // The last argument is the top of the stack. We need to reverse them and store starting at the first argument
+                    StackEntry[] argumentValues = new StackEntry[parameterCount];
+                    for (int i = 0; i < argumentValues.Length; i++)
+                    {
+                        argumentValues[argumentValues.Length - i - 1] = _stack.Pop();
+                    }
+                    PushNonNull(CallRuntime(_compilation.TypeSystemContext, "InternalCalls", "InvokeJSUnmarshalled", argumentValues));
+                    return;
+                }
+                if (callee.Name == "InvokeJS")
+                {
+                    var parameterCount = callee.Signature.Length + (callee.Signature.IsStatic ? 0 : 1);
+                    // The last argument is the top of the stack. We need to reverse them and store starting at the first argument
+                    StackEntry[] argumentValues = new StackEntry[parameterCount];
+                    for (int i = 0; i < argumentValues.Length; i++)
+                    {
+                        argumentValues[argumentValues.Length - i - 1] = _stack.Pop();
+                    }
+                    PushNonNull(CallRuntime(_compilation.TypeSystemContext, "InternalCalls", "InvokeJS", argumentValues));
+                    return;
+                }
+            }
+
             if (opcode == ILOpcode.newobj)
             {
                 TypeDesc newType = callee.OwningType;
