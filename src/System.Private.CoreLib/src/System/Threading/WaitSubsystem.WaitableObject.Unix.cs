@@ -4,7 +4,6 @@
 
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using Internal.Runtime.Augments;
 
 namespace System.Threading
 {
@@ -236,10 +235,10 @@ internal static partial class WaitSubsystem
                 }
             }
 
-            public bool Wait(ThreadWaitInfo waitInfo, int timeoutMilliseconds, bool interruptible, bool prioritize)
+            public int Wait(ThreadWaitInfo waitInfo, int timeoutMilliseconds, bool interruptible, bool prioritize)
             {
                 Debug.Assert(waitInfo != null);
-                Debug.Assert(waitInfo.Thread == RuntimeThread.CurrentThread);
+                Debug.Assert(waitInfo.Thread == Thread.CurrentThread);
 
                 Debug.Assert(timeoutMilliseconds >= -1);
 
@@ -258,11 +257,11 @@ internal static partial class WaitSubsystem
             /// This function does not check for a pending thread interrupt. Callers are expected to do that soon after
             /// acquiring <see cref="s_lock"/>.
             /// </summary>
-            public bool Wait_Locked(ThreadWaitInfo waitInfo, int timeoutMilliseconds, bool interruptible, bool prioritize)
+            public int Wait_Locked(ThreadWaitInfo waitInfo, int timeoutMilliseconds, bool interruptible, bool prioritize)
             {
                 s_lock.VerifyIsLocked();
                 Debug.Assert(waitInfo != null);
-                Debug.Assert(waitInfo.Thread == RuntimeThread.CurrentThread);
+                Debug.Assert(waitInfo.Thread == Thread.CurrentThread);
 
                 Debug.Assert(timeoutMilliseconds >= -1);
                 Debug.Assert(!interruptible || !waitInfo.CheckAndResetPendingInterrupt);
@@ -274,11 +273,7 @@ internal static partial class WaitSubsystem
                     {
                         bool isAbandoned = IsAbandonedMutex;
                         AcceptSignal(waitInfo);
-                        if (isAbandoned)
-                        {
-                            throw new AbandonedMutexException();
-                        }
-                        return true;
+                        return isAbandoned ? WaitHandle.WaitAbandoned : WaitHandle.WaitSuccess;
                     }
 
                     if (IsMutex && _ownershipInfo.Thread == waitInfo.Thread)
@@ -288,12 +283,12 @@ internal static partial class WaitSubsystem
                             throw new OverflowException(SR.Overflow_MutexReacquireCount);
                         }
                         _ownershipInfo.IncrementReacquireCount();
-                        return true;
+                        return WaitHandle.WaitSuccess;
                     }
 
                     if (timeoutMilliseconds == 0)
                     {
-                        return false;
+                        return WaitHandle.WaitTimeout;
                     }
 
                     WaitableObject[] waitableObjects = waitInfo.GetWaitedObjectArray(1);
@@ -314,8 +309,7 @@ internal static partial class WaitSubsystem
                     waitInfo.Wait(
                         timeoutMilliseconds,
                         interruptible,
-                        waitHandlesForAbandon: null,
-                        isSleep: false) != WaitHandle.WaitTimeout;
+                        isSleep: false);
             }
 
             public static int Wait(
@@ -325,12 +319,11 @@ internal static partial class WaitSubsystem
                 ThreadWaitInfo waitInfo,
                 int timeoutMilliseconds,
                 bool interruptible,
-                bool prioritize,
-                WaitHandle[] waitHandlesForAbandon)
+                bool prioritize)
             {
                 s_lock.VerifyIsNotLocked();
                 Debug.Assert(waitInfo != null);
-                Debug.Assert(waitInfo.Thread == RuntimeThread.CurrentThread);
+                Debug.Assert(waitInfo.Thread == Thread.CurrentThread);
 
                 Debug.Assert(waitableObjects != null);
                 Debug.Assert(waitableObjects.Length >= count);
@@ -360,16 +353,9 @@ internal static partial class WaitSubsystem
                                 waitableObject.AcceptSignal(waitInfo);
                                 if (isAbandoned)
                                 {
-                                    if (waitHandlesForAbandon == null)
-                                    {
-                                        throw new AbandonedMutexException();
-                                    }
-                                    else
-                                    {
-                                        throw new AbandonedMutexException(i, waitHandlesForAbandon[i]);
-                                    }
+                                    return WaitHandle.WaitAbandoned + i;
                                 }
-                                return i;
+                                return WaitHandle.WaitSuccess + i;
                             }
 
                             if (waitableObject.IsMutex)
@@ -382,7 +368,7 @@ internal static partial class WaitSubsystem
                                         throw new OverflowException(SR.Overflow_MutexReacquireCount);
                                     }
                                     ownershipInfo.IncrementReacquireCount();
-                                    return i;
+                                    return WaitHandle.WaitSuccess + i;
                                 }
                             }
                         }
@@ -444,7 +430,7 @@ internal static partial class WaitSubsystem
                             {
                                 throw new AbandonedMutexException();
                             }
-                            return 0;
+                            return WaitHandle.WaitSuccess;
                         }
                     }
 
@@ -474,11 +460,11 @@ internal static partial class WaitSubsystem
                     }
                 }
 
-                return waitInfo.Wait(timeoutMilliseconds, interruptible, waitHandlesForAbandon, isSleep: false);
+                return waitInfo.Wait(timeoutMilliseconds, interruptible, isSleep: false);
             }
 
             public static bool WouldWaitForAllBeSatisfiedOrAborted(
-                RuntimeThread waitingThread,
+                Thread waitingThread,
                 WaitableObject[] waitedObjects,
                 int waitedCount,
                 int signaledWaitedObjectIndex,
@@ -487,7 +473,7 @@ internal static partial class WaitSubsystem
             {
                 s_lock.VerifyIsLocked();
                 Debug.Assert(waitingThread != null);
-                Debug.Assert(waitingThread != RuntimeThread.CurrentThread);
+                Debug.Assert(waitingThread != Thread.CurrentThread);
                 Debug.Assert(waitedObjects != null);
                 Debug.Assert(waitedObjects.Length >= waitedCount);
                 Debug.Assert(waitedCount > 1);
@@ -542,7 +528,7 @@ internal static partial class WaitSubsystem
             {
                 s_lock.VerifyIsLocked();
                 Debug.Assert(waitInfo != null);
-                Debug.Assert(waitInfo.Thread != RuntimeThread.CurrentThread);
+                Debug.Assert(waitInfo.Thread != Thread.CurrentThread);
                 Debug.Assert(waitedObjects != null);
                 Debug.Assert(waitedObjects.Length >= waitedCount);
                 Debug.Assert(waitedCount > 1);
@@ -733,7 +719,7 @@ internal static partial class WaitSubsystem
                     WaitHandle.ThrowInvalidHandleException();
                 }
 
-                if (IsSignaled || _ownershipInfo.Thread != RuntimeThread.CurrentThread)
+                if (IsSignaled || _ownershipInfo.Thread != Thread.CurrentThread)
                 {
                     throw new ApplicationException(SR.Arg_SynchronizationLockException);
                 }
@@ -790,7 +776,7 @@ internal static partial class WaitSubsystem
 
             private sealed class OwnershipInfo
             {
-                private RuntimeThread _thread;
+                private Thread _thread;
                 private int _reacquireCount;
                 private bool _isAbandoned;
 
@@ -804,7 +790,7 @@ internal static partial class WaitSubsystem
                 /// </summary>
                 private WaitableObject _next;
 
-                public RuntimeThread Thread
+                public Thread Thread
                 {
                     get
                     {
@@ -912,7 +898,7 @@ internal static partial class WaitSubsystem
                 {
                     s_lock.VerifyIsLocked();
 
-                    Debug.Assert(_thread == RuntimeThread.CurrentThread);
+                    Debug.Assert(_thread == Thread.CurrentThread);
                     Debug.Assert(_reacquireCount >= 0);
                     Debug.Assert(!_isAbandoned);
 

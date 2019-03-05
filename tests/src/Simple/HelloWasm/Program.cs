@@ -184,7 +184,6 @@ internal static class Program
                 smallArrayTest[3] == 0);
 
         StartTest("Newobj value type test");
-
         IntPtr returnedIntPtr = NewobjValueType();
         EndTest(returnedIntPtr.ToInt32() == 3);
 
@@ -223,6 +222,17 @@ internal static class Program
         StartTest("Multi-dimension array instantiation test");
         var testMdArrayInstantiation = new int[2, 2];
         EndTest(testMdArrayInstantiation != null && testMdArrayInstantiation.GetLength(0) == 2 && testMdArrayInstantiation.GetLength(1) == 2);
+
+        StartTest("Multi-dimension array get/set test");
+        testMdArrayInstantiation[0, 0] = 1;
+        testMdArrayInstantiation[0, 1] = 2;
+        testMdArrayInstantiation[1, 0] = 3;
+        testMdArrayInstantiation[1, 1] = 4;
+        EndTest(testMdArrayInstantiation[0, 0] == 1 
+                && testMdArrayInstantiation[0, 1] == 2
+                && testMdArrayInstantiation[1, 0] == 3
+                && testMdArrayInstantiation[1, 1] == 4);
+
 
         FloatDoubleTest();
 
@@ -274,9 +284,9 @@ internal static class Program
 
         TestThreadStaticsForSingleThread();
 
-        TestForWrappedPrimitiveStruct();
+        TestDispose();
 
-        TestVirtualMethodUse();
+        TestInitObjDouble();
 
         TestTryCatch();
 
@@ -318,7 +328,7 @@ internal static class Program
     }
 
     private static int StaticDelegateTarget()
-    {
+    {         
         return 7;
     }
 
@@ -335,7 +345,7 @@ internal static class Program
             }
         }
     }
-
+    
     public static void PrintLine(string s)
     {
         PrintString(s);
@@ -371,21 +381,21 @@ internal static class Program
     {
         return a >> b;
     }
-
+    
     private static int SwitchOp(int a, int b, int mode)
     {
-        switch (mode)
+        switch(mode)
         {
-            case 0:
-                return a + b;
-            case 1:
-                return a * b;
-            case 2:
-                return a / b;
-            case 3:
-                return a - b;
-            default:
-                return 0;
+          case 0:
+            return a + b;
+          case 1:
+            return a * b;
+          case 2:
+            return a / b;
+          case 3:
+            return a - b;
+          default:
+            return 0;
         }
     }
 
@@ -417,16 +427,16 @@ internal static class Program
         StartTest("ldind test");
         var ldindTarget = new TwoByteStr { first = byte.MaxValue, second = byte.MinValue };
         var ldindField = &ldindTarget.first;
-        if ((*ldindField) == byte.MaxValue)
+        if((*ldindField) == byte.MaxValue)
         {
             ldindTarget.second = byte.MaxValue;
             *ldindField = byte.MinValue;
             //ensure there isnt any overwrite of nearby fields
-            if (ldindTarget.first == byte.MinValue && ldindTarget.second == byte.MaxValue)
+            if(ldindTarget.first == byte.MinValue && ldindTarget.second == byte.MaxValue)
             {
                 PassTest();
             }
-            else if (ldindTarget.first != byte.MinValue)
+            else if(ldindTarget.first != byte.MinValue)
             {
                 FailTest("didnt update target.");
             }
@@ -501,7 +511,7 @@ internal static class Program
             PrintString(stringDirectToString);
             PrintLine("\"");
         }
-
+       
         // Generic calls on methods not defined on object
         uint dataFromBase = GenericGetData<MyBase>(new MyBase(11));
         StartTest("Generic call to base class test");
@@ -556,79 +566,6 @@ internal static class Program
         var chars = new[] { 'i', 'p', 's', 'u', 'm' };
         StartTest("Value type element indexing: ");
         EndTest(chars[0] == 'i' && chars[1] == 'p' && chars[2] == 's' && chars[3] == 'u' && chars[4] == 'm');
-    }
-
-    struct OddLengthStruct
-    {
-        public UInt16 a, b, c;
-    }
-
-    private static unsafe void TestNonIntAlignedStructArray()
-    {
-        PrintString("Non-int aligned struct array: ");
-
-        OddLengthStruct firstOdd = new OddLengthStruct { a = 1, b = 2, c = 3 };
-        OddLengthStruct secondOdd = new OddLengthStruct { a = 4, b = 5, c = 6 };
-
-        OddLengthStruct[] someOddStructs = new OddLengthStruct[2];
-        someOddStructs[0] = firstOdd;
-        someOddStructs[1] = secondOdd;
-
-        bool success = true;
-        if (someOddStructs[0].a != 1 || someOddStructs[0].b != 2 || someOddStructs[0].c != 3)
-        {
-            PrintLine("Failed reading from first index");
-            success = false;
-        }
-        if (someOddStructs[1].a != 4 || someOddStructs[1].b != 5 || someOddStructs[1].c != 6)
-        {
-            PrintLine("Failed reading from second index");
-            success = false;
-        }
-
-        fixed (OddLengthStruct* pArrStart = someOddStructs)
-        {
-            UInt16* pArr = (ushort*)pArrStart;
-            for (int i = 0; i < 6; i++)
-            {
-                if (*pArr != i + 1)
-                {
-                    PrintLine("Failed reading as ushort pointer");
-                    success = false;
-                }
-                pArr++;
-            }
-        }
-
-        fixed (OddLengthStruct* pArrStart2 = someOddStructs)
-        {
-            byte* pArr2 = (byte*)pArrStart2;
-            for (int i = 0; i < 12; i++)
-            {
-                if (i % 2 == 0)
-                {
-                    if (*pArr2 != ((i / 2) + 1))
-                    {
-                        PrintLine("Failed reading as byte pointer");
-                        success = false;
-                    }
-                }
-                else
-                {
-                    if (*pArr2 != 0)
-                    {
-                        PrintLine("Failed reading as byte pointer");
-                        success = false;
-                    }
-                }
-                pArr2++;
-            }
-        }
-
-        if (success)
-        {
-            PrintLine("Ok.");
-        }
     }
 
     private static void FloatDoubleTest()
@@ -890,67 +827,6 @@ internal static class Program
         return result;
     }
 
-    private static void TestTryCatch()
-    {
-        // break out the individual tests to their own methods to make looking at the funclets easier
-        TestTryCatchNoException();
-
-        TestTryCatchThrowException(new Exception());
-    }
-
-    private static void TestTryCatchNoException()
-    {
-        bool caught = false;
-        StartTest("Catch not called when no exception test");
-        try
-        {
-            new Exception();
-        }
-        catch (Exception)
-        {
-            caught = true;
-        }
-        EndTest(!caught);
-    }
-
-    // pass the exception to avoid a call/invoke for that ctor in this function
-    private static void TestTryCatchThrowException(Exception e)
-    {
-        bool caught = false;
-        StartTest("Catch called when exception thrown test");
-        try
-        {
-            throw e;
-        }
-        catch (Exception)
-        {
-            caught = true;
-        }
-        EndTest(!caught);
-    }
-
-    private static void TestVirtualMethodUse()
-    {
-        StartTest("TestVirtualMethodUse test");
-
-        TestGenItf implInt = new TestGenItf();
-        implInt.Log<object>(new object());
-        EndTest(true);
-    }
-
-    public interface ITestGenItf
-    {
-        bool Log<TState>(TState state);
-    }
-
-    public class TestGenItf : ITestGenItf
-    {
-        public bool Log<TState>(TState state)
-        {
-            return true;
-        }
-    }
-
     private static void TestArgsWithMixedTypesAndExceptionRegions()
     {
         new MixedArgFuncClass().MixedArgFunc(1, null, 2, null);
@@ -998,6 +874,45 @@ internal static class Program
                 PassTest();
             }
         }
+    }
+
+    private static void TestTryCatch()
+    {
+        // break out the individual tests to their own methods to make looking at the funclets easier
+        TestTryCatchNoException();
+
+        TestTryCatchThrowException(new Exception());
+    }
+
+    private static void TestTryCatchNoException()
+    {
+        bool caught = false;
+        StartTest("Catch not called when no exception test");
+        try
+        {
+            new Exception();
+        }
+        catch (Exception)
+        {
+            caught = true;
+        }
+        EndTest(!caught);
+    }
+
+    // pass the exception to avoid a call/invoke for that ctor in this function
+    private static void TestTryCatchThrowException(Exception e)
+    {
+        bool caught = false;
+        StartTest("Catch called when exception thrown test");
+        try
+        {
+            throw e;
+        }
+        catch (Exception)
+        {
+            caught = true;
+        }
+        EndTest(!caught);
     }
 
     private static void TestThreadStaticsForSingleThread()
@@ -1065,26 +980,21 @@ internal static class Program
         Thread.Sleep(10);
     }
 
-
-    struct AFloat
+    private static void TestDispose()
     {
-        public float f;
+        StartTest("using calls Dispose");
+        var disposable = new DisposableTest();
+        using (disposable)
+        {
+        }
+        EndTest(disposable.Disposed);
     }
 
-    private static void TestForWrappedPrimitiveStruct()
+    private static void TestInitObjDouble()
     {
-        // exercises the path through DefType.IsHfa to optimize the access for structs around primitives
-        PrintString("Access to wrapped primitive: ");
-        var x = new AFloat();
-        x.f = float.MaxValue;
-        if (x.f == float.MaxValue)
-        {
-            PrintLine("Ok.");
-        }
-        else
-        {
-            PrintLine("Failed.");
-        }
+        StartTest("Init struct with double field test");
+        StructWithDouble strt = new StructWithDouble();
+        EndTest(strt.DoubleField == 0d);
     }
 
     [DllImport("*")]
@@ -1277,6 +1187,11 @@ public sealed class MySealedClass
     }
 }
 
+public struct StructWithDouble
+{
+    public double DoubleField;
+}
+
 public class Gen<T>
 {
     internal Type TestTypeOf()
@@ -1405,6 +1320,16 @@ class AnotherClassWithFourThreadStatics
         classStatic3++;
         classStatic4++;
         classStatic5++;
+    }
+}
+
+class DisposableTest : IDisposable
+{
+    public bool Disposed;
+
+    public void Dispose()
+    {
+        Disposed = true;
     }
 }
 
