@@ -1267,11 +1267,47 @@ namespace Internal.IL
         {
             Debug.Assert(type.IsValueType);
             Debug.Assert(primitiveType.IsPrimitive);
-            DefType defType = type as DefType;
-            if (defType != null && defType.IsHfa)
+
+            if (type.GetElementSize().AsInt != primitiveType.GetElementSize().AsInt)
             {
-                return defType.HfaElementType == primitiveType;
+                return false;
             }
+
+            FieldDesc[] fields = type.GetFields().ToArray();
+            int instanceFieldCount = 0;
+            bool foundPrimitive = false;
+
+            foreach (FieldDesc field in fields)
+            {
+                if (field.IsStatic)
+                {
+                    continue;
+                }
+
+                instanceFieldCount++;
+
+                // If there's more than one field, figuring out whether this is a primitive gets complicated, so assume it's not
+                if (instanceFieldCount > 1)
+                {
+                    break;
+                }
+
+                TypeDesc fieldType = field.FieldType;
+                if (fieldType == primitiveType)
+                {
+                    foundPrimitive = true;
+                }
+                else if (fieldType.IsValueType && !fieldType.IsPrimitive && StructIsWrappedPrimitive(fieldType, primitiveType))
+                {
+                    foundPrimitive = true;
+                }
+            }
+
+            if (instanceFieldCount == 1 && foundPrimitive)
+            {
+                return true;
+            }
+
             return false;
         }
 
@@ -2036,7 +2072,7 @@ namespace Internal.IL
         private ExpressionEntry HandleCall(MethodDesc callee, MethodSignature signature, StackEntry[] argumentValues, ILOpcode opcode = ILOpcode.call,
             TypeDesc constrainedType = null, LLVMValueRef calliTarget = default(LLVMValueRef), TypeDesc forcedReturnType = null)
         {
-            if (opcode == ILOpcode.callvirt && callee.IsVirtual && !callee.HasInstantiation)
+            if (opcode == ILOpcode.callvirt && callee.IsVirtual)
             {
                 AddVirtualMethodReference(callee);
             }
