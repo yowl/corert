@@ -1745,9 +1745,6 @@ namespace Internal.IL
                 if (!callee.IsNewSlot)
                     throw new NotImplementedException();
 
-                if (!_compilation.HasFixedSlotVTable(callee.OwningType))
-                    AddVirtualMethodReference(callee);
-
                 bool isValueTypeCall = false;
                 TypeDesc thisType = thisPointer.Type;
                 TypeFlags category = thisType.Category;
@@ -1795,6 +1792,7 @@ namespace Internal.IL
             }
             else
             {
+                AddMethodReference(callee);
                 return GetOrCreateLLVMFunction(calleeName, callee.Signature);
             }
         }
@@ -2072,16 +2070,6 @@ namespace Internal.IL
         private ExpressionEntry HandleCall(MethodDesc callee, MethodSignature signature, StackEntry[] argumentValues, ILOpcode opcode = ILOpcode.call,
             TypeDesc constrainedType = null, LLVMValueRef calliTarget = default(LLVMValueRef), TypeDesc forcedReturnType = null)
         {
-            if (opcode == ILOpcode.callvirt && callee.IsVirtual)
-            {
-                AddVirtualMethodReference(callee);
-            }
-            else if (callee != null)
-            {
-                AddMethodReference(callee);
-            }
-            var pointerSize = _compilation.NodeFactory.Target.PointerSize;
-
             LLVMValueRef fn;
             if (opcode == ILOpcode.calli)
             {
@@ -2206,15 +2194,6 @@ namespace Internal.IL
             ILOpcode opcode, TypeDesc constrainedType, LLVMValueRef calliTarget, int offset, LLVMValueRef baseShadowStack, LLVMBuilderRef builder, bool needsReturnSlot,
             LLVMValueRef castReturnAddress)
         {
-            if (opcode == ILOpcode.callvirt && callee.IsVirtual)
-            {
-                AddVirtualMethodReference(callee);
-            }
-            else if (callee != null)
-            {
-                AddMethodReference(callee);
-            }
-
             LLVMValueRef fn;
             if (opcode == ILOpcode.calli)
             {
@@ -2365,10 +2344,6 @@ namespace Internal.IL
             _dependencies.Add(_compilation.NodeFactory.MethodEntrypoint(method));
         }
 
-        private void AddVirtualMethodReference(MethodDesc method)
-        {
-            _dependencies.Add(_compilation.NodeFactory.VirtualMethodUse(method));
-        }
         static Dictionary<string, MethodDesc> _pinvokeMap = new Dictionary<string, MethodDesc>();
         private void ImportRawPInvoke(MethodDesc method)
         {
@@ -2638,7 +2613,6 @@ namespace Internal.IL
                 if (method.IsVirtual)
                 {
                     targetLLVMFunction = LLVMFunctionForMethod(method, thisPointer, true, null);
-                    AddVirtualMethodReference(method);
                 }
                 else
                 {
