@@ -3,18 +3,10 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 
 namespace System.Threading
 {
-
-public struct TwoByteStr
-{
-    public byte first;
-    public byte second;
-}
-
-internal static partial class WaitSubsystem
+    internal static partial class WaitSubsystem
     {
         /// <summary>
         /// A synchronization object that can participate in <see cref="WaitSubsystem"/>'s wait operations.

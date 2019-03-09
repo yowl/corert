@@ -150,8 +150,6 @@ namespace System.Runtime.Intrinsics
             return (obj is Vector128<T>) && Equals((Vector128<T>)(obj));
         }
 
-        [Intrinsic]
-        [Intrinsic]
         /// <summary>Gets the hash code for the instance.</summary>
         /// <returns>The hash code for the instance.</returns>
         /// <exception cref="NotSupportedException">The type of the current instance (<typeparamref name="T" />) is not supported.</exception>
