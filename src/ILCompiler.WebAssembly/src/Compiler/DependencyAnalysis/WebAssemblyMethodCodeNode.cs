@@ -17,7 +17,6 @@ namespace ILCompiler.DependencyAnalysis
     {
         protected readonly MethodDesc _method;
         protected IEnumerable<Object> _dependencies = Enumerable.Empty<Object>();
-        private ObjectNode.ObjectData _ehInfo;
 
         protected WebAssemblyMethodCodeNode(MethodDesc method)
         {
@@ -56,12 +55,6 @@ namespace ILCompiler.DependencyAnalysis
 
         public override IEnumerable<CombinedDependencyListEntry> GetConditionalStaticDependencies(NodeFactory factory) => null;
         public override IEnumerable<CombinedDependencyListEntry> SearchDynamicDependencies(List<DependencyNodeCore<NodeFactory>> markedNodes, int firstNode, NodeFactory factory) => null;
-
-        public void InitializeEHInfo(ObjectNode.ObjectData ehInfo)
-        {
-            Debug.Assert(_ehInfo == null);
-            _ehInfo = ehInfo;
-        }
     }
 
     internal class WebAssemblyMethodBodyNode : WebAssemblyMethodCodeNode, IMethodBodyNode

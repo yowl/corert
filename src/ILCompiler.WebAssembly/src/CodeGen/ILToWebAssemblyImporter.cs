@@ -30,6 +30,11 @@ namespace Internal.IL
             Temp
         }
 
+        private class ExceptionRegion
+        {
+            public ILExceptionRegion ILRegion;
+        }
+
         ArrayBuilder<object> _dependencies = new ArrayBuilder<object>();
         public IEnumerable<object> GetDependencies()
         {
@@ -91,12 +96,6 @@ namespace Internal.IL
             public readonly List<LLVMBasicBlockRef> LLVMBlocks = new List<LLVMBasicBlockRef>(1);
         }
 
-        private class ExceptionRegion
-        {
-            // TODO: what was the intention here, store something else?   If not, then delete this class?
-            public ILExceptionRegion ILRegion;
-        }
-
         private ExceptionRegion[] _exceptionRegions;
 
         public ILImporter(WebAssemblyCodegenCompilation compilation, MethodDesc method, MethodIL methodIL, string mangledName)
@@ -132,15 +131,18 @@ namespace Internal.IL
 
             var ilExceptionRegions = methodIL.GetExceptionRegions();
             _exceptionRegions = new ExceptionRegion[ilExceptionRegions.Length];
-            _exceptionFunclets = new List<LLVMValueRef>(_exceptionRegions.Length);
-            if (_exceptionRegions.Length != 0)
+            if (ilExceptionRegions.Length != 0)
             {
+                _exceptionFunclets = new List<LLVMValueRef>(_exceptionRegions.Length);
                 _landingPads = new Dictionary<Tuple<int, IntPtr>, LLVMBasicBlockRef>();
             }
             int curRegion = 0;
             foreach (ILExceptionRegion region in ilExceptionRegions.OrderBy(region => region.TryOffset))
             {
-                _exceptionRegions[curRegion++] = new ExceptionRegion() { ILRegion = region };
+                _exceptionRegions[curRegion++] = new ExceptionRegion
+                                                 {
+                                                     ILRegion = region
+                                                 };
             }
             _llvmFunction = GetOrCreateLLVMFunction(mangledName, method.Signature);
             _currentFunclet = _llvmFunction;
@@ -182,9 +184,12 @@ namespace Internal.IL
                     }
                 }
 
-                foreach (LLVMValueRef funclet in _exceptionFunclets)
+                if (_exceptionFunclets != null)
                 {
-                    LLVM.DeleteFunction(funclet);
+                    foreach (LLVMValueRef funclet in _exceptionFunclets)
+                    {
+                        LLVM.DeleteFunction(funclet);
+                    }
                 }
 
                 LLVM.PositionBuilderAtEnd(_builder, trapBlock);
@@ -572,9 +577,9 @@ namespace Internal.IL
             // Iterate backwards to find the most nested region
             for (int i = _exceptionRegions.Length - 1; i >= 0; i--)
             {
-                ILExceptionRegion region = _exceptionRegions[i].ILRegion;
-                if (IsOffsetContained(offset, region.HandlerOffset, region.HandlerLength) ||
-                    (region.Kind == ILExceptionRegionKind.Filter && IsOffsetContained(offset, region.FilterOffset, region.HandlerOffset - region.FilterOffset)))
+                ExceptionRegion exceptionRegion = _exceptionRegions[i];
+                if (IsOffsetContained(offset, exceptionRegion.ILRegion.HandlerOffset, exceptionRegion.ILRegion.HandlerLength) ||
+                    (exceptionRegion.ILRegion.Kind == ILExceptionRegionKind.Filter && IsOffsetContained(offset, exceptionRegion.ILRegion.FilterOffset, exceptionRegion.ILRegion.HandlerOffset - exceptionRegion.ILRegion.FilterOffset)))
                 {
                     return _exceptionRegions[i];
                 }
@@ -3999,7 +4004,7 @@ namespace Internal.IL
 //                relocs,
 //                _compilation.NodeFactory.Target.MinimumFunctionAlignment,
 //                new ISymbolDefinitionNode[] { _methodCodeNode });
-            ObjectNode.ObjectData ehInfo = _exceptionRegions != null ? EncodeEHInfo() : null;
+            ObjectNode.ObjectData ehInfo = _exceptionRegions.Length > 0 ? EncodeEHInfo() : null;
             //TODO: is this just for debugging, what happens if we dont have it
             //            DebugEHClauseInfo[] debugEHClauseInfos = null;
             //            if (_ehClauses != null)
@@ -4020,10 +4025,14 @@ namespace Internal.IL
             //            _methodCodeNode.InitializeFrameInfos(_frameInfos);
             //            _methodCodeNode.InitializeDebugEHClauseInfos(debugEHClauseInfos);
             //            _methodCodeNode.InitializeGCInfo(_gcInfo);
-            methodCodeNodeNeedingCode.InitializeEHInfo(ehInfo);
             //
             //            _methodCodeNode.InitializeDebugLocInfos(_debugLocInfos);
             //            _methodCodeNode.InitializeDebugVarInfos(_debugVarInfos);
+
+            if (ehInfo != null)
+            {
+                _dependencies.Add(new BlobNode(_mangledName + "___EHInfo", ObjectNodeSection.ReadOnlyDataSection, ehInfo.Data, 1));
+            }
         }
 
         private ObjectNode.ObjectData EncodeEHInfo()
@@ -4034,35 +4043,34 @@ namespace Internal.IL
             int totalClauses = _exceptionRegions.Length;
 
             // Count the number of special markers that will be needed
-            for (int i = 1; i < _exceptionRegions.Length; i++)
-            {
-                ref ExceptionRegion clause = ref _exceptionRegions[i];
-                ref ExceptionRegion previousClause = ref _exceptionRegions[i - 1];
+//            for (int i = 1; i < _exceptionRegions.Length; i++)
+//            {
+//                ExceptionRegion clause = _exceptionRegions[i];
+//                ExceptionRegion previousClause = _exceptionRegions[i - 1];
 
-
-                //TODO: reinstante SAMETRY?
-//                if ((previousClause.TryOffset == clause.TryOffset) &&
-//                    (previousClause.TryLength == clause.TryLength) &&
+                // TODO : do we need these specail markers and if so how do we detect and set CORINFO_EH_CLAUSE_SAMETRY?
+//                if ((previousClause.ILRegion.TryOffset == clause.ILRegion.TryOffset) &&
+//                    (previousClause.ILRegion.TryLength == clause.ILRegion.TryLength) &&
 //                    ((clause.Flags & CORINFO_EH_CLAUSE_FLAGS.CORINFO_EH_CLAUSE_SAMETRY) == 0))
 //                {
-                    totalClauses++;
+//                    totalClauses++;
 //                }
-            }
+//            }
 
             builder.EmitCompressedUInt((uint)totalClauses);
 
             for (int i = 0; i < _exceptionRegions.Length; i++)
             {
-                ref ExceptionRegion clause = ref _exceptionRegions[i];
+                ExceptionRegion exceptionRegion = _exceptionRegions[i];
 
-                if (i > 0)
-                {
-                    ref ExceptionRegion previousClause = ref _exceptionRegions[i - 1];
+//                if (i > 0)
+//                {
+//                    ExceptionRegion previousClause = _exceptionRegions[i - 1];
 
-                    //TODO: reinstante SAMETRY?
                     // If the previous clause has same try offset and length as the current clause,
                     // but belongs to a different try block (CORINFO_EH_CLAUSE_SAMETRY is not set),
                     // emit a special marker to allow runtime distinguish this case.
+                    //TODO: see above - do we need these
 //                    if ((previousClause.TryOffset == clause.TryOffset) &&
 //                        (previousClause.TryLength == clause.TryLength) &&
 //                        ((clause.Flags & CORINFO_EH_CLAUSE_FLAGS.CORINFO_EH_CLAUSE_SAMETRY) == 0))
@@ -4071,17 +4079,17 @@ namespace Internal.IL
 //                        builder.EmitCompressedUInt((uint)RhEHClauseKind.RH_EH_CLAUSE_FAULT);
 //                        builder.EmitCompressedUInt(0);
 //                    }
-                }
+//                }
 
                 RhEHClauseKind clauseKind;
 
-                if (((clause.ILRegion.Kind & ILExceptionRegionKind.Fault) != 0) ||
-                    ((clause.ILRegion.Kind & ILExceptionRegionKind.Finally) != 0))
+                if (exceptionRegion.ILRegion.Kind == ILExceptionRegionKind.Fault ||
+                    exceptionRegion.ILRegion.Kind  == ILExceptionRegionKind.Finally)
                 {
                     clauseKind = RhEHClauseKind.RH_EH_CLAUSE_FAULT;
                 }
                 else
-                if ((clause.ILRegion.Kind & ILExceptionRegionKind.Filter) != 0)
+                if (exceptionRegion.ILRegion.Kind == ILExceptionRegionKind.Filter)
                 {
                     clauseKind = RhEHClauseKind.RH_EH_CLAUSE_FILTER;
                 }
@@ -4090,20 +4098,20 @@ namespace Internal.IL
                     clauseKind = RhEHClauseKind.RH_EH_CLAUSE_TYPED;
                 }
 
-                builder.EmitCompressedUInt((uint)clause.ILRegion.TryOffset);
+                builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.TryOffset);
 
                 // clause.TryLength returned by the JIT is actually end offset... // TODO: does this apply to Wasm ExceptionRegion?
                 // https://github.com/dotnet/coreclr/issues/3585
-                int tryLength = (int)clause.ILRegion.TryLength - (int)clause.ILRegion.TryOffset;
+                int tryLength = (int)exceptionRegion.ILRegion.TryLength - (int)exceptionRegion.ILRegion.TryOffset;
                 builder.EmitCompressedUInt((uint)((tryLength << 2) | (int)clauseKind));
 
                 switch (clauseKind)
                 {
                     case RhEHClauseKind.RH_EH_CLAUSE_TYPED:
                         {
-                            builder.EmitCompressedUInt((uint)clause.ILRegion.HandlerOffset);
+                            builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.HandlerOffset);
 
-                            var type = (TypeDesc)_methodIL.GetObject(clause.ILRegion.ClassToken); // TODO: dropping the filter offset that could be in this c union for RyuJit
+                            var type = (TypeDesc)_methodIL.GetObject((int)exceptionRegion.ILRegion.ClassToken); 
 
                             // Once https://github.com/dotnet/corert/issues/3460 is done, this should be an assert.
                             // Throwing InvalidProgram is not great, but we want to do *something* if this happens
@@ -4125,17 +4133,18 @@ namespace Internal.IL
                         }
                         break;
                     case RhEHClauseKind.RH_EH_CLAUSE_FAULT:
-                        builder.EmitCompressedUInt((uint)clause.ILRegion.HandlerOffset);
+                        builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.HandlerOffset);
                         break;
                     case RhEHClauseKind.RH_EH_CLAUSE_FILTER:
-                        builder.EmitCompressedUInt((uint)clause.ILRegion.HandlerOffset);
-                        builder.EmitCompressedUInt((uint)clause.ILRegion.ClassToken); // TODO: dropping the filter offset that could be in this c union for RyuJit
+                        builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.HandlerOffset);
+                        builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.FilterOffset); 
                         break;
                 }
             }
 
             return builder.ToObjectData();
         }
+
         enum RhEHClauseKind
         {
             RH_EH_CLAUSE_TYPED = 0,
