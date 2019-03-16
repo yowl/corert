@@ -9,7 +9,6 @@
     <TargetFramework>netstandard1.3</TargetFramework>
     <NoWarn>8002</NoWarn>
     <OutputPath>$(BaseOutputPath)$(OSPlatformConfig)/tools</OutputPath>
-    <LangVersion>7.2</LangVersion>
   </PropertyGroup>
   
   <ItemGroup>
@@ -46,6 +45,7 @@
     <Compile Include="CodeGen\LLVMMisc.cs" />
     <Compile Include="CodeGen\LLVMPInvokes.cs" />
     <Compile Include="CodeGen\WebAssemblyObjectWriter.cs" />
+    <Compile Include="Compiler\DependencyAnalysis\EHInfoNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\RawMainMethodRootProvider.cs" />
     <Compile Include="Compiler\DependencyAnalysis\WebAssemblyCodegenNodeFactory.cs" />
     <Compile Include="Compiler\DependencyAnalysis\WebAssemblyMethodCodeNode.cs" />

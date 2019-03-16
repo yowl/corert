@@ -11,6 +11,7 @@ using Internal.TypeSystem;
 using ILCompiler;
 using LLVMSharp;
 using ILCompiler.CodeGen;
+using ILCompiler.Compiler.DependencyAnalysis;
 using ILCompiler.DependencyAnalysis;
 using ILCompiler.DependencyAnalysisFramework;
 using ILCompiler.WebAssembly;
@@ -66,7 +67,8 @@ namespace Internal.IL
         private List<LLVMValueRef> _exceptionFunclets;
         private readonly Dictionary<Tuple<int, IntPtr>, LLVMBasicBlockRef> _landingPads;
         private readonly Dictionary<IntPtr, LLVMBasicBlockRef> _funcletUnreachableBlocks = new Dictionary<IntPtr, LLVMBasicBlockRef>();
-
+        private readonly EHInfoNode _ehInfoNode;
+        
         /// <summary>
         /// Stack of values pushed onto the IL stack: locals, arguments, values, function pointer, ...
         /// </summary>
@@ -135,6 +137,7 @@ namespace Internal.IL
             {
                 _exceptionFunclets = new List<LLVMValueRef>(_exceptionRegions.Length);
                 _landingPads = new Dictionary<Tuple<int, IntPtr>, LLVMBasicBlockRef>();
+                _ehInfoNode = new EHInfoNode(_mangledName);
             }
             int curRegion = 0;
             foreach (ILExceptionRegion region in ilExceptionRegions.OrderBy(region => region.TryOffset))
@@ -1670,7 +1673,7 @@ namespace Internal.IL
                     };
                     MetadataType helperType = _compilation.TypeSystemContext.SystemModule.GetKnownType("Internal.Runtime.CompilerHelpers", "ArrayHelpers");
                     MethodDesc helperMethod = helperType.GetKnownMethod("NewObjArray", null);
-                    PushNonNull(HandleCall(helperMethod, helperMethod.Signature, arguments, forcedReturnType: newType));
+                    PushNonNull(HandleCall(helperMethod, helperMethod.Signature, arguments));
                     return;
                 }
                 else if (newType.IsString)
@@ -2068,7 +2071,7 @@ namespace Internal.IL
         }
 
         private ExpressionEntry HandleCall(MethodDesc callee, MethodSignature signature, StackEntry[] argumentValues, ILOpcode opcode = ILOpcode.call,
-            TypeDesc constrainedType = null, LLVMValueRef calliTarget = default(LLVMValueRef), TypeDesc forcedReturnType = null)
+            TypeDesc constrainedType = null, LLVMValueRef calliTarget = default(LLVMValueRef), bool fromLandingPad = false)
         {
             LLVMValueRef fn;
             if (opcode == ILOpcode.calli)
@@ -2156,7 +2159,7 @@ namespace Internal.IL
 
             ExceptionRegion currentTryRegion = GetCurrentTryRegion();
 
-            if (currentTryRegion == null)
+            if (currentTryRegion == null || fromLandingPad) // not handling exceptions that occur in the LLVM landing pad determining the EH handler
             {
                 llvmReturn = LLVM.BuildCall(_builder, fn, llvmArgs.ToArray(), string.Empty);
             }
@@ -2290,7 +2293,6 @@ namespace Internal.IL
             LLVM.PositionBuilderAtEnd(landingPadBuilder, landingPad);
             LLVMValueRef pad = LLVM.BuildLandingPad(landingPadBuilder, GxxPersonalityType, GxxPersonality, 1, "");
             LLVM.AddClause(pad, LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0)));
-            // TODO: set pad as cleanup? https://stackoverflow.com/questions/13166552/writing-a-simple-cleanup-landing-pad-on-llvm
             if (_method.Name == "TestTryCatchThrowException")
             {
                 if (RhpCallCatchFunclet.Pointer.Equals(IntPtr.Zero))
@@ -2314,15 +2316,30 @@ namespace Internal.IL
                     ;;         R8:   REGDISPLAY*
                     ;;         R9:   ExInfo
                 */
+                // TODO: set pad as cleanup? https://stackoverflow.com/questions/13166552/writing-a-simple-cleanup-landing-pad-on-llvm
                 LLVM.SetCleanup(pad, true); // TODO: is this needed
                 var exPtr = LLVM.BuildExtractValue(landingPadBuilder, pad, 0, "ex");
+                LLVMTypeRef ehInfoIteratorType = LLVM.StructType(new LLVMTypeRef[] { LLVMTypeRef.Int32Type() }, false);
+
+                var ehInfoIterator = LLVM.BuildAlloca(landingPadBuilder, ehInfoIteratorType, "ehInfoIterPtr");
+                
+                var iteratorInitArgs = new StackEntry[] {
+                                                            new ExpressionEntry(StackValueKind.ObjRef, "ehInfoIter", ehInfoIterator), 
+                                                            new ExpressionEntry(StackValueKind.ByRef, "ehInfoStart", LoadAddressOfSymbolNode(_ehInfoNode)),
+                                                            new ExpressionEntry(StackValueKind.ByRef, "ehInfoEnd", LoadAddressOfSymbolNode(_ehInfoNode.EndSymbol)),
+                                                     new ExpressionEntry(StackValueKind.Int32, "idxStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0, false)) }; /* if this doesnt work, try MaxTryRegionIdx */
+                // bit hacky this, replace the _builder with the landing pad builder to avoid adding a builder param everywhere
+                LLVMBuilderRef methodBuilder = _builder;
+                _builder = landingPadBuilder;
+                var res = CallRuntime(_compilation.TypeSystemContext, "EHClauseIterator", "InitFromEhInfo", iteratorInitArgs, null, fromLandingPad: true);
+
                 // params are:
                 // object exception, uint idxStart,
                 // ref StackFrameIterator frameIter, out uint tryRegionIdx, out byte* pHandler
                 var arguments = new StackEntry[] { new ExpressionEntry(StackValueKind.ValueType, "exPtr", exPtr),
                                                      new ExpressionEntry(StackValueKind.Int32, "idxStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0, false)) /* if this doesnt work, try MaxTryRegionIdx */
                                                      };
-//                var handler = CallRuntime(_compilation.TypeSystemContext, "EH", "FindFirstPassHandler", arguments, null);
+                var handler = CallRuntime(_compilation.TypeSystemContext, "EH", "FindFirstPassHandlerWasm", arguments, null, true);
 //                LLVMValueRef[] args = new LLVMValueRef[]
 //                                      {
 //                                          exPtr,
@@ -2332,6 +2349,7 @@ namespace Internal.IL
 //                                      };
 //                LLVM.BuildCall(landingPadBuilder, RhpCallCatchFunclet, args, "");
 //                LLVM.BuildBr(landingPadBuilder, GetBasicBlockForExceptionRegionHandler(tryRegion));
+                _builder = methodBuilder;
             }
             EmitTrapCall(landingPadBuilder);
             LLVM.DisposeBuilder(landingPadBuilder);
@@ -2472,6 +2490,7 @@ namespace Internal.IL
         }
 
         static LLVMValueRef s_shadowStackTop = default(LLVMValueRef);
+
         LLVMValueRef ShadowStackTop
         {
             get
@@ -3880,19 +3899,19 @@ namespace Internal.IL
         private const string ThreadStatics = "ThreadStatics";
         private const string ClassConstructorRunner = "ClassConstructorRunner";
 
-        private ExpressionEntry CallRuntime(TypeSystemContext context, string className, string methodName, StackEntry[] arguments, TypeDesc forcedReturnType = null)
+        private ExpressionEntry CallRuntime(TypeSystemContext context, string className, string methodName, StackEntry[] arguments, TypeDesc forcedReturnType = null, bool fromLandingPad = false)
         {
-            return CallRuntime("System.Runtime", context, className, methodName, arguments, forcedReturnType);
+            return CallRuntime("System.Runtime", context, className, methodName, arguments, forcedReturnType, fromLandingPad);
         }
 
-        private ExpressionEntry CallRuntime(string @namespace, TypeSystemContext context, string className, string methodName, StackEntry[] arguments, TypeDesc forcedReturnType = null)
+        private ExpressionEntry CallRuntime(string @namespace, TypeSystemContext context, string className, string methodName, StackEntry[] arguments, TypeDesc forcedReturnType = null, bool fromLandingPad = false)
         {
             MetadataType helperType = context.SystemModule.GetKnownType(@namespace, className);
             MethodDesc helperMethod = helperType.GetKnownMethod(methodName, null);
             if ((helperMethod.IsInternalCall && helperMethod.HasCustomAttribute("System.Runtime", "RuntimeImportAttribute")))
                 return ImportRawPInvoke(helperMethod, arguments, forcedReturnType: forcedReturnType);
             else
-                return HandleCall(helperMethod, helperMethod.Signature, arguments, forcedReturnType: forcedReturnType);
+                return HandleCall(helperMethod, helperMethod.Signature, arguments, fromLandingPad: fromLandingPad);
         }
 
         private void PushNonNull(StackEntry entry)
@@ -4041,7 +4060,8 @@ namespace Internal.IL
 
             if (ehInfo != null)
             {
-                _dependencies.Add(new BlobNode(_mangledName + "___EHInfo", ObjectNodeSection.ReadOnlyDataSection, ehInfo.Data, 1));
+                _ehInfoNode.AddEHInfo(ehInfo.Data);
+                _dependencies.Add(_ehInfoNode);
             }
         }
 
@@ -4121,14 +4141,9 @@ namespace Internal.IL
                         {
                             builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.HandlerOffset);
 
-                            var type = (TypeDesc)_methodIL.GetObject((int)exceptionRegion.ILRegion.ClassToken); 
+                            var type = (TypeDesc)_methodIL.GetObject((int)exceptionRegion.ILRegion.ClassToken);
 
-                            // Once https://github.com/dotnet/corert/issues/3460 is done, this should be an assert.
-                            // Throwing InvalidProgram is not great, but we want to do *something* if this happens
-                            // because doing nothing means problems at runtime. This is not worth piping a
-                            // a new exception with a fancy message for.
-                            if (type.IsCanonicalSubtype(CanonicalFormKind.Any))
-                                ThrowHelper.ThrowInvalidProgramException();
+                            Debug.Assert(!type.IsCanonicalSubtype(CanonicalFormKind.Any));
 
                             var typeSymbol = _compilation.NodeFactory.NecessaryTypeSymbol(type);
 

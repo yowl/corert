@@ -869,6 +869,98 @@ namespace System.Runtime
             return false;
         }
 
+        internal struct RhEHClauseWasm
+        {
+            internal uint _tryOffset;
+            internal uint _tryStartOffset;
+            internal EHClauseIterator.RhEHClauseKindWasm _clauseKind;
+//            internal uint _tryEndOffset;
+        }
+
+
+        // TODO: temporary to try things out, when working look to see how to refactor with FindFirstPassHandler
+        private static bool FindFirstPassHandlerWasm(object exception, uint idxStart,
+            ref EHClauseIterator clauseIter, out uint tryRegionIdx, out byte* pHandler)
+        {
+            pHandler = null;
+            tryRegionIdx = MaxTryRegionIdx;
+
+//            EHEnum ehEnum;
+//            byte* pbMethodStartAddress;
+//            if (!InternalCalls.RhpEHEnumInitFromStackFrameIterator(ref clauseIter, &pbMethodStartAddress, &ehEnum))
+//                return false;
+//
+//            byte* pbControlPC = clauseIter.ControlPC;
+//
+//            uint codeOffset = (uint)(pbControlPC - pbMethodStartAddress);
+//
+            uint lastTryStart = 0, lastTryEnd = 0;
+//
+//            // Search the clauses for one that contains the current offset.
+            RhEHClauseWasm ehClause = new RhEHClauseWasm();
+            // for (uint curIdx = 0; InternalCalls.RhpEHEnumNext(&ehEnum, &ehClause); curIdx++)// TODO: would it be useful for GC also to have an implementation of ICodeManager?
+            for (uint curIdx = 0; clauseIter.Next(ref ehClause); curIdx++)
+            {
+                // 
+                // Skip to the starting try region.  This is used by collided unwinds and rethrows to pickup where
+                // the previous dispatch left off.
+                //
+                if (idxStart != MaxTryRegionIdx)
+                {
+                    if (curIdx <= idxStart)
+                    {
+                        lastTryStart = ehClause._tryStartOffset;
+                        lastTryEnd = ehClause._tryEndOffset;
+                        continue;
+                    }
+
+                    // Now, we continue skipping while the try region is identical to the one that invoked the 
+                    // previous dispatch.
+                    if ((ehClause._tryStartOffset == lastTryStart) && (ehClause._tryEndOffset == lastTryEnd))
+                        continue;
+
+                    // We are done skipping. This is required to handle empty finally block markers that are used
+                    // to separate runs of different try blocks with same native code offsets.
+                    idxStart = MaxTryRegionIdx;
+                }
+//
+//                RhEHClauseKind clauseKind = ehClause._clauseKind;
+//
+//                if (((clauseKind != RhEHClauseKind.RH_EH_CLAUSE_TYPED) &&
+//                     (clauseKind != RhEHClauseKind.RH_EH_CLAUSE_FILTER))
+//                    || !ehClause.ContainsCodeOffset(codeOffset))
+//                {
+//                    continue;
+//                }
+//
+//                // Found a containing clause. Because of the order of the clauses, we know this is the
+//                // most containing.
+//                if (clauseKind == RhEHClauseKind.RH_EH_CLAUSE_TYPED)
+//                {
+//                    if (ShouldTypedClauseCatchThisException(exception, (EEType*)ehClause._pTargetType))
+//                    {
+//                        pHandler = ehClause._handlerAddress;
+//                        tryRegionIdx = curIdx;
+//                        return true;
+//                    }
+//                }
+//                else
+//                {
+//                    byte* pFilterFunclet = ehClause._filterAddress;
+//                    bool shouldInvokeHandler =
+//                        InternalCalls.RhpCallFilterFunclet(exception, pFilterFunclet, clauseIter.RegisterSet);
+//
+//                    if (shouldInvokeHandler)
+//                    {
+//                        pHandler = ehClause._handlerAddress;
+//                        tryRegionIdx = curIdx;
+//                        return true;
+//                    }
+//                }
+            }
+
+            return false;
+        }
 #if DEBUG && !INPLACE_RUNTIME
         private static EEType* s_pLowLevelObjectType;
         private static void AssertNotRuntimeObject(EEType* pClauseType)
