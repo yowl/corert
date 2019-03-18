@@ -10,6 +10,7 @@ namespace ILCompiler.Compiler.DependencyAnalysis
         private readonly string _name;
         private ArrayBuilder<byte> _ehInfoBuilder;
         private readonly ObjectAndOffsetSymbolNode _endSymbol;
+        private Relocation[] _relocs;
 
 
         public override ObjectNodeSection Section => ObjectNodeSection.ReadOnlyDataSection;
@@ -28,10 +29,11 @@ namespace ILCompiler.Compiler.DependencyAnalysis
             _ehInfoBuilder = new ArrayBuilder<byte>();
             _endSymbol = new ObjectAndOffsetSymbolNode(this, 0, mangledName + "___EHInfo_End", true);
         }
-        public int AddEHInfo(byte[] ehInfo)
+        public int AddEHInfo(ObjectData ehInfo)
         {
             int offset = _ehInfoBuilder.Count;
-            _ehInfoBuilder.Append(ehInfo);
+            _ehInfoBuilder.Append(ehInfo.Data);
+            _relocs = ehInfo.Relocs;
             return offset;
         }
 
@@ -49,7 +51,7 @@ namespace ILCompiler.Compiler.DependencyAnalysis
         {
             var byteArray = _ehInfoBuilder.ToArray();
             _endSymbol.SetSymbolOffset(byteArray.Length);
-            return new ObjectData(byteArray, Array.Empty<Relocation>(), alignment: 1, definedSymbols: new ISymbolDefinitionNode[] { this, _endSymbol });
+            return new ObjectData(byteArray, _relocs, alignment: 1, definedSymbols: new ISymbolDefinitionNode[] { this, _endSymbol });
         }
 
         protected override string GetName(NodeFactory context)

@@ -15,6 +15,7 @@ using ObjectData = ILCompiler.DependencyAnalysis.ObjectNode.ObjectData;
 
 using LLVMSharp;
 using ILCompiler.CodeGen;
+using ILCompiler.Compiler.DependencyAnalysis;
 
 namespace ILCompiler.DependencyAnalysis
 {
@@ -810,7 +811,10 @@ namespace ILCompiler.DependencyAnalysis
                     {
                         // Emit symbol definitions if necessary
                         objectWriter.EmitSymbolDefinition(i);
+                        if (node is EHInfoNode && relocs.Length > 0)
+                        {
 
+                        }
                         if (i == nextRelocOffset)
                         {
                             Relocation reloc = relocs[nextRelocIndex];

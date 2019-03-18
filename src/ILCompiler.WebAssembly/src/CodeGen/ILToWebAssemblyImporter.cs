@@ -2319,8 +2319,8 @@ namespace Internal.IL
                 // TODO: set pad as cleanup? https://stackoverflow.com/questions/13166552/writing-a-simple-cleanup-landing-pad-on-llvm
                 LLVM.SetCleanup(pad, true); // TODO: is this needed
                 var exPtr = LLVM.BuildExtractValue(landingPadBuilder, pad, 0, "ex");
-                LLVMTypeRef ehInfoIteratorType = LLVM.StructType(new LLVMTypeRef[] { LLVMTypeRef.Int32Type() }, false);
-
+                // TODO: should this really be a newobj call?
+                LLVMTypeRef ehInfoIteratorType = LLVM.StructType(new LLVMTypeRef[] { LLVMTypeRef.Int32Type(), LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0), LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0) }, false);
                 var ehInfoIterator = LLVM.BuildAlloca(landingPadBuilder, ehInfoIteratorType, "ehInfoIterPtr");
                 
                 var iteratorInitArgs = new StackEntry[] {
@@ -2336,8 +2336,15 @@ namespace Internal.IL
                 // params are:
                 // object exception, uint idxStart,
                 // ref StackFrameIterator frameIter, out uint tryRegionIdx, out byte* pHandler
+                var tryRegionIdx = LLVM.BuildAlloca(landingPadBuilder, LLVM.Int32Type(), "tryRegionIdx");
+                var pHandler = LLVM.BuildAlloca(landingPadBuilder, LLVM.PointerType(LLVMTypeRef.Int8Type(), 0), "pHandler");
+
                 var arguments = new StackEntry[] { new ExpressionEntry(StackValueKind.ValueType, "exPtr", exPtr),
-                                                     new ExpressionEntry(StackValueKind.Int32, "idxStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0, false)) /* if this doesnt work, try MaxTryRegionIdx */
+                                                     new ExpressionEntry(StackValueKind.Int32, "idxStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0xFFFFFFFFu, false)), /* if this doesnt work, try MaxTryRegionIdx */
+                                                     new ExpressionEntry(StackValueKind.Int32, "idxTryLandingStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), (ulong)tryRegion.ILRegion.TryOffset, false)),
+                                                     new ExpressionEntry(StackValueKind.ByRef, "refFrameIter", ehInfoIterator), 
+                                                     new ExpressionEntry(StackValueKind.ByRef, "tryRegionIdx", tryRegionIdx),
+                                                     new ExpressionEntry(StackValueKind.ByRef, "pHandler", pHandler) 
                                                      };
                 var handler = CallRuntime(_compilation.TypeSystemContext, "EH", "FindFirstPassHandlerWasm", arguments, null, true);
 //                LLVMValueRef[] args = new LLVMValueRef[]
@@ -4060,7 +4067,7 @@ namespace Internal.IL
 
             if (ehInfo != null)
             {
-                _ehInfoNode.AddEHInfo(ehInfo.Data);
+                _ehInfoNode.AddEHInfo(ehInfo);
                 _dependencies.Add(_ehInfoNode);
             }
         }
@@ -4089,6 +4096,10 @@ namespace Internal.IL
 
             builder.EmitCompressedUInt((uint)totalClauses);
 
+            if (_method.Name == "TestTryCatchThrowException")
+            {
+
+            }
             for (int i = 0; i < _exceptionRegions.Length; i++)
             {
                 ExceptionRegion exceptionRegion = _exceptionRegions[i];
@@ -4130,10 +4141,8 @@ namespace Internal.IL
 
                 builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.TryOffset);
 
-                // clause.TryLength returned by the JIT is actually end offset... // TODO: does this apply to Wasm ExceptionRegion?
-                // https://github.com/dotnet/coreclr/issues/3585
-                int tryLength = (int)exceptionRegion.ILRegion.TryLength - (int)exceptionRegion.ILRegion.TryOffset;
-                builder.EmitCompressedUInt((uint)((tryLength << 2) | (int)clauseKind));
+                uint tryLength = (uint)exceptionRegion.ILRegion.TryLength;
+                builder.EmitCompressedUInt((tryLength << 2) | (uint)clauseKind);
 
                 switch (clauseKind)
                 {

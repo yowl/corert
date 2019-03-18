@@ -5,7 +5,6 @@
 using System.Diagnostics;
 using System.Runtime;
 using System.Runtime.InteropServices;
-using Internal.NativeFormat;
 
 namespace System.Runtime
 {
@@ -40,13 +39,13 @@ namespace System.Runtime
         //            internal UIntPtr FramePointer { get { return _framePointer; } }
         //
         private uint _totalClauses;
-        NativeParser _nativeParser;
+        private byte *_currentPtr;
+        private int _currentClause;
 
         [DllImport("*")]
         private static unsafe extern int printf(byte* str, byte* unused);
 
-
-        private static unsafe void PrintString(string s)
+        public static unsafe void PrintString(string s)
         {
             int length = s.Length;
             fixed (char* curChar = s)
@@ -66,15 +65,72 @@ namespace System.Runtime
             PrintString("\n");
         }
 
+        private static uint DecodeUnsigned(ref byte* stream)
+        {
+            uint value = 0;
+
+            uint val = *stream;
+            if ((val & 1) == 0)
+            {
+                value = (val >> 1);
+                stream += 1;
+            }
+            else if ((val & 2) == 0)
+            {
+                value = (val >> 2) |
+                        (((uint)*(stream + 1)) << 6);
+                stream += 2;
+            }
+            else if ((val & 4) == 0)
+            {
+                value = (val >> 3) |
+                        (((uint)*(stream + 1)) << 5) |
+                        (((uint)*(stream + 2)) << 13);
+                stream += 3;
+            }
+            else if ((val & 8) == 0)
+            {
+                value = (val >> 4) |
+                        (((uint)*(stream + 1)) << 4) |
+                        (((uint)*(stream + 2)) << 12) |
+                        (((uint)*(stream + 3)) << 20);
+                stream += 4;
+            }
+            else if ((val & 16) == 0)
+            {
+                stream += 1;
+                value = ReadUInt32(ref stream);
+            }
+
+            // TODO : deleted all the error handling
+            return value;
+        }
+
+        private static uint ReadUInt32(ref byte* stream)
+        {
+            uint result = *(uint*)(stream); // Assumes little endian and unaligned access
+            stream += 4;
+            return result;
+        }
+
+        uint GetUnsigned()
+        {
+            uint value;
+            value = DecodeUnsigned(ref _currentPtr);
+            return value;
+        }
+
         internal void InitFromEhInfo(byte* ehInfoStart, byte* ehInfoEnd, int idxStart)
         {
-            NativeReader reader =  new NativeReader(ehInfoStart, (uint)(ehInfoEnd - ehInfoStart));
-            _nativeParser = new NativeParser(reader, 0);
-            _totalClauses = _nativeParser.GetUnsigned();
-            PrintString("read offset now ");
-            PrintLine(_nativeParser.Offset.ToString());
+            _currentPtr = ehInfoStart;
+            _currentClause = -1;
+            _totalClauses = GetUnsigned();
+#if netcoreapp
+            PrintString("read _currentPtr now ");
+            PrintLine(((uint)_currentPtr).ToString());
             PrintString("read _totalClauses ");
             PrintLine(_totalClauses.ToString());
+#endif
         }
 
         // TODO : copied from EH
@@ -88,70 +144,60 @@ namespace System.Runtime
 
         internal bool Next(ref EH.RhEHClauseWasm pEHClause)
         {
-            if (_nativeParser.Offset >= _nativeParser.Reader.Size) return false;
+#if netcoreapp
+            PrintLine("EH Next");
 
-            // read next EHInfo
-//                RhEHClauseKind clauseKind;
-//
-//                if (exceptionRegion.ILRegion.Kind == ILExceptionRegionKind.Fault ||
-//                    exceptionRegion.ILRegion.Kind == ILExceptionRegionKind.Finally)
-//                {
-//                    clauseKind = RhEHClauseKind.RH_EH_CLAUSE_FAULT;
-//                }
-//                else
-//                if (exceptionRegion.ILRegion.Kind == ILExceptionRegionKind.Filter)
-//                {
-//                    clauseKind = RhEHClauseKind.RH_EH_CLAUSE_FILTER;
-//                }
-//                else
-//                {
-//                    clauseKind = RhEHClauseKind.RH_EH_CLAUSE_TYPED;
-//                }
+            PrintString("Next _currentPtr ");
+            PrintLine(((uint)_currentPtr).ToString());
+            PrintString("Next _currentClause ");
+            PrintLine(_currentClause.ToString());
+#endif
 
-                pEHClause._tryOffset = _nativeParser.GetUnsigned();
+            if (_currentClause >= _totalClauses) return false;
 
-                // clause.TryLength returned by the JIT is actually end offset... // TODO: does this apply to Wasm ExceptionRegion?
-                // https://github.com/dotnet/coreclr/issues/3585
-                uint tryLengthAndKind = _nativeParser.GetUnsigned();
-                pEHClause._clauseKind = tryLengthAndKind & 3;
-                pEHClause._tryLength = tryLengthAndKind >> 2;
+            _currentClause++;
+            pEHClause._tryStartOffset = GetUnsigned();
+            uint tryLengthAndKind = GetUnsigned();
+            pEHClause._clauseKind = (RhEHClauseKindWasm)(tryLengthAndKind & 3);
+            pEHClause._tryEndOffset = (tryLengthAndKind >> 2) + pEHClause._tryStartOffset;
+            switch (pEHClause._clauseKind)
+            {
+                case RhEHClauseKindWasm.RH_EH_CLAUSE_TYPED:
 
-                switch (clauseKind)
-                {
-                    case RhEHClauseKind.RH_EH_CLAUSE_TYPED:
-                        {
-                            builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.HandlerOffset);
-
-                            var type = (TypeDesc)_methodIL.GetObject((int)exceptionRegion.ILRegion.ClassToken);
-
-                            Debug.Assert(!type.IsCanonicalSubtype(CanonicalFormKind.Any));
-
-                            var typeSymbol = _compilation.NodeFactory.NecessaryTypeSymbol(type);
-
-                            RelocType rel = (_compilation.NodeFactory.Target.IsWindows) ?
-                                RelocType.IMAGE_REL_BASED_ABSOLUTE :
-                                RelocType.IMAGE_REL_BASED_REL32;
-
-                            if (_compilation.NodeFactory.Target.Abi == TargetAbi.Jit)
-                                rel = RelocType.IMAGE_REL_BASED_REL32;
-
-                            builder.EmitReloc(typeSymbol, rel);
-                        }
-                        break;
-                    case RhEHClauseKind.RH_EH_CLAUSE_FAULT:
-                        builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.HandlerOffset);
-                        break;
-                    case RhEHClauseKind.RH_EH_CLAUSE_FILTER:
-                        builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.HandlerOffset);
-                        builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.FilterOffset);
-                        break;
-                }
+                    pEHClause._handlerOffset = GetUnsigned();
+                    pEHClause._typeSymbol = ReadUInt32(ref _currentPtr);
+#if netcoreapp
+                    PrintString("Next _typeSymbol ");
+                    PrintLine(pEHClause._typeSymbol.ToString());
+#endif
+                    break;
+                case RhEHClauseKindWasm.RH_EH_CLAUSE_FAULT:
+                    pEHClause._handlerOffset = GetUnsigned();
+                    break;
+                case RhEHClauseKindWasm.RH_EH_CLAUSE_FILTER:
+                    pEHClause._handlerOffset = GetUnsigned();
+                    pEHClause._filterOffset = GetUnsigned();
+                    break;
             }
-
-            uint uExCollideClauseIdx;
-            bool fUnwoundReversePInvoke;
-            return Next(out uExCollideClauseIdx, out fUnwoundReversePInvoke);
+#if netcoreapp
+            PrintString("Next _tryStartOffset ");
+            PrintLine(pEHClause._tryStartOffset.ToString());
+            PrintString("Next _tryEndOffset ");
+            PrintLine(pEHClause._tryEndOffset.ToString());
+//            PrintString("Next _clauseKind ");
+//            PrintLine(pEHClause._clauseKind.ToString());
+            PrintString("Next _handlerOffset ");
+            PrintLine(pEHClause._handlerOffset.ToString());
+            PrintString("Next tryLengthAndKind ");
+            PrintLine(tryLengthAndKind.ToString());
+#endif
+            return true;
         }
+
+//            uint uExCollideClauseIdx;
+//            bool fUnwoundReversePInvoke;
+//            return Next(out uExCollideClauseIdx, out fUnwoundReversePInvoke);
+//        }
         //
         //            internal bool Next(out uint uExCollideClauseIdx)
         //            {

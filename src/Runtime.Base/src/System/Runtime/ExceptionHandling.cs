@@ -871,18 +871,27 @@ namespace System.Runtime
 
         internal struct RhEHClauseWasm
         {
-            internal uint _tryOffset;
             internal uint _tryStartOffset;
             internal EHClauseIterator.RhEHClauseKindWasm _clauseKind;
-//            internal uint _tryEndOffset;
+            internal uint _tryEndOffset;
+            internal uint _handlerOffset;
+            internal uint _typeSymbol;
+            internal uint _filterOffset;
+
+            public bool ContainsCodeOffset(uint idxTryLandingStart)
+            {
+                return idxTryLandingStart == _tryStartOffset;
+//                return ((idxTryLandingStart >= _tryStartOffset) &&
+//                        (idxTryLandingStart < _tryEndOffset));
+            }
         }
 
 
         // TODO: temporary to try things out, when working look to see how to refactor with FindFirstPassHandler
-        private static bool FindFirstPassHandlerWasm(object exception, uint idxStart,
-            ref EHClauseIterator clauseIter, out uint tryRegionIdx, out byte* pHandler)
+        private static bool FindFirstPassHandlerWasm(object exception, uint idxStart, uint idxTryLandingStart /* this start IL idx of the try region for the landing pad, will use in place of PC */, 
+            ref EHClauseIterator clauseIter, out uint tryRegionIdx, out uint pHandler)
         {
-            pHandler = null;
+            pHandler = 0;
             tryRegionIdx = MaxTryRegionIdx;
 
 //            EHEnum ehEnum;
@@ -892,13 +901,12 @@ namespace System.Runtime
 //
 //            byte* pbControlPC = clauseIter.ControlPC;
 //
-//            uint codeOffset = (uint)(pbControlPC - pbMethodStartAddress);
 //
             uint lastTryStart = 0, lastTryEnd = 0;
 //
 //            // Search the clauses for one that contains the current offset.
             RhEHClauseWasm ehClause = new RhEHClauseWasm();
-            // for (uint curIdx = 0; InternalCalls.RhpEHEnumNext(&ehEnum, &ehClause); curIdx++)// TODO: would it be useful for GC also to have an implementation of ICodeManager?
+            // for (uint curIdx = 0; InternalCalls.RhpEHEnumNext(&ehEnum, &ehClause); curIdx++)// TODO: would it be useful for GC also to have an implementation of ICodeManager, then could maybe use InternalCalls.RhpEHEnumNext?
             for (uint curIdx = 0; clauseIter.Next(ref ehClause); curIdx++)
             {
                 // 
@@ -911,56 +919,85 @@ namespace System.Runtime
                     {
                         lastTryStart = ehClause._tryStartOffset;
                         lastTryEnd = ehClause._tryEndOffset;
+#if netcoreapp
+                        EHClauseIterator.PrintLine("skipping as curIdx <= idxStart ");
+#endif
+
                         continue;
                     }
 
                     // Now, we continue skipping while the try region is identical to the one that invoked the 
                     // previous dispatch.
                     if ((ehClause._tryStartOffset == lastTryStart) && (ehClause._tryEndOffset == lastTryEnd))
+                    {
+#if netcoreapp
+                        EHClauseIterator.PrintLine("skipping as ehClause._tryStartOffset == lastTryStart) && (ehClause._tryEndOffset == lastTryEnd ");
+#endif
                         continue;
+                    }
 
                     // We are done skipping. This is required to handle empty finally block markers that are used
                     // to separate runs of different try blocks with same native code offsets.
                     idxStart = MaxTryRegionIdx;
                 }
-//
-//                RhEHClauseKind clauseKind = ehClause._clauseKind;
-//
-//                if (((clauseKind != RhEHClauseKind.RH_EH_CLAUSE_TYPED) &&
-//                     (clauseKind != RhEHClauseKind.RH_EH_CLAUSE_FILTER))
-//                    || !ehClause.ContainsCodeOffset(codeOffset))
-//                {
-//                    continue;
-//                }
-//
-//                // Found a containing clause. Because of the order of the clauses, we know this is the
-//                // most containing.
-//                if (clauseKind == RhEHClauseKind.RH_EH_CLAUSE_TYPED)
-//                {
-//                    if (ShouldTypedClauseCatchThisException(exception, (EEType*)ehClause._pTargetType))
-//                    {
-//                        pHandler = ehClause._handlerAddress;
-//                        tryRegionIdx = curIdx;
-//                        return true;
-//                    }
-//                }
-//                else
-//                {
-//                    byte* pFilterFunclet = ehClause._filterAddress;
-//                    bool shouldInvokeHandler =
-//                        InternalCalls.RhpCallFilterFunclet(exception, pFilterFunclet, clauseIter.RegisterSet);
-//
-//                    if (shouldInvokeHandler)
-//                    {
-//                        pHandler = ehClause._handlerAddress;
-//                        tryRegionIdx = curIdx;
-//                        return true;
-//                    }
-//                }
+
+                EHClauseIterator.RhEHClauseKindWasm clauseKind = ehClause._clauseKind;
+#if netcoreapp
+                EHClauseIterator.PrintString("done skipping idxStart ");
+                EHClauseIterator.PrintLine(idxStart.ToString());
+                EHClauseIterator.PrintString("done skipping codeOffset ");
+                EHClauseIterator.PrintLine(idxTryLandingStart.ToString());
+#endif
+                if (((clauseKind != EHClauseIterator.RhEHClauseKindWasm.RH_EH_CLAUSE_TYPED) &&
+                     (clauseKind != EHClauseIterator.RhEHClauseKindWasm.RH_EH_CLAUSE_FILTER))
+                    || !ehClause.ContainsCodeOffset(idxTryLandingStart))
+                {
+                    continue;
+                }
+
+#if netcoreapp
+                EHClauseIterator.PrintString("found ehclause for try idx (substitute for lack of PC) ");
+#endif
+
+                // Found a containing clause. Because of the order of the clauses, we know this is the
+                // most containing.
+                if (clauseKind == EHClauseIterator.RhEHClauseKindWasm.RH_EH_CLAUSE_TYPED)
+                {
+#if netcoreapp
+                EHClauseIterator.PrintString("comparing ex types ");
+                EHClauseIterator.PrintLine(ehClause._typeSymbol.ToString());
+                EEType* pObjType = exception.EEType;
+                EHClauseIterator.PrintString("with exception eetype  ");
+                EHClauseIterator.PrintLine(((uint)(pObjType)).ToString());
+#endif
+                    if (ShouldTypedClauseCatchThisException(exception, (EEType*)ehClause._typeSymbol))
+                    {
+                        pHandler = ehClause._handlerOffset;
+                        tryRegionIdx = curIdx;
+#if netcoreapp
+                        EHClauseIterator.PrintString("type is a match ");
+#endif
+                        return true;
+                    }
+                }
+                //                else
+                //                {
+                //                    byte* pFilterFunclet = ehClause._filterAddress;
+                //                    bool shouldInvokeHandler =
+                //                        InternalCalls.RhpCallFilterFunclet(exception, pFilterFunclet, clauseIter.RegisterSet);
+                //
+                //                    if (shouldInvokeHandler)
+                //                    {
+                //                        pHandler = ehClause._handlerAddress;
+                //                        tryRegionIdx = curIdx;
+                //                        return true;
+                //                    }
+                //                }
             }
 
             return false;
         }
+
 #if DEBUG && !INPLACE_RUNTIME
         private static EEType* s_pLowLevelObjectType;
         private static void AssertNotRuntimeObject(EEType* pClauseType)
