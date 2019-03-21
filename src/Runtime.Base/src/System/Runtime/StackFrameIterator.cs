@@ -123,7 +123,7 @@ namespace System.Runtime
         internal void InitFromEhInfo(byte* ehInfoStart, byte* ehInfoEnd, int idxStart)
         {
             _currentPtr = ehInfoStart;
-            _currentClause = -1;
+            _currentClause = 0;
             _totalClauses = GetUnsigned();
 #if netcoreapp
             PrintString("read _currentPtr now ");

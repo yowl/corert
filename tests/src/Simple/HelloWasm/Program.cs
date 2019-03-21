@@ -934,9 +934,10 @@ internal static class Program
         }
         catch (Exception)
         {
+            PrintLine("In Catch");
             caught = true;
         }
-        EndTest(!caught);
+        EndTest(caught);
     }
 
     private static void TestThreadStaticsForSingleThread()

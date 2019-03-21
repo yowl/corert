@@ -226,22 +226,33 @@ public:
         m_pManagedException = pManagedException;
     }
 
-private:
+public:
     void* m_pManagedException;
 };
 
 extern "C" void RhpThrowEx(void * pEx)
 {
-    throw ManagedExceptionWrapper(pEx);
+    printf("%u\n", pEx);
+    printf("%u\n", *((void **)pEx));
+    ManagedExceptionWrapper  m = ManagedExceptionWrapper(pEx);
+    printf("%u\n", &m);
+    printf("%u\n", m.m_pManagedException);
+    throw m;
 }
 
 extern "C" void RhpThrowHwEx()
 {
     throw "RhpThrowHwEx";
 }
-extern "C" void RhpCallCatchFunclet()
+
+extern "C" void LlvmCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo); // WASMTODO: do we beed all these
+
+extern "C" void RhpCallCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo)
 {
-    throw "RhpCallCatchFunclet";
+    printf("RhpCallCatchFunclet\n");
+    printf("%u\n", pHandlerIP);
+
+    LlvmCatchFunclet(exceptionObj, pHandlerIP, pvRegDisplay, exInfo);
 }
 extern "C" void RhpCallFilterFunclet()
 {

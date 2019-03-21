@@ -117,6 +117,7 @@ namespace Internal.IL
         static LLVMValueRef DoNothingFunction = default(LLVMValueRef);
         static LLVMValueRef RhpThrowEx = default(LLVMValueRef);
         static LLVMValueRef RhpCallCatchFunclet = default(LLVMValueRef);
+        static LLVMValueRef LlvmCatchFunclet = default(LLVMValueRef);
         static LLVMValueRef NullRefFunction = default(LLVMValueRef);
         public static LLVMValueRef GxxPersonality = default(LLVMValueRef);
         public static LLVMTypeRef GxxPersonalityType = default(LLVMTypeRef);
@@ -134,6 +135,41 @@ namespace Internal.IL
             }
 
             return null;
+        }
+
+        void BuildCatchFunclet()
+        {
+            LlvmCatchFunclet = LLVM.AddFunction(Module, "LlvmCatchFunclet", LLVM.FunctionType(LLVM.VoidType(),
+                new LLVMTypeRef[]
+                {
+                    LLVM.PointerType(LLVM.Int8Type(), 0),
+                    LLVM.PointerType(LLVM.FunctionType(LLVMTypeRef.Int32Type(), new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0)}, false), 0), // pHandlerIP - catch funcletAddress
+                    LLVM.PointerType(LLVM.Int8Type(), 0), // shadow stack
+                    LLVM.PointerType(LLVM.Int8Type(), 0)
+                }, false));
+            var block = LLVM.AppendBasicBlock(LlvmCatchFunclet, "a");
+            LLVMBuilderRef funcletBuilder = LLVM.CreateBuilder();
+            LLVM.PositionBuilderAtEnd(funcletBuilder, block);
+            //            EmitTrapCall(funcletBuilder);
+
+            var exceptionParam = LLVM.GetParam(LlvmCatchFunclet, 0);  
+            var catchFunclet = LLVM.GetParam(LlvmCatchFunclet, 1);
+            var castShadowStack = LLVM.GetParam(LlvmCatchFunclet, 2);  
+            var debugArgs = new StackEntry[] {new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", catchFunclet) };
+            var mainBuilder = _builder;  // if not doing the CallRuntime and remove this
+            var currentFunclet = _currentFunclet;
+            _currentFunclet = LlvmCatchFunclet;
+            _builder = funcletBuilder;
+            CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", debugArgs, GetWellKnownType(WellKnownType.Int32), true);
+
+            List<LLVMValueRef> llvmArgs = new List<LLVMValueRef>();
+            llvmArgs.Add(castShadowStack);
+
+            LLVM.BuildCall(_builder, catchFunclet, llvmArgs.ToArray(), string.Empty);
+            _builder = mainBuilder;
+            _currentFunclet = currentFunclet;
+            LLVM.BuildRetVoid(funcletBuilder);
+            LLVM.DisposeBuilder(funcletBuilder);
         }
     }
 }

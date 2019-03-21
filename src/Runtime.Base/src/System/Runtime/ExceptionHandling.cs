@@ -886,11 +886,30 @@ namespace System.Runtime
             }
         }
 
+        private static void DebugPointer(void* exception)
+        {
+#if netcoreapp
+            EHClauseIterator.PrintString("void * value ");
+            EHClauseIterator.PrintLine(((uint)(exception)).ToString());
+            if (((uint)(exception) > 0) && ((uint)exception & 3) == 0)
+            {
+                EHClauseIterator.PrintString("void ** value ");
+                EHClauseIterator.PrintLine(((uint)(*(void **)exception)).ToString());
+            }
+#endif
+        }
 
         // TODO: temporary to try things out, when working look to see how to refactor with FindFirstPassHandler
         private static bool FindFirstPassHandlerWasm(object exception, uint idxStart, uint idxTryLandingStart /* this start IL idx of the try region for the landing pad, will use in place of PC */, 
             ref EHClauseIterator clauseIter, out uint tryRegionIdx, out uint pHandler)
         {
+#if netcoreapp
+            EEType* pObjType2 = exception.EEType;
+            EHClauseIterator.PrintString("with exception eetype at address ");
+            EHClauseIterator.PrintLine(((uint)(&pObjType2)).ToString());
+            EHClauseIterator.PrintString("with exception eetype  ");
+            EHClauseIterator.PrintLine(((uint)(pObjType2)).ToString());
+#endif
             pHandler = 0;
             tryRegionIdx = MaxTryRegionIdx;
 
@@ -966,7 +985,12 @@ namespace System.Runtime
 #if netcoreapp
                 EHClauseIterator.PrintString("comparing ex types ");
                 EHClauseIterator.PrintLine(ehClause._typeSymbol.ToString());
-                EEType* pObjType = exception.EEType;
+                var e = new Exception();
+                EEType* pObjTypeE = e.EEType;
+                EHClauseIterator.PrintString("new Exception() eetype  ");
+                EHClauseIterator.PrintLine(((uint)(pObjTypeE)).ToString());
+
+                    EEType* pObjType = exception.EEType;
                 EHClauseIterator.PrintString("with exception eetype  ");
                 EHClauseIterator.PrintLine(((uint)(pObjType)).ToString());
 #endif
@@ -975,7 +999,7 @@ namespace System.Runtime
                         pHandler = ehClause._handlerOffset;
                         tryRegionIdx = curIdx;
 #if netcoreapp
-                        EHClauseIterator.PrintString("type is a match ");
+                        EHClauseIterator.PrintLine("type is a match ");
 #endif
                         return true;
                     }
