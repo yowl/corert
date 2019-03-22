@@ -16,6 +16,7 @@ using ObjectData = ILCompiler.DependencyAnalysis.ObjectNode.ObjectData;
 using LLVMSharp;
 using ILCompiler.CodeGen;
 using ILCompiler.Compiler.DependencyAnalysis;
+using Internal.IL;
 
 namespace ILCompiler.DependencyAnalysis
 {
@@ -836,7 +837,10 @@ namespace ILCompiler.DependencyAnalysis
                                     symbolToWrite = factory.ConstructedTypeSymbol(eeTypeNode.Type);
                                 }
                             }
+                            if (reloc.Target is WebAssemblyBlockRefNode)
+                            {
 
+                            }
                             int size = objectWriter.EmitSymbolReference(symbolToWrite, (int)delta, reloc.RelocType);
 
                             /*
