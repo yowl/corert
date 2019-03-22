@@ -869,6 +869,7 @@ namespace System.Runtime
             return false;
         }
 
+        // WASMTODO: remove unused fields
         internal struct RhEHClauseWasm
         {
             internal uint _tryStartOffset;

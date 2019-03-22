@@ -139,7 +139,7 @@ namespace Internal.IL
 
         void BuildCatchFunclet()
         {
-            LlvmCatchFunclet = LLVM.AddFunction(Module, "LlvmCatchFunclet", LLVM.FunctionType(LLVM.VoidType(),
+            LlvmCatchFunclet = LLVM.AddFunction(Module, "LlvmCatchFunclet", LLVM.FunctionType(LLVM.Int32Type(),
                 new LLVMTypeRef[]
                 {
                     LLVM.PointerType(LLVM.Int8Type(), 0),
@@ -165,10 +165,10 @@ namespace Internal.IL
             List<LLVMValueRef> llvmArgs = new List<LLVMValueRef>();
             llvmArgs.Add(castShadowStack);
 
-            LLVM.BuildCall(_builder, catchFunclet, llvmArgs.ToArray(), string.Empty);
+            LLVMValueRef leaveToILOffset = LLVM.BuildCall(_builder, catchFunclet, llvmArgs.ToArray(), string.Empty);
             _builder = mainBuilder;
             _currentFunclet = currentFunclet;
-            LLVM.BuildRetVoid(funcletBuilder);
+            LLVM.BuildRet(funcletBuilder, leaveToILOffset);
             LLVM.DisposeBuilder(funcletBuilder);
         }
     }

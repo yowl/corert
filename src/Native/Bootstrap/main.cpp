@@ -245,14 +245,15 @@ extern "C" void RhpThrowHwEx()
     throw "RhpThrowHwEx";
 }
 
-extern "C" void LlvmCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo); // WASMTODO: do we beed all these
+// returns the Leave targer
+extern "C" uint32_t LlvmCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo); // WASMTODO: do we beed all these
 
-extern "C" void RhpCallCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo)
+extern "C" uint32_t RhpCallCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo)
 {
     printf("RhpCallCatchFunclet\n");
     printf("%u\n", pHandlerIP);
 
-    LlvmCatchFunclet(exceptionObj, pHandlerIP, pvRegDisplay, exInfo);
+    return LlvmCatchFunclet(exceptionObj, pHandlerIP, pvRegDisplay, exInfo);
 }
 extern "C" void RhpCallFilterFunclet()
 {

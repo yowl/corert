@@ -16,6 +16,7 @@ using ILCompiler.DependencyAnalysis;
 using ILCompiler.DependencyAnalysisFramework;
 using ILCompiler.WebAssembly;
 using Internal.IL.Stubs;
+using Internal.Text;
 using Internal.TypeSystem.Ecma;
 
 namespace Internal.IL
@@ -2296,7 +2297,7 @@ namespace Internal.IL
             LLVMValueRef pad = LLVM.BuildLandingPad(landingPadBuilder, GxxPersonalityType, GxxPersonality, 1, "");
             LLVM.AddClause(pad, LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int32Type(), 0)));
             // TODO: set pad as cleanup? https://stackoverflow.com/questions/13166552/writing-a-simple-cleanup-landing-pad-on-llvm
-            LLVM.SetCleanup(pad, true); // TODO: is this needed
+            LLVM.SetCleanup(pad, true); // WASMTODO: is this needed
             if (_method.Name == "TestTryCatchThrowException")
             {
                 if (RhpCallCatchFunclet.Pointer.Equals(IntPtr.Zero))
@@ -2326,13 +2327,13 @@ namespace Internal.IL
                 var managedPtr = LLVM.BuildLoad(landingPadBuilder, plus4, "managedEx");
                 //                var managedPtr2 = LLVM.BuildLoad(landingPadBuilder, managedPtr, "managedPtr2");
 
-                var arse2Args = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", plus4)
+                var ptr2Args = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", plus4)
                                                 };
-                CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", arse2Args, null, fromLandingPad: true);
+                CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", ptr2Args, null, fromLandingPad: true);
 
-                var arse3Args = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", managedPtr)
+                var ptr3Args = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", managedPtr)
                                                  };
-                CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", arse3Args, null, fromLandingPad: true);
+                CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", ptr3Args, null, fromLandingPad: true);
 
 
                 // TODO: should this really be a newobj call?
@@ -2379,7 +2380,7 @@ namespace Internal.IL
                                           shadowStack,
                                           LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0))
                                       };
-                LLVM.BuildCall(landingPadBuilder, RhpCallCatchFunclet, callCatchArgs, "");
+                var leaveReturnValue = LLVM.BuildCall(landingPadBuilder, RhpCallCatchFunclet, callCatchArgs, "");
                 //                LLVM.BuildBr(landingPadBuilder, GetBasicBlockForExceptionRegionHandler(tryRegion));
 
                 // call second pass (Fault/finally blocks) with args :         private static void InvokeSecondPass(ref ExInfo exInfo, uint idxStart)
@@ -2389,7 +2390,28 @@ namespace Internal.IL
                 //                                                          new ExpressionEntry(StackValueKind.ByRef, "pHandler", pHandler)
                 //                                                          CallRuntime(_compilation.TypeSystemContext, "EH", "InvokeSecondPass", secondPassArgs, null, true);
                 //
-                LLVM.BuildBr(landingPadBuilder, GetLLVMBasicBlockForBlock(_basicBlocks[35])); // WASMTODO: remove hardcoded and get from return value of RhpCallCatchFunclet.
+//                var blockRef = LLVM.BlockAddress(_currentFunclet, GetLLVMBasicBlockForBlock(_basicBlocks[35]));
+                //                  LLVM.BuildBr(landingPadBuilder, blockRef, 1); // WASMTODO: remove hardcoded and get from return value of RhpCallCatchFunclet.
+                bool passedCurrent = false;
+
+                var @switch = LLVM.BuildSwitch(landingPadBuilder, CastIfNecessary(landingPadBuilder, leaveReturnValue, LLVMTypeRef.Int32Type()), GetOrCreateUnreachableBlock(), 1 /* fortunately this doesn't seem to make much difference */);
+                for(var i = 0; i < _basicBlocks.Length; i++)
+                {
+                    var basicBlock = _basicBlocks[i];
+                    if (basicBlock == null) continue;
+                    if (!passedCurrent)
+                    {
+                        if (basicBlock == _currentBasicBlock) // cant leave from a catch and go backwards presumably
+                        {
+                            passedCurrent = true;
+                        }
+                        continue;
+                    }
+                    if (!basicBlock.HandlerStart)
+                    {
+                        LLVM.AddCase(@switch, BuildConstInt32(i), GetLLVMBasicBlockForBlock(basicBlock));
+                    }
+                }
                 _builder = methodBuilder;
             }
             else EmitTrapCall(landingPadBuilder);
@@ -4125,7 +4147,7 @@ namespace Internal.IL
 //                ExceptionRegion clause = _exceptionRegions[i];
 //                ExceptionRegion previousClause = _exceptionRegions[i - 1];
 
-                // TODO : do we need these specail markers and if so how do we detect and set CORINFO_EH_CLAUSE_SAMETRY?
+                // WASMTODO : do we need these special markers and if so how do we detect and set CORINFO_EH_CLAUSE_SAMETRY?
 //                if ((previousClause.ILRegion.TryOffset == clause.ILRegion.TryOffset) &&
 //                    (previousClause.ILRegion.TryLength == clause.ILRegion.TryLength) &&
 //                    ((clause.Flags & CORINFO_EH_CLAUSE_FLAGS.CORINFO_EH_CLAUSE_SAMETRY) == 0))
@@ -4151,7 +4173,7 @@ namespace Internal.IL
                     // If the previous clause has same try offset and length as the current clause,
                     // but belongs to a different try block (CORINFO_EH_CLAUSE_SAMETRY is not set),
                     // emit a special marker to allow runtime distinguish this case.
-                    //TODO: see above - do we need these
+                    //WASMTODO: see above - do we need these
 //                    if ((previousClause.TryOffset == clause.TryOffset) &&
 //                        (previousClause.TryLength == clause.TryLength) &&
 //                        ((clause.Flags & CORINFO_EH_CLAUSE_FLAGS.CORINFO_EH_CLAUSE_SAMETRY) == 0))
