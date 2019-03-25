@@ -906,6 +906,8 @@ internal static class Program
         TestTryCatchNoException();
 
         TestTryCatchThrowException(new Exception());
+
+        TestTryCatchException();
     }
 
     private static void TestTryCatchNoException()
@@ -938,6 +940,59 @@ internal static class Program
             caught = true;
         }
         EndTest(caught);
+    }
+
+    static bool finallyCalled;
+    private static void TestTryFinallyThrowException(Exception e)
+    {
+        finallyCalled = false;
+        StartTest("Try/Finally calls finally when exception thrown test");
+        CatchException();
+        EndTest(finallyCalled);
+    }
+
+    private static void CatchException()
+    {
+        try
+        {
+            TryFinally();
+        }
+        catch (Exception)
+        {
+
+        } 
+    }
+
+    private static void TryFinally()
+    {
+        try
+        {
+            throw new Exception();
+        }
+        finally
+        {
+            finallyCalled = true;
+        }
+    }
+
+    private static void TestTryCatchException()
+    {
+        bool caught = false;
+        StartTest("Catch called when exception thrown from call");
+        try
+        {
+            ThrowException(new Exception());
+        }
+        catch (Exception)
+        {
+            caught = true;
+        }
+        EndTest(caught);
+    }
+
+    private static void ThrowException(Exception e)
+    {
+        throw e;
     }
 
     private static void TestThreadStaticsForSingleThread()

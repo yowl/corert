@@ -877,6 +877,7 @@ namespace System.Runtime
             internal uint _tryEndOffset;
             internal uint _handlerOffset;
             internal uint _typeSymbol;
+            internal uint _handlerFunctionPtr; // an alternative to this would be to create a switch (on _handlerOffset) in LLVM for all possible handlers 
             internal uint _filterOffset;
 
             public bool ContainsCodeOffset(uint idxTryLandingStart)
@@ -997,7 +998,7 @@ namespace System.Runtime
 #endif
                     if (ShouldTypedClauseCatchThisException(exception, (EEType*)ehClause._typeSymbol))
                     {
-                        pHandler = ehClause._handlerOffset;
+                        pHandler = ehClause._handlerFunctionPtr;
                         tryRegionIdx = curIdx;
 #if netcoreapp
                         EHClauseIterator.PrintLine("type is a match ");

@@ -66,6 +66,7 @@ namespace Internal.IL
         private LLVMMetadataRef _debugFunction;
         private TypeDesc _constrainedType = null;
         private List<LLVMValueRef> _exceptionFunclets;
+        private List<int> _leaveTargets;
         private readonly Dictionary<Tuple<int, IntPtr>, LLVMBasicBlockRef> _landingPads;
         private readonly Dictionary<IntPtr, LLVMBasicBlockRef> _funcletUnreachableBlocks = new Dictionary<IntPtr, LLVMBasicBlockRef>();
         private readonly EHInfoNode _ehInfoNode;
@@ -160,6 +161,11 @@ namespace Internal.IL
 
         public void Import()
         {
+
+            if (_method.Name.Contains("TestTryCatchThrowException"))
+            {
+
+            }
             FindBasicBlocks();
 
             GenerateProlog();
@@ -434,7 +440,7 @@ namespace Internal.IL
                 LLVMTypeRef universalFuncletSignature = LLVM.FunctionType(returnType, new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0) }, false);
                 funclet = LLVM.AddFunction(Module, funcletName, universalFuncletSignature);
                 _exceptionFunclets.Add(funclet);
-                if(_method.Name.Contains("TestTryCatchThrowException"))
+                if (_method.Name.Contains("EnsureClassConstructorRun"))
                 { }
             }
 
@@ -2298,123 +2304,144 @@ namespace Internal.IL
             LLVM.AddClause(pad, LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int32Type(), 0)));
             // TODO: set pad as cleanup? https://stackoverflow.com/questions/13166552/writing-a-simple-cleanup-landing-pad-on-llvm
             LLVM.SetCleanup(pad, true); // WASMTODO: is this needed
-            if (_method.Name == "TestTryCatchThrowException")
+            if (RhpCallCatchFunclet.Pointer.Equals(IntPtr.Zero))
             {
-                if (RhpCallCatchFunclet.Pointer.Equals(IntPtr.Zero))
-                {
-                    RhpCallCatchFunclet = LLVM.GetNamedFunction(Module, "RhpCallCatchFunclet");
-                    BuildCatchFunclet();
-                }
-                /*
-                    ;; void* FASTCALL RhpCallCatchFunclet(RtuObjectRef exceptionObj, void* pHandlerIP, REGDISPLAY* pRegDisplay,
-                    ;;                                    ExInfo* pExInfo)
-                    ;;
-                    ;; INPUT:  RCX:  exception object
-                    ;;         RDX:  handler funclet address
-                    ;;         R8:   REGDISPLAY*
-                    ;;         R9:   ExInfo
-                */
-                // bit hacky this, replace the _builder with the landing pad builder to avoid adding a builder param everywhere
-                LLVMBuilderRef methodBuilder = _builder;
-                _builder = landingPadBuilder;
-
-                var exPtr = LLVM.BuildExtractValue(landingPadBuilder, pad, 0, "ex");
-                // unwrap managed
-                var plus4 = LLVM.BuildGEP(landingPadBuilder, exPtr, new LLVMValueRef[] {BuildConstInt32(1)}, "offset");
-                //                var castExPtr = LLVM.BuildPointerCast(landingPadBuilder, exPtr, LLVMTypeRef.PointerType(LLVMTypeRef.PointerType(LLVM.Int8Type(), 0), 0), "castExPtr");
-                //                var structGep = LLVM.BuildStructGEP(landingPadBuilder, exPtr, 0, "structGep");
-
-                var managedPtr = LLVM.BuildLoad(landingPadBuilder, plus4, "managedEx");
-                //                var managedPtr2 = LLVM.BuildLoad(landingPadBuilder, managedPtr, "managedPtr2");
-
-                var ptr2Args = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", plus4)
-                                                };
-                CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", ptr2Args, null, fromLandingPad: true);
-
-                var ptr3Args = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", managedPtr)
-                                                 };
-                CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", ptr3Args, null, fromLandingPad: true);
-
-
-                // TODO: should this really be a newobj call?
-                LLVMTypeRef ehInfoIteratorType = LLVM.StructType(new LLVMTypeRef[] { LLVMTypeRef.Int32Type(), LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0), LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0) }, false);
-                var ehInfoIterator = LLVM.BuildAlloca(landingPadBuilder, ehInfoIteratorType, "ehInfoIterPtr");
-                
-                var iteratorInitArgs = new StackEntry[] {
-                                                            new ExpressionEntry(StackValueKind.ObjRef, "ehInfoIter", ehInfoIterator), 
-                                                            new ExpressionEntry(StackValueKind.ByRef, "ehInfoStart", LoadAddressOfSymbolNode(_ehInfoNode)),
-                                                            new ExpressionEntry(StackValueKind.ByRef, "ehInfoEnd", LoadAddressOfSymbolNode(_ehInfoNode.EndSymbol)),
-                                                     new ExpressionEntry(StackValueKind.Int32, "idxStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0, false)) }; /* if this doesnt work, try MaxTryRegionIdx */
-                var res = CallRuntime(_compilation.TypeSystemContext, "EHClauseIterator", "InitFromEhInfo", iteratorInitArgs, null, fromLandingPad: true);
-
-                // params are:
-                // object exception, uint idxStart,
-                // ref StackFrameIterator frameIter, out uint tryRegionIdx, out byte* pHandler
-                var tryRegionIdx = LLVM.BuildAlloca(landingPadBuilder, LLVM.Int32Type(), "tryRegionIdx");
-                var handlerOffset = LLVM.BuildAlloca(landingPadBuilder, LLVM.Int32Type(), "_handlerOffset");
-
-                var arguments = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", managedPtr),
-                                                     new ExpressionEntry(StackValueKind.Int32, "idxStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0xFFFFFFFFu, false)), 
-                                                     new ExpressionEntry(StackValueKind.Int32, "idxTryLandingStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), (ulong)tryRegion.ILRegion.TryOffset, false)),
-                                                     new ExpressionEntry(StackValueKind.ByRef, "refFrameIter", ehInfoIterator), 
-                                                     new ExpressionEntry(StackValueKind.ByRef, "tryRegionIdx", tryRegionIdx),
-                                                     new ExpressionEntry(StackValueKind.ByRef, "pHandler", handlerOffset) 
-                                                     };
-                var handler = CallRuntime(_compilation.TypeSystemContext, "EH", "FindFirstPassHandlerWasm", arguments, null, true);
-
-
-                var pHandlerArgs = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "handlerOffset", handlerOffset)
-                                                 };
-                CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", pHandlerArgs, null, fromLandingPad: true);
-
-                // TODO: when returns false - no handler found for this try
-                // If it didn't find a catch block, we can rethrow (resume in LLVM) the C++ exception to continue the stack walk.
-
-                //                internal extern static unsafe IntPtr RhpCallCatchFunclet(
-                //                    object exceptionObj, byte* pHandlerIP, void* pvRegDisplay, ref EH.ExInfo exInfo);
-                handlerOffset = GetOrCreateFunclet(ILExceptionRegionKind.Catch, 17);
-                LLVMValueRef[] callCatchArgs = new LLVMValueRef[]
-                                      {
-                                          CastIfNecessary(landingPadBuilder, managedPtr, LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0)),
-                                          CastIfNecessary(landingPadBuilder, handlerOffset, LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0)), /* catch funclet address */
-                                          shadowStack,
-                                          LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0))
-                                      };
-                var leaveReturnValue = LLVM.BuildCall(landingPadBuilder, RhpCallCatchFunclet, callCatchArgs, "");
-                //                LLVM.BuildBr(landingPadBuilder, GetBasicBlockForExceptionRegionHandler(tryRegion));
-
-                // call second pass (Fault/finally blocks) with args :         private static void InvokeSecondPass(ref ExInfo exInfo, uint idxStart)
-                //                var
-                //                var secondPassArgs = new StackEntry[] { new ExpressionEntry(StackValueKind.ByRef, "exInfo", ehInfoIterator),
-                //                                                          new ExpressionEntry(StackValueKind.ByRef, "tryRegionIdx", tryRegionIdx),
-                //                                                          new ExpressionEntry(StackValueKind.ByRef, "pHandler", pHandler)
-                //                                                          CallRuntime(_compilation.TypeSystemContext, "EH", "InvokeSecondPass", secondPassArgs, null, true);
-                //
-//                var blockRef = LLVM.BlockAddress(_currentFunclet, GetLLVMBasicBlockForBlock(_basicBlocks[35]));
-                //                  LLVM.BuildBr(landingPadBuilder, blockRef, 1); // WASMTODO: remove hardcoded and get from return value of RhpCallCatchFunclet.
-                bool passedCurrent = false;
-
-                var @switch = LLVM.BuildSwitch(landingPadBuilder, CastIfNecessary(landingPadBuilder, leaveReturnValue, LLVMTypeRef.Int32Type()), GetOrCreateUnreachableBlock(), 1 /* fortunately this doesn't seem to make much difference */);
-                for(var i = 0; i < _basicBlocks.Length; i++)
-                {
-                    var basicBlock = _basicBlocks[i];
-                    if (basicBlock == null) continue;
-                    if (!passedCurrent)
-                    {
-                        if (basicBlock == _currentBasicBlock) // cant leave from a catch and go backwards presumably
-                        {
-                            passedCurrent = true;
-                        }
-                        continue;
-                    }
-                    if (!basicBlock.HandlerStart)
-                    {
-                        LLVM.AddCase(@switch, BuildConstInt32(i), GetLLVMBasicBlockForBlock(basicBlock));
-                    }
-                }
-                _builder = methodBuilder;
+                RhpCallCatchFunclet = GetOrCreateLLVMFunction("RhpCallCatchFunclet", LLVM.FunctionType(LLVMTypeRef.Int32Type(), new []
+                                                                                                                                {
+                                                                                                                                    LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0),
+                                                                                                                                    LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0),
+                                                                                                                                    LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0),
+                                                                                                                                    LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0),
+                                                                                                                                }, false));
+                BuildCatchFunclet();
             }
-            else EmitTrapCall(landingPadBuilder);
+            /*
+                ;; void* FASTCALL RhpCallCatchFunclet(RtuObjectRef exceptionObj, void* pHandlerIP, REGDISPLAY* pRegDisplay,
+                ;;                                    ExInfo* pExInfo)
+                ;;
+                ;; INPUT:  RCX:  exception object
+                ;;         RDX:  handler funclet address
+                ;;         R8:   REGDISPLAY*
+                ;;         R9:   ExInfo
+            */
+            // bit hacky this, replace the _builder with the landing pad builder to avoid adding a builder param everywhere
+            LLVMBuilderRef methodBuilder = _builder;
+            _builder = landingPadBuilder;
+
+            var exPtr = LLVM.BuildExtractValue(landingPadBuilder, pad, 0, "ex");
+            // unwrap managed
+            var plus4 = LLVM.BuildGEP(landingPadBuilder, exPtr, new LLVMValueRef[] {BuildConstInt32(1)}, "offset");
+            //                var castExPtr = LLVM.BuildPointerCast(landingPadBuilder, exPtr, LLVMTypeRef.PointerType(LLVMTypeRef.PointerType(LLVM.Int8Type(), 0), 0), "castExPtr");
+            //                var structGep = LLVM.BuildStructGEP(landingPadBuilder, exPtr, 0, "structGep");
+
+            var managedPtr = LLVM.BuildLoad(landingPadBuilder, plus4, "managedEx");
+            //                var managedPtr2 = LLVM.BuildLoad(landingPadBuilder, managedPtr, "managedPtr2");
+
+            var ptr2Args = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", plus4)
+                                            };
+            CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", ptr2Args, null, fromLandingPad: true);
+
+            var ptr3Args = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", managedPtr)
+                                             };
+            CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", ptr3Args, null, fromLandingPad: true);
+
+
+            // TODO: should this really be a newobj call?
+            LLVMTypeRef ehInfoIteratorType = LLVM.StructType(new LLVMTypeRef[] { LLVMTypeRef.Int32Type(), LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0), LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0) }, false);
+            var ehInfoIterator = LLVM.BuildAlloca(landingPadBuilder, ehInfoIteratorType, "ehInfoIterPtr");
+            
+            var iteratorInitArgs = new StackEntry[] {
+                                                        new ExpressionEntry(StackValueKind.ObjRef, "ehInfoIter", ehInfoIterator), 
+                                                        new ExpressionEntry(StackValueKind.ByRef, "ehInfoStart", LoadAddressOfSymbolNode(_ehInfoNode)),
+                                                        new ExpressionEntry(StackValueKind.ByRef, "ehInfoEnd", LoadAddressOfSymbolNode(_ehInfoNode.EndSymbol)),
+                                                 new ExpressionEntry(StackValueKind.Int32, "idxStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0, false)) }; /* if this doesnt work, try MaxTryRegionIdx */
+            var res = CallRuntime(_compilation.TypeSystemContext, "EHClauseIterator", "InitFromEhInfo", iteratorInitArgs, null, fromLandingPad: true);
+
+            // params are:
+            // object exception, uint idxStart,
+            // ref StackFrameIterator frameIter, out uint tryRegionIdx, out byte* pHandler
+            var tryRegionIdx = LLVM.BuildAlloca(landingPadBuilder, LLVM.Int32Type(), "tryRegionIdx");
+            var handlerOffset = LLVM.BuildAlloca(landingPadBuilder, LLVM.Int32Type(), "_handlerOffset");
+
+            var arguments = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", managedPtr),
+                                                 new ExpressionEntry(StackValueKind.Int32, "idxStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0xFFFFFFFFu, false)), 
+                                                 new ExpressionEntry(StackValueKind.Int32, "idxTryLandingStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), (ulong)tryRegion.ILRegion.TryOffset, false)),
+                                                 new ExpressionEntry(StackValueKind.ByRef, "refFrameIter", ehInfoIterator), 
+                                                 new ExpressionEntry(StackValueKind.ByRef, "tryRegionIdx", tryRegionIdx),
+                                                 new ExpressionEntry(StackValueKind.ByRef, "pHandler", handlerOffset) 
+                                                 };
+            var handler = CallRuntime(_compilation.TypeSystemContext, "EH", "FindFirstPassHandlerWasm", arguments, null, true);
+
+            if (_method.Name.Contains("TestTryCatchThrowException"))
+                handlerOffset = GetOrCreateFunclet(ILExceptionRegionKind.Catch, 17);
+
+            var pHandlerArgs = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "handlerOffset", handlerOffset)
+                                             };
+            CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", pHandlerArgs, null, fromLandingPad: true);
+
+            // TODO: when returns false - no handler found for this try
+            // If it didn't find a catch block, we can rethrow (resume in LLVM) the C++ exception to continue the stack walk.
+
+            //                internal extern static unsafe IntPtr RhpCallCatchFunclet(
+            //                    object exceptionObj, byte* pHandlerIP, void* pvRegDisplay, ref EH.ExInfo exInfo);
+
+            LLVMValueRef[] callCatchArgs = new LLVMValueRef[]
+                                  {
+                                      CastIfNecessary(landingPadBuilder, managedPtr, LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0)),
+                                      CastIfNecessary(landingPadBuilder, handlerOffset, LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0)), /* catch funclet address */
+                                      shadowStack,
+                                      LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0))
+                                  };
+            var leaveReturnValue = LLVM.BuildCall(landingPadBuilder, RhpCallCatchFunclet, callCatchArgs, "");
+            //                LLVM.BuildBr(landingPadBuilder, GetBasicBlockForExceptionRegionHandler(tryRegion));
+
+            // call second pass (Fault/finally blocks) with args :         private static void InvokeSecondPass(ref ExInfo exInfo, uint idxStart)
+            //                var
+            //                var secondPassArgs = new StackEntry[] { new ExpressionEntry(StackValueKind.ByRef, "exInfo", ehInfoIterator),
+            //                                                          new ExpressionEntry(StackValueKind.ByRef, "tryRegionIdx", tryRegionIdx),
+            //                                                          new ExpressionEntry(StackValueKind.ByRef, "pHandler", pHandler)
+            //                                                          CallRuntime(_compilation.TypeSystemContext, "EH", "InvokeSecondPass", secondPassArgs, null, true);
+            //
+//                var blockRef = LLVM.BlockAddress(_currentFunclet, GetLLVMBasicBlockForBlock(_basicBlocks[35]));
+            //                  LLVM.BuildBr(landingPadBuilder, blockRef, 1); // WASMTODO: remove hardcoded and get from return value of RhpCallCatchFunclet.
+//            bool passedCurrent = false;
+
+            if (_method.Name.Contains("TestTryCatchThrowException"))
+            {
+
+            }
+            var @switch = LLVM.BuildSwitch(landingPadBuilder, CastIfNecessary(landingPadBuilder, leaveReturnValue, LLVMTypeRef.Int32Type()), GetOrCreateUnreachableBlock(), 1 /* fortunately this doesn't seem to make much difference */);
+//            var passedCurrent = false;
+//            for (var i = 0; i < _basicBlocks.Length; i++)
+//            {
+//                var basicBlock = _basicBlocks[i];
+//                if (basicBlock == null) continue;
+//                if (!passedCurrent)
+//                {
+//                    if (basicBlock == _currentBasicBlock) // cant leave from a catch and go backwards presumably
+//                    {
+//                        passedCurrent = true;
+//                    }
+//                    continue;
+//                }
+//                if (!basicBlock.HandlerStart && !basicBlock.FilterStart)
+//                {
+//                    LLVM.AddCase(@switch, BuildConstInt32(i), GetLLVMBasicBlockForBlock(basicBlock));
+//                }
+//            }
+            if (_leaveTargets != null)
+            {
+                foreach (var leaveTarget in _leaveTargets)
+                {
+                    var targetBlock = _basicBlocks[leaveTarget];
+                    var funcletForBlock = GetFuncletForBlock(targetBlock);
+                    if (funcletForBlock.Pointer.Equals(_currentFunclet.Pointer))
+                    {
+                        LLVM.AddCase(@switch, BuildConstInt32(targetBlock.StartOffset), GetLLVMBasicBlockForBlock(targetBlock));
+                    }
+                }
+            }
+            _builder = methodBuilder;
             LLVM.DisposeBuilder(landingPadBuilder);
 
             return landingPad;
@@ -3458,7 +3485,7 @@ namespace Internal.IL
             }
             else
             {
-                if (_method.Name == "TestTryCatchThrowException")
+                if (_method.Name.Contains("EnsureClassConstructorRun"))
                 {
 
                 }
@@ -4226,6 +4253,8 @@ namespace Internal.IL
                                 rel = RelocType.IMAGE_REL_BASED_REL32;
 
                             builder.EmitReloc(typeSymbol, rel);
+                            string funcletName = _mangledName + "$" + ILExceptionRegionKind.Catch.ToString() + exceptionRegion.ILRegion.HandlerOffset.ToString("X"); // WASMTODO: refactor to method
+                            builder.EmitReloc(new WebAssemblyBlockRefNode(GetOrCreateFunclet(ILExceptionRegionKind.Catch, exceptionRegion.ILRegion.HandlerOffset), funcletName), rel);
                         }
                         break;
                     case RhEHClauseKind.RH_EH_CLAUSE_FAULT:
@@ -4246,6 +4275,15 @@ namespace Internal.IL
             RH_EH_CLAUSE_TYPED = 0,
             RH_EH_CLAUSE_FAULT = 1,
             RH_EH_CLAUSE_FILTER = 2
+        }
+
+        partial void OnLeaveTargetCreated(int target)
+        {
+            if (_leaveTargets == null)
+            {
+                _leaveTargets = new List<int>();
+            }
+            if(!_leaveTargets.Contains(target)) _leaveTargets.Add(target);
         }
     }
 }

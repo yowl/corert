@@ -10,6 +10,7 @@ using ILCompiler.DependencyAnalysisFramework;
 
 using Internal.Text;
 using Internal.TypeSystem;
+using LLVMSharp;
 
 namespace ILCompiler.DependencyAnalysis
 {
@@ -111,5 +112,55 @@ namespace ILCompiler.DependencyAnalysis
         {
             return comparer.Compare(_method, ((WebAssemblyUnboxingThunkNode)other)._method);
         }
+    }
+
+    internal class WebAssemblyBlockRefNode : DependencyNodeCore<NodeFactory>, ISymbolNode
+    {
+        readonly LLVMValueRef catchFuncletRef;
+        readonly string mangledName;
+
+        public WebAssemblyBlockRefNode(LLVMValueRef catchFuncletRef, string mangledName)
+        {
+            this.catchFuncletRef = catchFuncletRef;
+            this.mangledName = mangledName;
+        }
+
+        public override bool HasConditionalStaticDependencies => false;
+        public override bool HasDynamicDependencies => false;
+        public override bool InterestingForDynamicDependencyAnalysis => false;
+        public override bool StaticDependenciesAreComputed => true;
+        public override IEnumerable<DependencyListEntry> GetStaticDependencies(NodeFactory context)
+        {
+            return Enumerable.Empty<DependencyListEntry>();
+        }
+
+        public override IEnumerable<CombinedDependencyListEntry> GetConditionalStaticDependencies(NodeFactory context)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override IEnumerable<CombinedDependencyListEntry> SearchDynamicDependencies(List<DependencyNodeCore<NodeFactory>> markedNodes, int firstNode, NodeFactory context)
+        {
+            throw new NotImplementedException();
+        }
+
+        protected override string GetName(NodeFactory context)
+        {
+            throw new NotImplementedException();
+        }
+
+//        public override int ClassCode => 1019664187;
+
+        
+
+//        public override ObjectNodeSection Section { get; }
+//        public override bool IsShareable { get; }
+        public void AppendMangledName(NameMangler nameMangler, Utf8StringBuilder sb)
+        {
+            sb.Append(mangledName);
+        }
+
+        public int Offset { get; }
+        public bool RepresentsIndirectionCell { get; }
     }
 }

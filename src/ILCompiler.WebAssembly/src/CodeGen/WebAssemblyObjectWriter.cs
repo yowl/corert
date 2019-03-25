@@ -27,7 +27,7 @@ namespace ILCompiler.DependencyAnalysis
     {
         public static string GetBaseSymbolName(ISymbolNode symbol, NameMangler nameMangler, bool objectWriterUse = false)
         {
-            if (symbol is WebAssemblyMethodCodeNode)
+            if (symbol is WebAssemblyMethodCodeNode || symbol is WebAssemblyBlockRefNode)
             {
                 return symbol.GetMangledName(nameMangler);
             }
@@ -96,7 +96,7 @@ namespace ILCompiler.DependencyAnalysis
 
         private static int GetNumericOffsetFromBaseSymbolValue(ISymbolNode symbol)
         {
-            if (symbol is WebAssemblyMethodCodeNode)
+            if (symbol is WebAssemblyMethodCodeNode || symbol is WebAssemblyBlockRefNode)
             {
                 return 0;
             }
@@ -574,7 +574,7 @@ namespace ILCompiler.DependencyAnalysis
                 return pointerSize;
             }
             int offsetFromBase = GetNumericOffsetFromBaseSymbolValue(target);
-            return EmitSymbolRef(realSymbolName, offsetFromBase, target is WebAssemblyMethodCodeNode, relocType, delta);
+            return EmitSymbolRef(realSymbolName, offsetFromBase, target is WebAssemblyMethodCodeNode || target is WebAssemblyBlockRefNode, relocType, delta);
         }
 
         public void EmitBlobWithRelocs(byte[] blob, Relocation[] relocs)
@@ -836,6 +836,10 @@ namespace ILCompiler.DependencyAnalysis
                                 {
                                     symbolToWrite = factory.ConstructedTypeSymbol(eeTypeNode.Type);
                                 }
+                            }
+                            if (reloc.Target is WebAssemblyBlockRefNode)
+                            {
+
                             }
                             int size = objectWriter.EmitSymbolReference(symbolToWrite, (int)delta, reloc.RelocType);
 

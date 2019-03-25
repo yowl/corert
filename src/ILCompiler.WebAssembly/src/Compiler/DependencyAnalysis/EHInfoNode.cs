@@ -12,7 +12,6 @@ namespace ILCompiler.Compiler.DependencyAnalysis
         private readonly ObjectAndOffsetSymbolNode _endSymbol;
         private Relocation[] _relocs;
 
-
         public override ObjectNodeSection Section => ObjectNodeSection.ReadOnlyDataSection;
 
         public override bool IsShareable => false;

@@ -166,6 +166,7 @@ namespace System.Runtime
 
                     pEHClause._handlerOffset = GetUnsigned();
                     pEHClause._typeSymbol = ReadUInt32(ref _currentPtr);
+                    pEHClause._handlerFunctionPtr = ReadUInt32(ref _currentPtr);
 #if netcoreapp
                     PrintString("Next _typeSymbol ");
                     PrintLine(pEHClause._typeSymbol.ToString());
