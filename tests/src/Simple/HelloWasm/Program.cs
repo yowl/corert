@@ -985,6 +985,7 @@ internal static class Program
         }
         catch (Exception)
         {
+            PrintLine(" TestTryCatchException In Catch");
             caught = true;
         }
         EndTest(caught);

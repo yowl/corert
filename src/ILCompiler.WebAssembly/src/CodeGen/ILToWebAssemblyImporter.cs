@@ -162,7 +162,7 @@ namespace Internal.IL
         public void Import()
         {
 
-            if (_method.Name.Contains("TestTryCatchThrowException"))
+            if (_method.Name.EndsWith("TestTryCatchException"))
             {
 
             }
@@ -2361,21 +2361,18 @@ namespace Internal.IL
             // object exception, uint idxStart,
             // ref StackFrameIterator frameIter, out uint tryRegionIdx, out byte* pHandler
             var tryRegionIdx = LLVM.BuildAlloca(landingPadBuilder, LLVM.Int32Type(), "tryRegionIdx");
-            var handlerOffset = LLVM.BuildAlloca(landingPadBuilder, LLVM.Int32Type(), "_handlerOffset");
+            var handlerFuncPtr = LLVM.BuildAlloca(landingPadBuilder, LLVM.Int32Type(), "handlerFuncPtr");
 
             var arguments = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", managedPtr),
                                                  new ExpressionEntry(StackValueKind.Int32, "idxStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0xFFFFFFFFu, false)), 
                                                  new ExpressionEntry(StackValueKind.Int32, "idxTryLandingStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), (ulong)tryRegion.ILRegion.TryOffset, false)),
                                                  new ExpressionEntry(StackValueKind.ByRef, "refFrameIter", ehInfoIterator), 
                                                  new ExpressionEntry(StackValueKind.ByRef, "tryRegionIdx", tryRegionIdx),
-                                                 new ExpressionEntry(StackValueKind.ByRef, "pHandler", handlerOffset) 
+                                                 new ExpressionEntry(StackValueKind.ByRef, "pHandler", handlerFuncPtr) 
                                                  };
             var handler = CallRuntime(_compilation.TypeSystemContext, "EH", "FindFirstPassHandlerWasm", arguments, null, true);
 
-            if (_method.Name.Contains("TestTryCatchThrowException"))
-                handlerOffset = GetOrCreateFunclet(ILExceptionRegionKind.Catch, 17);
-
-            var pHandlerArgs = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "handlerOffset", handlerOffset)
+            var pHandlerArgs = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "handlerOffset", handlerFuncPtr)
                                              };
             CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", pHandlerArgs, null, fromLandingPad: true);
 
@@ -2384,11 +2381,11 @@ namespace Internal.IL
 
             //                internal extern static unsafe IntPtr RhpCallCatchFunclet(
             //                    object exceptionObj, byte* pHandlerIP, void* pvRegDisplay, ref EH.ExInfo exInfo);
-
+            var handlerFunc = LLVM.BuildLoad(landingPadBuilder, handlerFuncPtr, "handlerFunc");
             LLVMValueRef[] callCatchArgs = new LLVMValueRef[]
                                   {
                                       CastIfNecessary(landingPadBuilder, managedPtr, LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0)),
-                                      CastIfNecessary(landingPadBuilder, handlerOffset, LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0)), /* catch funclet address */
+                                      CastIfNecessary(landingPadBuilder, handlerFunc, LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0)), /* catch funclet address */
                                       shadowStack,
                                       LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0))
                                   };
