@@ -908,6 +908,8 @@ internal static class Program
         TestTryCatchThrowException(new Exception());
 
         TestTryCatchException();
+
+        TestTryFinallyThrowException();
     }
 
     private static void TestTryCatchNoException()
@@ -943,16 +945,10 @@ internal static class Program
     }
 
     static bool finallyCalled;
-    private static void TestTryFinallyThrowException(Exception e)
+    private static void TestTryFinallyThrowException()
     {
         finallyCalled = false;
         StartTest("Try/Finally calls finally when exception thrown test");
-        CatchException();
-        EndTest(finallyCalled);
-    }
-
-    private static void CatchException()
-    {
         try
         {
             TryFinally();
@@ -960,7 +956,8 @@ internal static class Program
         catch (Exception)
         {
 
-        } 
+        }
+        EndTest(finallyCalled);
     }
 
     private static void TryFinally()
@@ -971,6 +968,7 @@ internal static class Program
         }
         finally
         {
+            PrintLine("In Finally");
             finallyCalled = true;
         }
     }

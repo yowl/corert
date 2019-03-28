@@ -259,10 +259,13 @@ extern "C" void RhpCallFilterFunclet()
 {
     throw "RhpCallFilterFunclet";
 }
-extern "C" void RhpCallFinallyFunclet()
+
+extern "C" void LlvmFinallyFunclet(void *finallyHandler, void *shadowStack); // WASMTODO: do we beed all these
+extern "C" void RhpCallFinallyFunclet(void *finallyHandler, void *shadowStack)
 {
-    throw "RhpCallFinallyFunclet";
+    LlvmFinallyFunclet(finallyHandler, shadowStack);
 }
+
 extern "C" void RhpUniversalTransition()
 {
     throw "RhpUniversalTransition";

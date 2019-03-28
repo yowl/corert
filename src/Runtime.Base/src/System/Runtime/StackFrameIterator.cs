@@ -166,7 +166,7 @@ namespace System.Runtime
 
                     pEHClause._handlerOffset = GetUnsigned();
                     pEHClause._typeSymbol = ReadUInt32(ref _currentPtr);
-                    pEHClause._handlerFunctionPtr = ReadUInt32(ref _currentPtr);
+                    pEHClause._handlerAddress = (byte *)ReadUInt32(ref _currentPtr);
 #if netcoreapp
                     PrintString("Next _typeSymbol ");
                     PrintLine(pEHClause._typeSymbol.ToString());
@@ -174,6 +174,7 @@ namespace System.Runtime
                     break;
                 case RhEHClauseKindWasm.RH_EH_CLAUSE_FAULT:
                     pEHClause._handlerOffset = GetUnsigned();
+                    pEHClause._handlerAddress = (byte*)ReadUInt32(ref _currentPtr);
                     break;
                 case RhEHClauseKindWasm.RH_EH_CLAUSE_FILTER:
                     pEHClause._handlerOffset = GetUnsigned();

@@ -69,6 +69,7 @@ namespace Internal.IL
         private List<int> _leaveTargets;
         private readonly Dictionary<Tuple<int, IntPtr>, LLVMBasicBlockRef> _landingPads;
         private readonly Dictionary<IntPtr, LLVMBasicBlockRef> _funcletUnreachableBlocks = new Dictionary<IntPtr, LLVMBasicBlockRef>();
+        private readonly Dictionary<IntPtr, LLVMBasicBlockRef> _funcletResumeBlocks = new Dictionary<IntPtr, LLVMBasicBlockRef>();
         private readonly EHInfoNode _ehInfoNode;
         
         /// <summary>
@@ -2314,6 +2315,14 @@ namespace Internal.IL
                                                                                                                                     LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0),
                                                                                                                                 }, false));
                 BuildCatchFunclet();
+
+//                GetOrCreateLLVMFunction("RhpCallFinallyFunclet", LLVM.FunctionType(LLVMTypeRef.Int32Type(), new[]
+//                                                                                                                                {
+//                                                                                                                                    LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0),
+//                                                                                                                                    LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0),
+//                                                                                                                                }, false));
+                BuildFinallyFunclet();
+
             }
             /*
                 ;; void* FASTCALL RhpCallCatchFunclet(RtuObjectRef exceptionObj, void* pHandlerIP, REGDISPLAY* pRegDisplay,
@@ -2376,7 +2385,23 @@ namespace Internal.IL
                                              };
             CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", pHandlerArgs, null, fromLandingPad: true);
 
-            // TODO: when returns false - no handler found for this try
+            var pHandlerArgs2 = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "handlerOffset", handler.RawLLVMValue)
+                                             };
+            CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", pHandlerArgs2, null, fromLandingPad: true);
+
+            var leaveDestination = LLVM.BuildAlloca(landingPadBuilder, LLVMTypeRef.Int32Type(), "leaveDest"); // create a variable to store the operand of the leave as we can't use the result of the call directly due to domination/branches
+            LLVM.BuildStore(landingPadBuilder, LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0, false), leaveDestination); 
+            var foundCatchBlock = LLVM.AppendBasicBlock(_currentFunclet, "LPFoundCatch");
+            var noCatch = LLVM.BuildICmp(landingPadBuilder, LLVMIntPredicate.LLVMIntEQ, LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0, false),
+                handler.ValueAsInt32(landingPadBuilder, false), "testCatch");
+            var secondPassBlock = LLVM.AppendBasicBlock(_currentFunclet, "SecondPass");
+            LLVM.BuildCondBr(landingPadBuilder, noCatch, secondPassBlock, foundCatchBlock);
+
+
+            LLVM.PositionBuilderAtEnd(landingPadBuilder, foundCatchBlock);
+
+            //
+
             // If it didn't find a catch block, we can rethrow (resume in LLVM) the C++ exception to continue the stack walk.
 
             //                internal extern static unsafe IntPtr RhpCallCatchFunclet(
@@ -2390,24 +2415,28 @@ namespace Internal.IL
                                       LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0))
                                   };
             var leaveReturnValue = LLVM.BuildCall(landingPadBuilder, RhpCallCatchFunclet, callCatchArgs, "");
-            //                LLVM.BuildBr(landingPadBuilder, GetBasicBlockForExceptionRegionHandler(tryRegion));
+            LLVM.BuildStore(landingPadBuilder, leaveReturnValue, leaveDestination);
+            LLVM.BuildBr(landingPadBuilder, secondPassBlock);
 
-            // call second pass (Fault/finally blocks) with args :         private static void InvokeSecondPass(ref ExInfo exInfo, uint idxStart)
-            //                var
-            //                var secondPassArgs = new StackEntry[] { new ExpressionEntry(StackValueKind.ByRef, "exInfo", ehInfoIterator),
-            //                                                          new ExpressionEntry(StackValueKind.ByRef, "tryRegionIdx", tryRegionIdx),
-            //                                                          new ExpressionEntry(StackValueKind.ByRef, "pHandler", pHandler)
-            //                                                          CallRuntime(_compilation.TypeSystemContext, "EH", "InvokeSecondPass", secondPassArgs, null, true);
-            //
-//                var blockRef = LLVM.BlockAddress(_currentFunclet, GetLLVMBasicBlockForBlock(_basicBlocks[35]));
-            //                  LLVM.BuildBr(landingPadBuilder, blockRef, 1); // WASMTODO: remove hardcoded and get from return value of RhpCallCatchFunclet.
-//            bool passedCurrent = false;
+            LLVM.PositionBuilderAtEnd(landingPadBuilder, secondPassBlock);
 
-            if (_method.Name.Contains("TestTryCatchThrowException"))
-            {
+            // reinitialise the iterator
+            CallRuntime(_compilation.TypeSystemContext, "EHClauseIterator", "InitFromEhInfo", iteratorInitArgs, null, fromLandingPad: true);
 
-            }
-            var @switch = LLVM.BuildSwitch(landingPadBuilder, CastIfNecessary(landingPadBuilder, leaveReturnValue, LLVMTypeRef.Int32Type()), GetOrCreateUnreachableBlock(), 1 /* fortunately this doesn't seem to make much difference */);
+            var secondPassArgs = new StackEntry[] { new ExpressionEntry(StackValueKind.Int32, "idxStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0xFFFFFFFFu, false)),
+                                                      new ExpressionEntry(StackValueKind.Int32, "idxTryLandingStart", LLVM.ConstInt(LLVMTypeRef.Int32Type(), (ulong)tryRegion.ILRegion.TryOffset, false)),
+                                                      new ExpressionEntry(StackValueKind.ByRef, "refFrameIter", ehInfoIterator),
+                                                      new ExpressionEntry(StackValueKind.Int32, "idxLimit", LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0xFFFFFFFFu, false)),
+                                                      new ExpressionEntry(StackValueKind.ByRef, "shadowStack", shadowStack)
+                                                  };
+            CallRuntime(_compilation.TypeSystemContext, "EH", "InvokeSecondPassWasm", secondPassArgs, null, true);
+
+            var catchLeaveBlock = LLVM.AppendBasicBlock(_currentFunclet, "CatchLeave");
+            LLVM.BuildCondBr(landingPadBuilder, noCatch, GetOrCreateResumeBlock(pad, tryRegion.ILRegion.TryOffset.ToString()), catchLeaveBlock);
+            LLVM.PositionBuilderAtEnd(landingPadBuilder, catchLeaveBlock);
+
+            // Use the else as the path for no exception handler found for this exception
+            var @switch = LLVM.BuildSwitch(landingPadBuilder, CastIfNecessary(landingPadBuilder, leaveDestination, LLVMTypeRef.Int32Type()), GetOrCreateUnreachableBlock(), 1 /* number of cases, but fortunately this doesn't seem to make much difference */);
 //            var passedCurrent = false;
 //            for (var i = 0; i < _basicBlocks.Length; i++)
 //            {
@@ -2438,6 +2467,13 @@ namespace Internal.IL
                     }
                 }
             }
+
+
+            if (_method.Name.Contains("TestTryCatchThrowException"))
+            {
+
+            }
+
             _builder = methodBuilder;
             LLVM.DisposeBuilder(landingPadBuilder);
 
@@ -3519,6 +3555,23 @@ namespace Internal.IL
             return unreachableBlock;
         }
 
+        private LLVMBasicBlockRef GetOrCreateResumeBlock(LLVMValueRef exceptionValueRef, string offset)
+        {
+            if (_funcletResumeBlocks.TryGetValue(exceptionValueRef.Pointer, out LLVMBasicBlockRef resumeBlock))
+            {
+                return resumeBlock;
+            }
+
+            resumeBlock = LLVM.AppendBasicBlock(_currentFunclet, "Resume" + offset);
+            LLVMBuilderRef resumeBuilder = LLVM.CreateBuilder();
+            LLVM.PositionBuilderAtEnd(resumeBuilder, resumeBlock);
+            LLVM.BuildResume(resumeBuilder, exceptionValueRef);
+            LLVM.DisposeBuilder(resumeBuilder);
+            _funcletResumeBlocks[_currentFunclet.Pointer] = resumeBlock;
+
+            return resumeBlock;
+        }
+
         private void ThrowIfNull(LLVMValueRef entry)
         {
             if (NullRefFunction.Pointer == IntPtr.Zero)
@@ -4160,6 +4213,10 @@ namespace Internal.IL
 
         private ObjectNode.ObjectData EncodeEHInfo()
         {
+            if (_method.Name.EndsWith("TryFinally"))
+            {
+
+            }
             var builder = new ObjectDataBuilder();
             builder.RequireInitialAlignment(1);
 
@@ -4230,32 +4287,31 @@ namespace Internal.IL
                 uint tryLength = (uint)exceptionRegion.ILRegion.TryLength;
                 builder.EmitCompressedUInt((tryLength << 2) | (uint)clauseKind);
 
+                RelocType rel = (_compilation.NodeFactory.Target.IsWindows) ?
+                    RelocType.IMAGE_REL_BASED_ABSOLUTE :
+                    RelocType.IMAGE_REL_BASED_REL32;
+
+                if (_compilation.NodeFactory.Target.Abi == TargetAbi.Jit)
+                    rel = RelocType.IMAGE_REL_BASED_REL32;
+
                 switch (clauseKind)
                 {
                     case RhEHClauseKind.RH_EH_CLAUSE_TYPED:
-                        {
-                            builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.HandlerOffset);
+                        builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.HandlerOffset);
 
-                            var type = (TypeDesc)_methodIL.GetObject((int)exceptionRegion.ILRegion.ClassToken);
+                        var type = (TypeDesc)_methodIL.GetObject((int)exceptionRegion.ILRegion.ClassToken);
 
-                            Debug.Assert(!type.IsCanonicalSubtype(CanonicalFormKind.Any));
+                        Debug.Assert(!type.IsCanonicalSubtype(CanonicalFormKind.Any));
 
-                            var typeSymbol = _compilation.NodeFactory.NecessaryTypeSymbol(type);
-
-                            RelocType rel = (_compilation.NodeFactory.Target.IsWindows) ?
-                                RelocType.IMAGE_REL_BASED_ABSOLUTE :
-                                RelocType.IMAGE_REL_BASED_REL32;
-
-                            if (_compilation.NodeFactory.Target.Abi == TargetAbi.Jit)
-                                rel = RelocType.IMAGE_REL_BASED_REL32;
-
-                            builder.EmitReloc(typeSymbol, rel);
-                            string funcletName = _mangledName + "$" + ILExceptionRegionKind.Catch.ToString() + exceptionRegion.ILRegion.HandlerOffset.ToString("X"); // WASMTODO: refactor to method
-                            builder.EmitReloc(new WebAssemblyBlockRefNode(GetOrCreateFunclet(ILExceptionRegionKind.Catch, exceptionRegion.ILRegion.HandlerOffset), funcletName), rel);
-                        }
+                        var typeSymbol = _compilation.NodeFactory.NecessaryTypeSymbol(type);
+                        builder.EmitReloc(typeSymbol, rel);
+                        string catchFuncletName = _mangledName + "$" + ILExceptionRegionKind.Catch.ToString() + exceptionRegion.ILRegion.HandlerOffset.ToString("X"); // WASMTODO: refactor to method
+                        builder.EmitReloc(new WebAssemblyBlockRefNode(GetOrCreateFunclet(ILExceptionRegionKind.Catch, exceptionRegion.ILRegion.HandlerOffset), catchFuncletName), rel);
                         break;
                     case RhEHClauseKind.RH_EH_CLAUSE_FAULT:
                         builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.HandlerOffset);
+                        string finallyFuncletName = _mangledName + "$" + ILExceptionRegionKind.Finally.ToString() + exceptionRegion.ILRegion.HandlerOffset.ToString("X"); // WASMTODO: refactor to method
+                        builder.EmitReloc(new WebAssemblyBlockRefNode(GetOrCreateFunclet(ILExceptionRegionKind.Finally, exceptionRegion.ILRegion.HandlerOffset), finallyFuncletName), rel);
                         break;
                     case RhEHClauseKind.RH_EH_CLAUSE_FILTER:
                         builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.HandlerOffset);

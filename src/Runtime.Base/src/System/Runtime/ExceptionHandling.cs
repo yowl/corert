@@ -877,7 +877,7 @@ namespace System.Runtime
             internal uint _tryEndOffset;
             internal uint _handlerOffset;
             internal uint _typeSymbol;
-            internal uint _handlerFunctionPtr; // an alternative to this would be to create a switch (on _handlerOffset) in LLVM for all possible handlers 
+            internal byte* _handlerAddress; // an alternative to this would be to create a switch (on _handlerOffset) in LLVM for all possible handlers 
             internal uint _filterOffset;
 
             public bool ContainsCodeOffset(uint idxTryLandingStart)
@@ -903,7 +903,7 @@ namespace System.Runtime
 
         // TODO: temporary to try things out, when working look to see how to refactor with FindFirstPassHandler
         private static bool FindFirstPassHandlerWasm(object exception, uint idxStart, uint idxTryLandingStart /* this start IL idx of the try region for the landing pad, will use in place of PC */, 
-            ref EHClauseIterator clauseIter, out uint tryRegionIdx, out uint pHandler)
+            ref EHClauseIterator clauseIter, out uint tryRegionIdx, out byte * pHandler)
         {
 #if netcoreapp
             EEType* pObjType2 = exception.EEType;
@@ -912,7 +912,7 @@ namespace System.Runtime
             EHClauseIterator.PrintString("with exception eetype  ");
             EHClauseIterator.PrintLine(((uint)(pObjType2)).ToString());
 #endif
-            pHandler = 0;
+            pHandler = (byte *)0;
             tryRegionIdx = MaxTryRegionIdx;
 
 //            EHEnum ehEnum;
@@ -998,7 +998,7 @@ namespace System.Runtime
 #endif
                     if (ShouldTypedClauseCatchThisException(exception, (EEType*)ehClause._typeSymbol))
                     {
-                        pHandler = ehClause._handlerFunctionPtr;
+                        pHandler = ehClause._handlerAddress;
                         tryRegionIdx = curIdx;
 #if netcoreapp
                         EHClauseIterator.PrintLine("type is a match ");
@@ -1126,6 +1126,70 @@ namespace System.Runtime
                 exInfo._idxCurClause = curIdx;
                 InternalCalls.RhpCallFinallyFunclet(pFinallyHandler, exInfo._frameIter.RegisterSet);
                 exInfo._idxCurClause = MaxTryRegionIdx;
+            }
+        }
+
+        private static void InvokeSecondPassWasm(uint idxStart, uint idxTryLandingStart, ref EHClauseIterator clauseIter, uint idxLimit, void *shadowStack)
+        {
+            uint lastTryStart = 0, lastTryEnd = 0;
+            EHClauseIterator.PrintLine("second pass ");
+            // Search the clauses for one that contains the current offset.
+            RhEHClauseWasm ehClause = new RhEHClauseWasm();
+            for (uint curIdx = 0; clauseIter.Next(ref ehClause) && curIdx < idxLimit; curIdx++)
+            {
+                // 
+                // Skip to the starting try region.  This is used by collided unwinds and rethrows to pickup where
+                // the previous dispatch left off.
+                //
+                if (idxStart != MaxTryRegionIdx)
+                {
+                    if (curIdx <= idxStart)
+                    {
+                        lastTryStart = ehClause._tryStartOffset;
+                        lastTryEnd = ehClause._tryEndOffset;
+                        continue;
+                    }
+
+                    // Now, we continue skipping while the try region is identical to the one that invoked the 
+                    // previous dispatch.
+                    if ((ehClause._tryStartOffset == lastTryStart) && (ehClause._tryEndOffset == lastTryEnd))
+                        continue;
+
+                    // We are done skipping. This is required to handle empty finally block markers that are used
+                    // to separate runs of different try blocks with same native code offsets.
+                    idxStart = MaxTryRegionIdx;
+                }
+                EHClauseIterator.PrintLine("second pass done skipping");
+
+                EHClauseIterator.RhEHClauseKindWasm clauseKind = ehClause._clauseKind;
+
+                if ((clauseKind != EHClauseIterator.RhEHClauseKindWasm.RH_EH_CLAUSE_FAULT)
+                    || !ehClause.ContainsCodeOffset(idxTryLandingStart))
+                {
+                    continue;
+                }
+
+                // Found a containing clause. Because of the order of the clauses, we know this is the
+                // most containing.
+
+                // N.B. -- We need to suppress GC "in-between" calls to finallys in this loop because we do
+                // not have the correct next-execution point live on the stack and, therefore, may cause a GC
+                // hole if we allow a GC between invocation of finally funclets (i.e. after one has returned
+                // here to the dispatcher, but before the next one is invoked).  Once they are running, it's 
+                // fine for them to trigger a GC, obviously.
+                // 
+                // As a result, RhpCallFinallyFunclet will set this state in the runtime upon return from the
+                // funclet, and we need to reset it if/when we fall out of the loop and we know that the 
+                // method will no longer get any more GC callbacks.
+
+                byte* pFinallyHandler = ehClause._handlerAddress;
+#if netcoreapp
+                EHClauseIterator.PrintLine("second pass calling finally " + ((uint)pFinallyHandler).ToString());
+#endif
+
+                //                exInfo._idxCurClause = curIdx;
+                InternalCalls.RhpCallFinallyFunclet(pFinallyHandler, shadowStack);
+//                exInfo._idxCurClause = MaxTryRegionIdx;
             }
         }
 

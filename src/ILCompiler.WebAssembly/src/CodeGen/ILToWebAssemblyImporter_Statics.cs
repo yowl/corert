@@ -118,6 +118,7 @@ namespace Internal.IL
         static LLVMValueRef RhpThrowEx = default(LLVMValueRef);
         static LLVMValueRef RhpCallCatchFunclet = default(LLVMValueRef);
         static LLVMValueRef LlvmCatchFunclet = default(LLVMValueRef);
+        static LLVMValueRef LlvmFinallyFunclet = default(LLVMValueRef);
         static LLVMValueRef NullRefFunction = default(LLVMValueRef);
         public static LLVMValueRef GxxPersonality = default(LLVMValueRef);
         public static LLVMTypeRef GxxPersonalityType = default(LLVMTypeRef);
@@ -147,7 +148,7 @@ namespace Internal.IL
                     LLVM.PointerType(LLVM.Int8Type(), 0), // shadow stack
                     LLVM.PointerType(LLVM.Int8Type(), 0)
                 }, false));
-            var block = LLVM.AppendBasicBlock(LlvmCatchFunclet, "a");
+            var block = LLVM.AppendBasicBlock(LlvmCatchFunclet, "GenericCatch");
             LLVMBuilderRef funcletBuilder = LLVM.CreateBuilder();
             LLVM.PositionBuilderAtEnd(funcletBuilder, block);
             //            EmitTrapCall(funcletBuilder);
@@ -169,6 +170,38 @@ namespace Internal.IL
             _builder = mainBuilder;
             _currentFunclet = currentFunclet;
             LLVM.BuildRet(funcletBuilder, leaveToILOffset);
+            LLVM.DisposeBuilder(funcletBuilder);
+        }
+
+        void BuildFinallyFunclet()
+        {
+            LlvmFinallyFunclet = LLVM.AddFunction(Module, "LlvmFinallyFunclet", LLVM.FunctionType(LLVM.VoidType(),
+                new LLVMTypeRef[]
+                {
+                    LLVM.PointerType(LLVM.FunctionType(LLVMTypeRef.VoidType(), new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0)}, false), 0), // finallyHandler
+                    LLVM.PointerType(LLVM.Int8Type(), 0), // shadow stack
+                }, false));
+            var block = LLVM.AppendBasicBlock(LlvmFinallyFunclet, "GenericFinally");
+            LLVMBuilderRef funcletBuilder = LLVM.CreateBuilder();
+            LLVM.PositionBuilderAtEnd(funcletBuilder, block);
+            //            EmitTrapCall(funcletBuilder);
+
+            var finallyFunclet = LLVM.GetParam(LlvmFinallyFunclet, 0);
+            var castShadowStack = LLVM.GetParam(LlvmFinallyFunclet, 1);
+            var debugArgs = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", finallyFunclet) };
+            var mainBuilder = _builder;  // if not doing the CallRuntime and remove this
+            var currentFunclet = _currentFunclet;
+            _currentFunclet = LlvmFinallyFunclet;
+            _builder = funcletBuilder;
+//            CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", debugArgs, GetWellKnownType(WellKnownType.Int32), true);
+
+            List<LLVMValueRef> llvmArgs = new List<LLVMValueRef>();
+            llvmArgs.Add(castShadowStack);
+
+            LLVM.BuildCall(_builder, finallyFunclet, llvmArgs.ToArray(), string.Empty);
+            _builder = mainBuilder;
+            _currentFunclet = currentFunclet;
+            LLVM.BuildRetVoid(funcletBuilder);
             LLVM.DisposeBuilder(funcletBuilder);
         }
     }
