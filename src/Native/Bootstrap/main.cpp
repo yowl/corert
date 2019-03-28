@@ -232,12 +232,16 @@ public:
 
 extern "C" void RhpThrowEx(void * pEx)
 {
+//#if CLR_CMAKE_PLATFORM_WASM
     printf("%u\n", pEx);
     printf("%u\n", *((void **)pEx));
     ManagedExceptionWrapper  m = ManagedExceptionWrapper(pEx);
     printf("%u\n", &m);
     printf("%u\n", m.m_pManagedException);
     throw m;
+//#else 
+    throw "RhpThrowEx";
+//#endif
 }
 
 extern "C" void RhpThrowHwEx()

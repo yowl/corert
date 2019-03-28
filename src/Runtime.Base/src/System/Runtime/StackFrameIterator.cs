@@ -165,6 +165,7 @@ namespace System.Runtime
                 case RhEHClauseKindWasm.RH_EH_CLAUSE_TYPED:
 
                     pEHClause._handlerOffset = GetUnsigned();
+                    AlignToSymbol();
                     pEHClause._typeSymbol = ReadUInt32(ref _currentPtr);
                     pEHClause._handlerAddress = (byte *)ReadUInt32(ref _currentPtr);
 #if netcoreapp
@@ -174,6 +175,7 @@ namespace System.Runtime
                     break;
                 case RhEHClauseKindWasm.RH_EH_CLAUSE_FAULT:
                     pEHClause._handlerOffset = GetUnsigned();
+                    AlignToSymbol();
                     pEHClause._handlerAddress = (byte*)ReadUInt32(ref _currentPtr);
                     break;
                 case RhEHClauseKindWasm.RH_EH_CLAUSE_FILTER:
@@ -194,6 +196,14 @@ namespace System.Runtime
             PrintLine(tryLengthAndKind.ToString());
 #endif
             return true;
+        }
+
+        private void AlignToSymbol()
+        {
+//            if (((uint)_currentPtr & 3) != 0)
+//            {
+//                _currentPtr += 4 - ((uint)_currentPtr & 3);
+//            }
         }
 
 //            uint uExCollideClauseIdx;

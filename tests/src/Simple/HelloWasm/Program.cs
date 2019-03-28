@@ -909,6 +909,8 @@ internal static class Program
 
         TestTryCatchException();
 
+        TestCatchExceptionType();
+
         TestTryFinallyThrowException();
     }
 
@@ -989,6 +991,29 @@ internal static class Program
         EndTest(caught);
     }
 
+    private static void TestCatchExceptionType()
+    {
+        int i = 0;
+        StartTest("Catch called for exception type and order");
+        try
+        {
+            throw new NullReferenceException();
+        }
+        catch (ArgumentException)
+        {
+            i += 1;
+        }
+        catch (NullReferenceException)
+        {
+            i += 10;
+        }
+        catch (Exception)
+        {
+            i += 100;
+        }
+        EndTest(i == 10);
+    }
+
     private static void ThrowException(Exception e)
     {
         throw e;
@@ -1066,7 +1091,7 @@ internal static class Program
         using (disposable)
         {
         }
-        EndTest(disposable.Disposed);
+        EndTest(disposable.Count == 1);
     }
 
     private static void TestInitObjDouble()
@@ -1404,11 +1429,11 @@ class AnotherClassWithFourThreadStatics
 
 class DisposableTest : IDisposable
 {
-    public bool Disposed;
+    public int Count = 0;
 
     public void Dispose()
     {
-        Disposed = true;
+        Count++;
     }
 }
 

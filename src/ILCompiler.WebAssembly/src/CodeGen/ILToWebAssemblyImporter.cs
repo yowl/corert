@@ -1647,6 +1647,10 @@ namespace Internal.IL
 
         private void ImportCall(ILOpcode opcode, int token)
         {
+            if (_method.Name == "TestCatchExceptionType")
+            {
+
+            }
             MethodDesc callee = (MethodDesc)_methodIL.GetObject(token);
             if (callee.IsIntrinsic)
             {
@@ -4213,13 +4217,12 @@ namespace Internal.IL
 
         private ObjectNode.ObjectData EncodeEHInfo()
         {
-            if (_method.Name.EndsWith("TryFinally"))
+            var builder = new ObjectDataBuilder();
+            builder.RequireInitialAlignment(1);
+            if (_method.Name == "TestCatchExceptionType")
             {
 
             }
-            var builder = new ObjectDataBuilder();
-            builder.RequireInitialAlignment(1);
-
             int totalClauses = _exceptionRegions.Length;
 
             // Count the number of special markers that will be needed
@@ -4239,10 +4242,6 @@ namespace Internal.IL
 
             builder.EmitCompressedUInt((uint)totalClauses);
 
-            if (_method.Name == "TestTryCatchThrowException")
-            {
-
-            }
             for (int i = 0; i < _exceptionRegions.Length; i++)
             {
                 ExceptionRegion exceptionRegion = _exceptionRegions[i];
@@ -4302,7 +4301,7 @@ namespace Internal.IL
                         var type = (TypeDesc)_methodIL.GetObject((int)exceptionRegion.ILRegion.ClassToken);
 
                         Debug.Assert(!type.IsCanonicalSubtype(CanonicalFormKind.Any));
-
+                        AlignForSymbol(ref builder);
                         var typeSymbol = _compilation.NodeFactory.NecessaryTypeSymbol(type);
                         builder.EmitReloc(typeSymbol, rel);
                         string catchFuncletName = _mangledName + "$" + ILExceptionRegionKind.Catch.ToString() + exceptionRegion.ILRegion.HandlerOffset.ToString("X"); // WASMTODO: refactor to method
@@ -4310,6 +4309,7 @@ namespace Internal.IL
                         break;
                     case RhEHClauseKind.RH_EH_CLAUSE_FAULT:
                         builder.EmitCompressedUInt((uint)exceptionRegion.ILRegion.HandlerOffset);
+                        AlignForSymbol(ref builder);
                         string finallyFuncletName = _mangledName + "$" + ILExceptionRegionKind.Finally.ToString() + exceptionRegion.ILRegion.HandlerOffset.ToString("X"); // WASMTODO: refactor to method
                         builder.EmitReloc(new WebAssemblyBlockRefNode(GetOrCreateFunclet(ILExceptionRegionKind.Finally, exceptionRegion.ILRegion.HandlerOffset), finallyFuncletName), rel);
                         break;
@@ -4321,6 +4321,15 @@ namespace Internal.IL
             }
 
             return builder.ToObjectData();
+        }
+
+        void AlignForSymbol(ref ObjectDataBuilder builder)
+        {
+            var bytes = builder.CountBytes;
+            for (var pad = 0; pad < ((4 - (bytes & 3)) & 3); pad++)
+            {
+                builder.EmitByte(0);
+            }
         }
 
         enum RhEHClauseKind
