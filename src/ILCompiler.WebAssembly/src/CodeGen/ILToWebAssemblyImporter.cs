@@ -163,7 +163,7 @@ namespace Internal.IL
         public void Import()
         {
 
-            if (_method.Name.EndsWith("TestCatchExceptionType"))
+            if (_method.Name.EndsWith("MemberwiseClone"))
             {
 
             }
@@ -2562,7 +2562,7 @@ namespace Internal.IL
             // Save the top of the shadow stack in case the callee reverse P/Invokes
             LLVMValueRef stackFrameSize = BuildConstInt32(GetTotalParameterOffset() + GetTotalLocalOffset());
             LLVM.BuildStore(_builder, LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_currentFunclet), new LLVMValueRef[] { stackFrameSize }, "shadowStackTop"),
-                LLVM.GetNamedGlobal(Module, "t_pShadowStackTop"));
+                ShadowStackTop);
 
             LLVMValueRef pInvokeTransitionFrame = default;
             LLVMTypeRef pInvokeFunctionType = default;
