@@ -4325,7 +4325,8 @@ namespace Internal.IL
 
         void AlignForSymbol(ref ObjectDataBuilder builder)
         {
-            var padding = (4 - (builder.CountBytes & 3)) & 3;
+            if ((builder.CountBytes & 3) == 0) return;
+            var padding = (4 - (builder.CountBytes & 3));
 
             for (var pad = 0; pad < padding; pad++)
             {
