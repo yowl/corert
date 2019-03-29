@@ -163,7 +163,7 @@ namespace Internal.IL
         public void Import()
         {
 
-            if (_method.Name.EndsWith("TestTryCatchException"))
+            if (_method.Name.EndsWith("TestCatchExceptionType"))
             {
 
             }
@@ -4325,8 +4325,9 @@ namespace Internal.IL
 
         void AlignForSymbol(ref ObjectDataBuilder builder)
         {
-            var bytes = builder.CountBytes;
-            for (var pad = 0; pad < ((4 - (bytes & 3)) & 3); pad++)
+            var padding = (4 - (builder.CountBytes & 3)) & 3;
+
+            for (var pad = 0; pad < padding; pad++)
             {
                 builder.EmitByte(0);
             }

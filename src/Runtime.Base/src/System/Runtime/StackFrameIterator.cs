@@ -200,10 +200,7 @@ namespace System.Runtime
 
         private void AlignToSymbol()
         {
-//            if (((uint)_currentPtr & 3) != 0)
-//            {
-//                _currentPtr += 4 - ((uint)_currentPtr & 3);
-//            }
+            _currentPtr = (byte *)(((uint)_currentPtr + 3) & ~(3));
         }
 
 //            uint uExCollideClauseIdx;

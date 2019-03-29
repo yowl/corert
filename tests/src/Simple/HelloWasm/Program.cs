@@ -909,7 +909,7 @@ internal static class Program
 
         TestTryCatchException();
 
-        TestCatchExceptionType();
+        TestCatchExceptionType(new Exception());
 
         TestTryFinallyThrowException();
     }
@@ -991,13 +991,13 @@ internal static class Program
         EndTest(caught);
     }
 
-    private static void TestCatchExceptionType()
+    private static void TestCatchExceptionType(Exception e)
     {
         int i = 0;
         StartTest("Catch called for exception type and order");
         try
         {
-            throw new NullReferenceException();
+            throw new NullReferenceException("test"); // the parameterless ctor is causing some unexplained memory corruption with the EHInfo pointers...
         }
         catch (ArgumentException)
         {

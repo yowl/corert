@@ -232,16 +232,16 @@ public:
 
 extern "C" void RhpThrowEx(void * pEx)
 {
-//#if CLR_CMAKE_PLATFORM_WASM
+#if defined(_WASM_)
     printf("%u\n", pEx);
     printf("%u\n", *((void **)pEx));
     ManagedExceptionWrapper  m = ManagedExceptionWrapper(pEx);
     printf("%u\n", &m);
     printf("%u\n", m.m_pManagedException);
     throw m;
-//#else 
+#else 
     throw "RhpThrowEx";
-//#endif
+#endif
 }
 
 extern "C" void RhpThrowHwEx()
@@ -249,9 +249,9 @@ extern "C" void RhpThrowHwEx()
     throw "RhpThrowHwEx";
 }
 
+#if defined(_WASM_)
 // returns the Leave targer
-extern "C" uint32_t LlvmCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo); // WASMTODO: do we beed all these
-
+extern "C" uint32_t LlvmCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo); // WASMTODO: do we need all these
 extern "C" uint32_t RhpCallCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo)
 {
     printf("RhpCallCatchFunclet\n");
@@ -259,16 +259,29 @@ extern "C" uint32_t RhpCallCatchFunclet(void * exceptionObj, void* pHandlerIP, v
 
     return LlvmCatchFunclet(exceptionObj, pHandlerIP, pvRegDisplay, exInfo);
 }
+#else 
+extern "C" uint32_t RhpCallCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo)
+{
+    throw "RhpCallCatchFunclet";
+}
+#endif
 extern "C" void RhpCallFilterFunclet()
 {
     throw "RhpCallFilterFunclet";
 }
 
-extern "C" void LlvmFinallyFunclet(void *finallyHandler, void *shadowStack); // WASMTODO: do we beed all these
+#if defined(_WASM_)
+extern "C" void LlvmFinallyFunclet(void *finallyHandler, void *shadowStack);
 extern "C" void RhpCallFinallyFunclet(void *finallyHandler, void *shadowStack)
 {
     LlvmFinallyFunclet(finallyHandler, shadowStack);
 }
+#else 
+extern "C" void RhpCallFinallyFunclet(void *finallyHandler, void *shadowStack)
+{
+    throw "RhpCallFinallyFunclet";
+}
+#endif
 
 extern "C" void RhpUniversalTransition()
 {
