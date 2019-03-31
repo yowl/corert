@@ -2,8 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
-using System.Diagnostics;
-using System.Runtime;
 using System.Runtime.InteropServices;
 
 namespace System.Runtime
@@ -15,55 +13,11 @@ namespace System.Runtime
         internal UIntPtr SP;
     }
 
-    public struct TwoByteStr
-    {
-        public byte first;
-        public byte second;
-    }
-
     internal unsafe struct EHClauseIterator
     {
-        //            [FieldOffset(AsmOffsets.OFFSETOF__StackFrameIterator__m_FramePointer)]
-        //            private UIntPtr _framePointer;
-        //            [FieldOffset(AsmOffsets.OFFSETOF__StackFrameIterator__m_ControlPC)]
-        //            private IntPtr _controlPC;
-        //            [FieldOffset(AsmOffsets.OFFSETOF__StackFrameIterator__m_RegDisplay)]
-        //            private REGDISPLAY _regDisplay;
-        //            [FieldOffset(AsmOffsets.OFFSETOF__StackFrameIterator__m_OriginalControlPC)]
-        //            private IntPtr _originalControlPC;
-        //
-        //            internal byte* ControlPC { get { return (byte*)_controlPC; } }
-        //            internal byte* OriginalControlPC { get { return (byte*)_originalControlPC; } }
-        //            internal void* RegisterSet { get { fixed (void* pRegDisplay = &_regDisplay) { return pRegDisplay; } } }
-        //            internal UIntPtr SP { get { return _regDisplay.SP; } }
-        //            internal UIntPtr FramePointer { get { return _framePointer; } }
-        //
         private uint _totalClauses;
         private byte *_currentPtr;
         private int _currentClause;
-
-        [DllImport("*")]
-        private static unsafe extern int printf(byte* str, byte* unused);
-
-        public static unsafe void PrintString(string s)
-        {
-            int length = s.Length;
-            fixed (char* curChar = s)
-            {
-                for (int i = 0; i < length; i++)
-                {
-                    TwoByteStr curCharStr = new TwoByteStr();
-                    curCharStr.first = (byte)(*(curChar + i));
-                    printf((byte*)&curCharStr, null);
-                }
-            }
-        }
-
-        public static void PrintLine(string s)
-        {
-            PrintString(s);
-            PrintString("\n");
-        }
 
         private static uint DecodeUnsigned(ref byte* stream)
         {
@@ -125,12 +79,6 @@ namespace System.Runtime
             _currentPtr = ehInfoStart;
             _currentClause = 0;
             _totalClauses = GetUnsigned();
-#if netcoreapp
-            PrintString("read _currentPtr now ");
-            PrintLine(((uint)_currentPtr).ToString());
-            PrintString("read _totalClauses ");
-            PrintLine(_totalClauses.ToString());
-#endif
         }
 
         // TODO : copied from EH
@@ -144,15 +92,6 @@ namespace System.Runtime
 
         internal bool Next(ref EH.RhEHClauseWasm pEHClause)
         {
-#if netcoreapp
-            PrintLine("EH Next");
-
-            PrintString("Next _currentPtr ");
-            PrintLine(((uint)_currentPtr).ToString());
-            PrintString("Next _currentClause ");
-            PrintLine(_currentClause.ToString());
-#endif
-
             if (_currentClause >= _totalClauses) return false;
 
             _currentClause++;
@@ -168,10 +107,6 @@ namespace System.Runtime
                     AlignToSymbol();
                     pEHClause._typeSymbol = ReadUInt32(ref _currentPtr);
                     pEHClause._handlerAddress = (byte *)ReadUInt32(ref _currentPtr);
-#if netcoreapp
-                    PrintString("Next _typeSymbol ");
-                    PrintLine(pEHClause._typeSymbol.ToString());
-#endif
                     break;
                 case RhEHClauseKindWasm.RH_EH_CLAUSE_FAULT:
                     pEHClause._handlerOffset = GetUnsigned();
@@ -183,18 +118,6 @@ namespace System.Runtime
                     pEHClause._filterOffset = GetUnsigned();
                     break;
             }
-#if netcoreapp
-            PrintString("Next _tryStartOffset ");
-            PrintLine(pEHClause._tryStartOffset.ToString());
-            PrintString("Next _tryEndOffset ");
-            PrintLine(pEHClause._tryEndOffset.ToString());
-//            PrintString("Next _clauseKind ");
-//            PrintLine(pEHClause._clauseKind.ToString());
-            PrintString("Next _handlerOffset ");
-            PrintLine(pEHClause._handlerOffset.ToString());
-            PrintString("Next tryLengthAndKind ");
-            PrintLine(tryLengthAndKind.ToString());
-#endif
             return true;
         }
 
@@ -202,22 +125,6 @@ namespace System.Runtime
         {
             _currentPtr = (byte *)(((uint)_currentPtr + 3) & ~(3));
         }
-
-//            uint uExCollideClauseIdx;
-//            bool fUnwoundReversePInvoke;
-//            return Next(out uExCollideClauseIdx, out fUnwoundReversePInvoke);
-//        }
-        //
-        //            internal bool Next(out uint uExCollideClauseIdx)
-        //            {
-        //                bool fUnwoundReversePInvoke;
-        //                return Next(out uExCollideClauseIdx, out fUnwoundReversePInvoke);
-        //            }
-        //
-        //            internal bool Next(out uint uExCollideClauseIdx, out bool fUnwoundReversePInvoke)
-        //            {
-        //                return InternalCalls.RhpSfiNext(ref this, out uExCollideClauseIdx, out fUnwoundReversePInvoke);
-        //            }
     }
 
     [StructLayout(LayoutKind.Explicit, Size = AsmOffsets.SIZEOF__StackFrameIterator)]

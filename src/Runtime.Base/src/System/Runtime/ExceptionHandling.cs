@@ -888,44 +888,13 @@ namespace System.Runtime
             }
         }
 
-        private static void DebugPointer(void* exception)
-        {
-#if netcoreapp
-            EHClauseIterator.PrintString("void * value ");
-            EHClauseIterator.PrintLine(((uint)(exception)).ToString());
-            if (((uint)(exception) > 0) && ((uint)exception & 3) == 0)
-            {
-                EHClauseIterator.PrintString("void ** value ");
-                EHClauseIterator.PrintLine(((uint)(*(void **)exception)).ToString());
-            }
-#endif
-        }
-
         // TODO: temporary to try things out, when working look to see how to refactor with FindFirstPassHandler
         private static bool FindFirstPassHandlerWasm(object exception, uint idxStart, uint idxTryLandingStart /* this start IL idx of the try region for the landing pad, will use in place of PC */, 
             ref EHClauseIterator clauseIter, out uint tryRegionIdx, out byte * pHandler)
         {
-#if netcoreapp
-            EEType* pObjType2 = exception.EEType;
-            EHClauseIterator.PrintString("with exception eetype at address ");
-            EHClauseIterator.PrintLine(((uint)(&pObjType2)).ToString());
-            EHClauseIterator.PrintString("with exception eetype  ");
-            EHClauseIterator.PrintLine(((uint)(pObjType2)).ToString());
-#endif
             pHandler = (byte *)0;
             tryRegionIdx = MaxTryRegionIdx;
-
-//            EHEnum ehEnum;
-//            byte* pbMethodStartAddress;
-//            if (!InternalCalls.RhpEHEnumInitFromStackFrameIterator(ref clauseIter, &pbMethodStartAddress, &ehEnum))
-//                return false;
-//
-//            byte* pbControlPC = clauseIter.ControlPC;
-//
-//
             uint lastTryStart = 0, lastTryEnd = 0;
-//
-//            // Search the clauses for one that contains the current offset.
             RhEHClauseWasm ehClause = new RhEHClauseWasm();
             // for (uint curIdx = 0; InternalCalls.RhpEHEnumNext(&ehEnum, &ehClause); curIdx++)// TODO: would it be useful for GC also to have an implementation of ICodeManager, then could maybe use InternalCalls.RhpEHEnumNext?
             for (uint curIdx = 0; clauseIter.Next(ref ehClause); curIdx++)
@@ -940,10 +909,6 @@ namespace System.Runtime
                     {
                         lastTryStart = ehClause._tryStartOffset;
                         lastTryEnd = ehClause._tryEndOffset;
-#if netcoreapp
-                        EHClauseIterator.PrintLine("skipping as curIdx <= idxStart ");
-#endif
-
                         continue;
                     }
 
@@ -951,9 +916,6 @@ namespace System.Runtime
                     // previous dispatch.
                     if ((ehClause._tryStartOffset == lastTryStart) && (ehClause._tryEndOffset == lastTryEnd))
                     {
-#if netcoreapp
-                        EHClauseIterator.PrintLine("skipping as ehClause._tryStartOffset == lastTryStart) && (ehClause._tryEndOffset == lastTryEnd ");
-#endif
                         continue;
                     }
 
@@ -963,12 +925,6 @@ namespace System.Runtime
                 }
 
                 EHClauseIterator.RhEHClauseKindWasm clauseKind = ehClause._clauseKind;
-#if netcoreapp
-                EHClauseIterator.PrintString("done skipping idxStart ");
-                EHClauseIterator.PrintLine(idxStart.ToString());
-                EHClauseIterator.PrintString("done skipping codeOffset ");
-                EHClauseIterator.PrintLine(idxTryLandingStart.ToString());
-#endif
                 if (((clauseKind != EHClauseIterator.RhEHClauseKindWasm.RH_EH_CLAUSE_TYPED) &&
                      (clauseKind != EHClauseIterator.RhEHClauseKindWasm.RH_EH_CLAUSE_FILTER))
                     || !ehClause.ContainsCodeOffset(idxTryLandingStart))
@@ -976,33 +932,14 @@ namespace System.Runtime
                     continue;
                 }
 
-#if netcoreapp
-                EHClauseIterator.PrintString("found ehclause for try idx (substitute for lack of PC) ");
-#endif
-
                 // Found a containing clause. Because of the order of the clauses, we know this is the
                 // most containing.
                 if (clauseKind == EHClauseIterator.RhEHClauseKindWasm.RH_EH_CLAUSE_TYPED)
                 {
-#if netcoreapp
-                EHClauseIterator.PrintString("comparing ex types ");
-                EHClauseIterator.PrintLine(ehClause._typeSymbol.ToString());
-                var e = new Exception();
-                EEType* pObjTypeE = e.EEType;
-                EHClauseIterator.PrintString("new Exception() eetype  ");
-                EHClauseIterator.PrintLine(((uint)(pObjTypeE)).ToString());
-
-                    EEType* pObjType = exception.EEType;
-                EHClauseIterator.PrintString("with exception eetype  ");
-                EHClauseIterator.PrintLine(((uint)(pObjType)).ToString());
-#endif
                     if (ShouldTypedClauseCatchThisException(exception, (EEType*)ehClause._typeSymbol))
                     {
                         pHandler = ehClause._handlerAddress;
                         tryRegionIdx = curIdx;
-#if netcoreapp
-                        EHClauseIterator.PrintLine("type is a match ");
-#endif
                         return true;
                     }
                 }
@@ -1132,7 +1069,6 @@ namespace System.Runtime
         private static void InvokeSecondPassWasm(uint idxStart, uint idxTryLandingStart, ref EHClauseIterator clauseIter, uint idxLimit, void *shadowStack)
         {
             uint lastTryStart = 0, lastTryEnd = 0;
-            EHClauseIterator.PrintLine("second pass ");
             // Search the clauses for one that contains the current offset.
             RhEHClauseWasm ehClause = new RhEHClauseWasm();
             for (uint curIdx = 0; clauseIter.Next(ref ehClause) && curIdx < idxLimit; curIdx++)
@@ -1159,7 +1095,6 @@ namespace System.Runtime
                     // to separate runs of different try blocks with same native code offsets.
                     idxStart = MaxTryRegionIdx;
                 }
-                EHClauseIterator.PrintLine("second pass done skipping");
 
                 EHClauseIterator.RhEHClauseKindWasm clauseKind = ehClause._clauseKind;
 
@@ -1183,9 +1118,6 @@ namespace System.Runtime
                 // method will no longer get any more GC callbacks.
 
                 byte* pFinallyHandler = ehClause._handlerAddress;
-#if netcoreapp
-                EHClauseIterator.PrintLine("second pass calling finally " + ((uint)pFinallyHandler).ToString());
-#endif
 
                 //                exInfo._idxCurClause = curIdx;
                 InternalCalls.RhpCallFinallyFunclet(pFinallyHandler, shadowStack);

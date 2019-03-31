@@ -233,12 +233,7 @@ public:
 extern "C" void RhpThrowEx(void * pEx)
 {
 #if defined(_WASM_)
-    printf("%u\n", pEx);
-    printf("%u\n", *((void **)pEx));
-    ManagedExceptionWrapper  m = ManagedExceptionWrapper(pEx);
-    printf("%u\n", &m);
-    printf("%u\n", m.m_pManagedException);
-    throw m;
+    throw ManagedExceptionWrapper(pEx);
 #else 
     throw "RhpThrowEx";
 #endif
@@ -254,9 +249,6 @@ extern "C" void RhpThrowHwEx()
 extern "C" uint32_t LlvmCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo); // WASMTODO: do we need all these
 extern "C" uint32_t RhpCallCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo)
 {
-    printf("RhpCallCatchFunclet\n");
-    printf("%u\n", pHandlerIP);
-
     return LlvmCatchFunclet(exceptionObj, pHandlerIP, pvRegDisplay, exInfo);
 }
 #else 

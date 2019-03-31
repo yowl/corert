@@ -940,7 +940,6 @@ internal static class Program
         }
         catch (Exception)
         {
-            PrintLine("In Catch");
             caught = true;
         }
         EndTest(caught);
@@ -970,7 +969,6 @@ internal static class Program
         }
         finally
         {
-            PrintLine("In Finally");
             finallyCalled = true;
         }
     }
@@ -985,7 +983,6 @@ internal static class Program
         }
         catch (Exception)
         {
-            PrintLine(" TestTryCatchException In Catch");
             caught = true;
         }
         EndTest(caught);

@@ -153,15 +153,12 @@ namespace Internal.IL
             LLVM.PositionBuilderAtEnd(funcletBuilder, block);
             //            EmitTrapCall(funcletBuilder);
 
-            var exceptionParam = LLVM.GetParam(LlvmCatchFunclet, 0);  
             var catchFunclet = LLVM.GetParam(LlvmCatchFunclet, 1);
             var castShadowStack = LLVM.GetParam(LlvmCatchFunclet, 2);  
-            var debugArgs = new StackEntry[] {new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", catchFunclet) };
             var mainBuilder = _builder;  // if not doing the CallRuntime and remove this
             var currentFunclet = _currentFunclet;
             _currentFunclet = LlvmCatchFunclet;
             _builder = funcletBuilder;
-            CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", debugArgs, GetWellKnownType(WellKnownType.Int32), true);
 
             List<LLVMValueRef> llvmArgs = new List<LLVMValueRef>();
             llvmArgs.Add(castShadowStack);
@@ -188,12 +185,10 @@ namespace Internal.IL
 
             var finallyFunclet = LLVM.GetParam(LlvmFinallyFunclet, 0);
             var castShadowStack = LLVM.GetParam(LlvmFinallyFunclet, 1);
-            var debugArgs = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", finallyFunclet) };
             var mainBuilder = _builder;  // if not doing the CallRuntime and remove this
             var currentFunclet = _currentFunclet;
             _currentFunclet = LlvmFinallyFunclet;
             _builder = funcletBuilder;
-//            CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", debugArgs, GetWellKnownType(WellKnownType.Int32), true);
 
             List<LLVMValueRef> llvmArgs = new List<LLVMValueRef>();
             llvmArgs.Add(castShadowStack);

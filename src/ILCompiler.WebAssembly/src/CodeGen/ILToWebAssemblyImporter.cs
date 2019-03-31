@@ -162,11 +162,6 @@ namespace Internal.IL
 
         public void Import()
         {
-
-            if (_method.Name.EndsWith("MemberwiseClone"))
-            {
-
-            }
             FindBasicBlocks();
 
             GenerateProlog();
@@ -441,8 +436,6 @@ namespace Internal.IL
                 LLVMTypeRef universalFuncletSignature = LLVM.FunctionType(returnType, new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0) }, false);
                 funclet = LLVM.AddFunction(Module, funcletName, universalFuncletSignature);
                 _exceptionFunclets.Add(funclet);
-                if (_method.Name.Contains("EnsureClassConstructorRun"))
-                { }
             }
 
             return funclet;
@@ -1647,10 +1640,6 @@ namespace Internal.IL
 
         private void ImportCall(ILOpcode opcode, int token)
         {
-            if (_method.Name == "TestCatchExceptionType")
-            {
-
-            }
             MethodDesc callee = (MethodDesc)_methodIL.GetObject(token);
             if (callee.IsIntrinsic)
             {
@@ -2344,19 +2333,8 @@ namespace Internal.IL
             var exPtr = LLVM.BuildExtractValue(landingPadBuilder, pad, 0, "ex");
             // unwrap managed
             var plus4 = LLVM.BuildGEP(landingPadBuilder, exPtr, new LLVMValueRef[] {BuildConstInt32(1)}, "offset");
-            //                var castExPtr = LLVM.BuildPointerCast(landingPadBuilder, exPtr, LLVMTypeRef.PointerType(LLVMTypeRef.PointerType(LLVM.Int8Type(), 0), 0), "castExPtr");
-            //                var structGep = LLVM.BuildStructGEP(landingPadBuilder, exPtr, 0, "structGep");
 
             var managedPtr = LLVM.BuildLoad(landingPadBuilder, plus4, "managedEx");
-            //                var managedPtr2 = LLVM.BuildLoad(landingPadBuilder, managedPtr, "managedPtr2");
-
-            var ptr2Args = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", plus4)
-                                            };
-            CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", ptr2Args, null, fromLandingPad: true);
-
-            var ptr3Args = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", managedPtr)
-                                             };
-            CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", ptr3Args, null, fromLandingPad: true);
 
 
             // TODO: should this really be a newobj call?
@@ -2384,14 +2362,6 @@ namespace Internal.IL
                                                  new ExpressionEntry(StackValueKind.ByRef, "pHandler", handlerFuncPtr) 
                                                  };
             var handler = CallRuntime(_compilation.TypeSystemContext, "EH", "FindFirstPassHandlerWasm", arguments, null, true);
-
-            var pHandlerArgs = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "handlerOffset", handlerFuncPtr)
-                                             };
-            CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", pHandlerArgs, null, fromLandingPad: true);
-
-            var pHandlerArgs2 = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "handlerOffset", handler.RawLLVMValue)
-                                             };
-            CallRuntime(_compilation.TypeSystemContext, "EH", "DebugPointer", pHandlerArgs2, null, fromLandingPad: true);
 
             var leaveDestination = LLVM.BuildAlloca(landingPadBuilder, LLVMTypeRef.Int32Type(), "leaveDest"); // create a variable to store the operand of the leave as we can't use the result of the call directly due to domination/branches
             LLVM.BuildStore(landingPadBuilder, LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0, false), leaveDestination); 
@@ -2470,12 +2440,6 @@ namespace Internal.IL
                         LLVM.AddCase(@switch, BuildConstInt32(targetBlock.StartOffset), GetLLVMBasicBlockForBlock(targetBlock));
                     }
                 }
-            }
-
-
-            if (_method.Name.Contains("TestTryCatchThrowException"))
-            {
-
             }
 
             _builder = methodBuilder;
@@ -3522,10 +3486,6 @@ namespace Internal.IL
             }
             else
             {
-                if (_method.Name.Contains("EnsureClassConstructorRun"))
-                {
-
-                }
                 // TODOWASM: refactor as this is duplicated in HandleCall
                 int offset = GetTotalParameterOffset() + GetTotalLocalOffset();
                 LLVM.BuildInvoke(_builder, RhpThrowEx, args, GetOrCreateUnreachableBlock(), GetOrCreateLandingPad(currentExceptionRegion, _currentFunclet, LLVM.GetFirstParam(_currentFunclet)), "");

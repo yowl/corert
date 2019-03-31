@@ -812,10 +812,6 @@ namespace ILCompiler.DependencyAnalysis
                     {
                         // Emit symbol definitions if necessary
                         objectWriter.EmitSymbolDefinition(i);
-                        if (node is EHInfoNode && relocs.Length > 0)
-                        {
-
-                        }
                         if (i == nextRelocOffset)
                         {
                             Relocation reloc = relocs[nextRelocIndex];
@@ -836,10 +832,6 @@ namespace ILCompiler.DependencyAnalysis
                                 {
                                     symbolToWrite = factory.ConstructedTypeSymbol(eeTypeNode.Type);
                                 }
-                            }
-                            if (reloc.Target is WebAssemblyBlockRefNode)
-                            {
-
                             }
                             int size = objectWriter.EmitSymbolReference(symbolToWrite, (int)delta, reloc.RelocType);
 
