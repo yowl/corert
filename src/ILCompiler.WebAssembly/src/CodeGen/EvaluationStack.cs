@@ -199,7 +199,7 @@ namespace Internal.IL
             else if (kind == StackValueKind.Int64)
                 return ValueAsInt64(builder, signExtend);
             else if (kind == StackValueKind.Float)
-                return ValueAsType(LLVM.DoubleType(), builder);
+                return ValueAsType(Type.IsWellKnownType(WellKnownType.Single) ? LLVM.FloatType() : LLVM.DoubleType(), builder);
             else if (kind == StackValueKind.NativeInt || kind == StackValueKind.ByRef || kind == StackValueKind.ObjRef)
                 return ValueAsInt32(builder, false);
             else
@@ -456,6 +456,11 @@ namespace Internal.IL
 
         protected override LLVMValueRef ValueAsTypeInternal(LLVMTypeRef type, LLVMBuilderRef builder, bool signExtend)
         {
+            if (Type.IsWellKnownType(WellKnownType.Single) && type.TypeKind == LLVMTypeKind.LLVMDoubleTypeKind)
+            {
+                var loadedVal = ILImporter.LoadValue(builder, RawLLVMValue, Type, LLVMTypeRef.FloatType(), signExtend, $"fpext_Load{Name}");
+                return LLVM.BuildFPExt(builder, loadedVal, type, $"fpext{Name}");
+            }
             return ILImporter.LoadValue(builder, RawLLVMValue, Type, type, signExtend, $"Load{Name}");
         }
     }

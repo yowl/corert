@@ -2857,6 +2857,14 @@ namespace Internal.IL
                     }
                     else
                     {
+                        if (op1.Type.IsWellKnownType(WellKnownType.Double) && op2.Type.IsWellKnownType(WellKnownType.Single))
+                        {
+                            left = LLVM.BuildFPExt(_builder, left, LLVM.DoubleType(), "fpextop2");
+                        }
+                        else if (op2.Type.IsWellKnownType(WellKnownType.Double) && op1.Type.IsWellKnownType(WellKnownType.Single))
+                        {
+                            right = LLVM.BuildFPExt(_builder, right, LLVM.DoubleType(), "fpextop1");
+                        }
                         switch (opcode)
                         {
                             case ILOpcode.beq:
@@ -2964,6 +2972,8 @@ namespace Internal.IL
 
         private void ImportBinaryOperation(ILOpcode opcode)
         {
+            if(_method.Name.Contains("op_Subtraction") && _method.OwningType is EcmaType && ((EcmaType)_method.OwningType).Name.Contains("Vec3"))
+                { }
             StackEntry op1 = _stack.Pop();
             StackEntry op2 = _stack.Pop();
 
@@ -2994,6 +3004,14 @@ namespace Internal.IL
             LLVMValueRef right = op1.ValueForStackKind(kind, _builder, false);
             if (kind == StackValueKind.Float)
             {
+                if(op1.Type.IsWellKnownType(WellKnownType.Double) && op2.Type.IsWellKnownType(WellKnownType.Single))
+                {
+                    left = LLVM.BuildFPExt(_builder, left, LLVM.DoubleType(), "fpextop2");
+                }
+                else if (op2.Type.IsWellKnownType(WellKnownType.Double) && op1.Type.IsWellKnownType(WellKnownType.Single))
+                {
+                    right = LLVM.BuildFPExt(_builder, right, LLVM.DoubleType(), "fpextop1");
+                }
                 switch (opcode)
                 {
                     case ILOpcode.add:
@@ -3212,6 +3230,14 @@ namespace Internal.IL
             }
             else
             {
+                if (op1.Type.IsWellKnownType(WellKnownType.Double) && op2.Type.IsWellKnownType(WellKnownType.Single))
+                {
+                    typeSaneOp2 = LLVM.BuildFPExt(_builder, typeSaneOp2, LLVM.DoubleType(), "fpextop2");
+                }
+                else if (op2.Type.IsWellKnownType(WellKnownType.Double) && op1.Type.IsWellKnownType(WellKnownType.Single))
+                {
+                    typeSaneOp1 = LLVM.BuildFPExt(_builder, typeSaneOp1, LLVM.DoubleType(), "fpextop1");
+                }
                 switch (opcode)
                 {
                     case ILOpcode.ceq:
