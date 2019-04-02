@@ -48,11 +48,17 @@ namespace Internal.IL
 
         public byte ReadILByte()
         {
+            if (_currentOffset + 1 > _ilBytes.Length)
+                ThrowHelper.ThrowInvalidProgramException();
+
             return _ilBytes[_currentOffset++];
         }
 
         public UInt16 ReadILUInt16()
         {
+            if (_currentOffset + 2 > _ilBytes.Length)
+                ThrowHelper.ThrowInvalidProgramException();
+
             UInt16 val = (UInt16)(_ilBytes[_currentOffset] + (_ilBytes[_currentOffset + 1] << 8));
             _currentOffset += 2;
             return val;
@@ -60,6 +66,9 @@ namespace Internal.IL
 
         public UInt32 ReadILUInt32()
         {
+            if (_currentOffset + 4 > _ilBytes.Length)
+                ThrowHelper.ThrowInvalidProgramException();
+
             UInt32 val = (UInt32)(_ilBytes[_currentOffset] + (_ilBytes[_currentOffset + 1] << 8) + (_ilBytes[_currentOffset + 2] << 16) + (_ilBytes[_currentOffset + 3] << 24));
             _currentOffset += 4;
             return val;
@@ -105,10 +114,30 @@ namespace Internal.IL
             ILOpcode opcode = (ILOpcode)_ilBytes[_currentOffset];
             if (opcode == ILOpcode.prefix1)
             {
+                if (_currentOffset + 2 > _ilBytes.Length)
+                    ThrowHelper.ThrowInvalidProgramException();
                 opcode = (ILOpcode)(0x100 + _ilBytes[_currentOffset + 1]);
             }
 
             return opcode;
+        }
+
+        public void Skip(ILOpcode opcode)
+        {
+            if (!opcode.IsValid())
+                ThrowHelper.ThrowInvalidProgramException();
+
+            if (opcode != ILOpcode.switch_)
+            {
+                int opcodeSize = (byte)opcode != (int)opcode ? 2 : 1;
+                _currentOffset += opcode.GetSize() - opcodeSize;
+            }
+            else
+            {
+                // "switch" opcode is special
+                uint count = ReadILUInt32();
+                _currentOffset += checked((int)(count * 4));
+            }
         }
 
         public void Seek(int offset)

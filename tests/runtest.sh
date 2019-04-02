@@ -9,6 +9,7 @@ usage()
     echo "    -corefx       : Download and run the CoreFX repo tests"
     echo "    -coreclr      : Download and run the CoreCLR repo tests"
     echo "    -multimodule  : Compile the framework as a .so and link tests against it (ryujit only)"
+    echo "    -singlethread : Run tests on a single thread (avoid parallel execution)"
     echo "    -coredumps    : [For CI use] Enables core dump generation, and analyzes and possibly stores/uploads"
     echo "                      dumps collected during test run."
     echo ""
@@ -100,9 +101,27 @@ download_and_unzip_coreclr_tests_artifacts()
         mkdir -p ${location}
     
         local_zip=${location}/tests.zip
-        curl --retry 10 --retry-delay 5 -sSL -o ${local_zip} ${url}
+
+        # Use curl if available, otherwise use wget
+        if command -v curl > /dev/null; then
+            curl --retry 10 --retry-delay 5 -sSL -o ${local_zip} ${url}
+        else
+            wget -q -O ${local_zip} ${url} --tries=10
+        fi
+
+        local __exitcode=$?
+        if [ ${__exitcode} != 0 ]; then
+            echo "Failed to download CoreCLR tests artifacts."
+            exit ${__exitcode}
+        fi
 
         unzip -q ${local_zip} -d ${location}
+        __exitcode=$?
+        # Exit code 1 indicates that a warning was encountered but unzipping completed successfully
+        if [ ${__exitcode} != 0 ] && [ ${__exitcode} != 1 ]; then
+            echo "Failed to unzip CoreCLR tests artifacts."
+            exit ${__exitcode}
+        fi
 
         echo "CoreCLR tests artifacts restored from ${url}" >> ${semaphore}
     fi
@@ -218,6 +237,8 @@ run_corefx_tests()
     export CoreRT_TestingUtilitiesOutputDir
     export CoreRT_CliBinDir
 
+    export CoreRT_SingleThreaded
+
     if [ ! -d "${CoreRT_TestExtRepo_CoreFX}" ]; then
         mkdir -p ${CoreRT_TestExtRepo_CoreFX}
     fi
@@ -291,6 +312,7 @@ CoreRT_CrossLinkerFlags=
 CoreRT_CrossBuild=0
 CoreRT_EnableCoreDumps=0
 CoreRT_TestName=*
+CoreRT_SingleThreaded=
 
 while [ "$1" != "" ]; do
         lowerI="$(echo $1 | awk '{print tolower($0)}')"
@@ -349,7 +371,8 @@ while [ "$1" != "" ]; do
         -coreclr)
             CoreRT_RunCoreCLRTests=true;
             shift
-            SelectedTests=$1
+            # Convert the name of the selected test set to lower case
+            SelectedTests="$(echo $1 | awk '{print tolower($0)}')"
 
             if [ -z ${SelectedTests} ]; then
                 SelectedTests=top200
@@ -360,10 +383,12 @@ while [ "$1" != "" ]; do
             ;;
         -corefx)
             CoreRT_RunCoreFXTests=true;
-            shift
             ;;
         -multimodule)
             CoreRT_MultiFileConfiguration=MultiModule;
+            ;;
+        -singlethread)
+            CoreRT_SingleThreaded=1;
             ;;
         -coredumps)
             CoreRT_EnableCoreDumps=1

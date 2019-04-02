@@ -3,7 +3,6 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
-using System.Collections.Generic;
 
 using Debug = System.Diagnostics.Debug;
 
@@ -408,15 +407,20 @@ namespace Internal.TypeSystem
             return computedLayout;
         }
 
-        protected static ComputedInstanceFieldLayout ComputeAutoFieldLayout(MetadataType type, int numInstanceFields)
+        protected virtual void AlignBaseOffsetIfNecessary(MetadataType type, ref LayoutInt baseOffset)
+        {
+        }
+
+        protected ComputedInstanceFieldLayout ComputeAutoFieldLayout(MetadataType type, int numInstanceFields)
         {
             // For types inheriting from another type, field offsets continue on from where they left off
             LayoutInt cumulativeInstanceFieldPos = ComputeBytesUsedInParentType(type);
 
+            AlignBaseOffsetIfNecessary(type, ref cumulativeInstanceFieldPos);
+
             var layoutMetadata = type.GetClassLayout();
 
             int packingSize = ComputePackingSize(type, layoutMetadata);
-            LayoutInt largestAlignmentRequired = LayoutInt.One;
 
             var offsets = new FieldAndOffset[numInstanceFields];
             int fieldOrdinal = 0;
@@ -447,7 +451,7 @@ namespace Internal.TypeSystem
                 }
                 else
                 {                    
-                    Debug.Assert(fieldType.IsPrimitive || fieldType.IsPointer || fieldType.IsFunctionPointer);
+                    Debug.Assert(fieldType.IsPrimitive || fieldType.IsPointer || fieldType.IsFunctionPointer || fieldType.IsEnum);
 
                     var fieldSizeAndAlignment = ComputeFieldSizeAndAlignment(fieldType, packingSize);
                     instanceNonGCPointerFieldsCount[CalculateLog2(fieldSizeAndAlignment.Size.AsInt)]++;
@@ -483,9 +487,6 @@ namespace Internal.TypeSystem
                     continue;
 
                 TypeDesc fieldType = field.FieldType;
-                var fieldSizeAndAlignment = ComputeFieldSizeAndAlignment(fieldType, packingSize);
-                largestAlignmentRequired = LayoutInt.Max(fieldSizeAndAlignment.Alignment, largestAlignmentRequired);
-
 
                 if (IsByValueClass(fieldType))
                 {
@@ -497,6 +498,7 @@ namespace Internal.TypeSystem
                 }
                 else
                 {
+                    var fieldSizeAndAlignment = ComputeFieldSizeAndAlignment(fieldType, packingSize);
                     int log2size = CalculateLog2(fieldSizeAndAlignment.Size.AsInt);
                     instanceNonGCPointerFieldsArr[log2size][instanceNonGCPointerFieldsCount[log2size]++] = field;
                 }
@@ -634,8 +636,27 @@ namespace Internal.TypeSystem
                 cumulativeInstanceFieldPos = LayoutInt.Max(cumulativeInstanceFieldPos, new LayoutInt(layoutMetadata.Size));
             }
 
+            // The JITs like to copy full machine words,
+            // so if the size is bigger than a void* round it up to minAlign
+            // and if the size is smaller than void* round it up to next power of two
+            LayoutInt minAlign;
+            if (cumulativeInstanceFieldPos.IsIndeterminate)
+            {
+                minAlign = LayoutInt.Indeterminate;
+            }
+            else if (cumulativeInstanceFieldPos.AsInt > type.Context.Target.PointerSize)
+            {
+                minAlign = type.Context.Target.LayoutPointerSize;
+            }
+            else
+            {
+                minAlign = new LayoutInt(1);
+                while (minAlign.AsInt < cumulativeInstanceFieldPos.AsInt)
+                    minAlign = new LayoutInt(minAlign.AsInt * 2);
+            }
+
             SizeAndAlignment instanceByteSizeAndAlignment;
-            var instanceSizeAndAlignment = ComputeInstanceSize(type, cumulativeInstanceFieldPos, largestAlignmentRequired, out instanceByteSizeAndAlignment);
+            var instanceSizeAndAlignment = ComputeInstanceSize(type, cumulativeInstanceFieldPos, minAlign, out instanceByteSizeAndAlignment);
 
             ComputedInstanceFieldLayout computedLayout = new ComputedInstanceFieldLayout();
             computedLayout.FieldAlignment = instanceSizeAndAlignment.Alignment;
@@ -686,7 +707,7 @@ namespace Internal.TypeSystem
 
         private static bool IsByValueClass(TypeDesc type)
         {
-            return type.IsValueType && !type.IsPrimitive;
+            return type.IsValueType && !type.IsPrimitive && !type.IsEnum;
         }
 
         private static LayoutInt ComputeBytesUsedInParentType(DefType type)

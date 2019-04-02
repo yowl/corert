@@ -182,11 +182,10 @@ using System.Security.Permissions;
 using System.Text;
 using System.Threading;
 using Microsoft.Win32;
-using Internal.Runtime.Augments;
 
 #if ES_BUILD_STANDALONE
 using EventDescriptor = Microsoft.Diagnostics.Tracing.EventDescriptor;
-using BitOps = Microsoft.Diagnostics.Tracing.Internal.BitOps;
+using BitOperations = Microsoft.Diagnostics.Tracing.Internal.BitOperations;
 #else
 using System.Threading.Tasks;
 #endif
@@ -434,39 +433,6 @@ namespace System.Diagnostics.Tracing
 
             eventSource.SendCommand(null, EventProviderType.ETW, 0, 0, command, true, EventLevel.LogAlways, EventKeywords.None, commandArguments);
         }
-
-#if !ES_BUILD_STANDALONE
-        /// <summary>
-        /// This property allows EventSource code to appropriately handle as "different" 
-        /// activities started on different threads that have not had an activity created on them.
-        /// </summary>
-        internal static Guid InternalCurrentThreadActivityId
-        {
-            get
-            {
-                Guid retval = CurrentThreadActivityId;
-                if (retval == Guid.Empty)
-                {
-                    retval = FallbackActivityId;
-                }
-                return retval;
-            }
-        }
-
-        internal static Guid FallbackActivityId
-        {
-            get
-            {
-                int threadID = Interop.Kernel32.GetCurrentThreadId();
-
-                // Managed thread IDs are more aggressively re-used than native thread IDs,
-                // so we'll use the latter...
-                return new Guid(unchecked((uint)threadID),
-                                unchecked((ushort)s_currentPid), unchecked((ushort)(s_currentPid >> 16)),
-                                0x94, 0x1b, 0x87, 0xd5, 0xa6, 0x5c, 0x36, 0x64);
-            }
-        }
-#endif // !ES_BUILD_STANDALONE
 
         // Error APIs.  (We don't throw by default, but you can probe for status)
         /// <summary>
@@ -2116,7 +2082,7 @@ namespace System.Diagnostics.Tracing
                         SendManifest(manifestBuilder.CreateManifest());
                     }
 
-                    // We use this low level routine to to bypass the enabled checking, since the eventSource itself is only partially inited. 
+                    // We use this low level routine to bypass the enabled checking, since the eventSource itself is only partially inited. 
                     fixed (char* msgStringPtr = msgString)
                     {
                         EventDescriptor descr = new EventDescriptor(0, 0, 0, (byte)level, 0, 0, keywords);
@@ -2729,7 +2695,7 @@ namespace System.Diagnostics.Tracing
                 // for non-BCL EventSource we must assert SecurityPermission
                 new SecurityPermission(PermissionState.Unrestricted).Assert();
 #endif
-                s_currentPid = Interop.Kernel32.GetCurrentProcessId();
+                s_currentPid = Interop.GetCurrentProcessId();
             }
         }
 
@@ -2803,11 +2769,7 @@ namespace System.Diagnostics.Tracing
                     // 5 chunks, so only the largest manifests will hit the pause.
                     if ((envelope.ChunkNumber % 5) == 0)
                     {
-#if ES_BUILD_STANDALONE
                         Thread.Sleep(15);
-#else
-                        RuntimeThread.Sleep(15);
-#endif
                     }
                 }
             }
@@ -3910,7 +3872,7 @@ namespace System.Diagnostics.Tracing
                                 break;
                             if (cur == this)
                             {
-                                // Found our Listener, remove references to to it in the eventSources
+                                // Found our Listener, remove references to it in the eventSources
                                 prev.m_Next = cur.m_Next;       // Remove entry. 
                                 RemoveReferencesToListenerInEventSources(cur);
                                 break;
@@ -4685,7 +4647,11 @@ namespace System.Diagnostics.Tracing
             {
                 if (!m_osThreadId.HasValue)
                 {
-                    m_osThreadId = (long)RuntimeThread.CurrentOSThreadId;
+#if ES_BUILD_STANDALONE
+                    m_osThreadId = (long)Interop.Kernel32.GetCurrentThreadId();
+#else
+                    m_osThreadId = (long)Thread.CurrentOSThreadId;
+#endif
                 }
 
                 return m_osThreadId.Value;
@@ -5400,7 +5366,7 @@ namespace System.Diagnostics.Tracing
         // support). The manifest generated *MUST* have the channels specified in the same order (that's how our computed keywords are mapped
         // to channels by the OS infrastructure).
         // If channelKeyworkds is present, and has keywords bits in the ValidPredefinedChannelKeywords then it is 
-        // assumed that that the keyword for that channel should be that bit.   
+        // assumed that the keyword for that channel should be that bit.   
         // otherwise we allocate a channel bit for the channel.  
         // explicit channel bits are only used by WCF to mimic an existing manifest, 
         // so we don't dont do error checking.  

@@ -6,8 +6,10 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
+using Internal.Text;
 using Internal.TypeSystem;
 using Internal.TypeSystem.Ecma;
+using Internal.TypeSystem.Interop;
 
 using ILCompiler;
 using ILCompiler.DependencyAnalysis;
@@ -65,7 +67,17 @@ namespace Internal.JitInterface
 
         public override int GetHashCode() => Context.GetHashCode();
 
-        public override string ToString() => Context.ToString();
+        public void AppendMangledName(NameMangler nameMangler, Utf8StringBuilder sb)
+        {
+            if (Context is MethodDesc contextAsMethod)
+            {
+                sb.Append(nameMangler.GetMangledMethodName(contextAsMethod));
+            }
+            else
+            {
+                sb.Append(nameMangler.GetMangledTypeName(ContextType));
+            }
+        }
     }
 
     public class RequiresRuntimeJitException : Exception
@@ -781,6 +793,8 @@ namespace Internal.JitInterface
             out TypeDesc constrainedType,
             out MethodDesc originalMethod,
             out TypeDesc exactType,
+            out MethodDesc callerMethod,
+            out EcmaModule callerModule,
             out bool useInstantiatingStub)
         {
 #if DEBUG
@@ -793,6 +807,16 @@ namespace Internal.JitInterface
 
             originalMethod = HandleToObject(pResolvedToken.hMethod);
             TypeDesc type = HandleToObject(pResolvedToken.hClass);
+
+            callerMethod = HandleToObject(callerHandle);
+            if (!_compilation.NodeFactory.CompilationModuleGroup.ContainsMethodBody(callerMethod, unboxingStub: false))
+            {
+                // We must abort inline attempts calling from outside of the version bubble being compiled
+                // because we have no way to remap the token relative to the external module to the current version bubble.
+                throw new RequiresRuntimeJitException(callerMethod.ToString() + " -> " + originalMethod.ToString());
+            }
+
+            callerModule = ((EcmaMethod)callerMethod.GetTypicalMethodDefinition()).Module;
 
             // Spec says that a callvirt lookup ignores static methods. Since static methods
             // can't have the exact same signature as instance methods, a lookup that found
@@ -937,8 +961,6 @@ namespace Internal.JitInterface
                 // we have to apply more restrictive rules
                 // These rules are related to the "inlining rules" as far as the
                 // boundaries of a version bubble are concerned.
-                MethodDesc callerMethod = HandleToObject(callerHandle);
-
                 if (!_compilation.NodeFactory.CompilationModuleGroup.ContainsMethodBody(callerMethod, unboxingStub: false) ||
                     !_compilation.NodeFactory.CompilationModuleGroup.ContainsMethodBody(targetMethod, unboxingStub: false))
                 {
@@ -1039,21 +1061,25 @@ namespace Internal.JitInterface
             // Non-interface dispatches go through the vtable.
             else if (!targetMethod.OwningType.IsInterface)
             {
-                pResult->kind = CORINFO_CALL_KIND.CORINFO_VIRTUALCALL_VTABLE;
+                pResult->kind = CORINFO_CALL_KIND.CORINFO_VIRTUALCALL_STUB;
                 pResult->nullInstanceCheck = true;
 
                 // We'll special virtual calls to target methods in the corelib assembly when compiling in R2R mode, and generate fragile-NI-like callsites for improved performance. We
                 // can do that because today we'll always service the corelib assembly and the runtime in one bundle. Any caller in the corelib version bubble can benefit from this
                 // performance optimization.
-                MethodDesc callerMethod = HandleToObject(callerHandle);
-                if (!MethodInSystemVersionBubble(callerMethod) || !MethodInSystemVersionBubble(targetMethod))
+                /* TODO-PERF, GitHub issue# 7168: uncommenting the conditional statement below enables
+                ** VTABLE-based calls for Corelib (and maybe a larger framework version bubble in the
+                ** future). Making it work requires construction of the method table in managed code
+                ** matching the CoreCLR algorithm (MethodTableBuilder).
+                if (MethodInSystemVersionBubble(callerMethod) && MethodInSystemVersionBubble(targetMethod))
                 {
-                    pResult->kind = CORINFO_CALL_KIND.CORINFO_VIRTUALCALL_STUB;
+                    pResult->kind = CORINFO_CALL_KIND.CORINFO_VIRTUALCALL_VTABLE;
                 }
+                */
             }
             else
             {
-                // Insert explicit null checks for cross-version bubble non-interface calls. 
+                // Insert explicit null checks for cross-version bubble non-interface calls.
                 // It is required to handle null checks properly for non-virtual <-> virtual change between versions
                 pResult->nullInstanceCheck = callVirtCrossingVersionBubble && !targetMethod.OwningType.IsInterface;
                 pResult->kind = CORINFO_CALL_KIND.CORINFO_VIRTUALCALL_LDVIRTFTN;
@@ -1103,6 +1129,8 @@ namespace Internal.JitInterface
             TypeDesc constrainedType;
             MethodDesc originalMethod;
             TypeDesc exactType;
+            MethodDesc callerMethod;
+            EcmaModule callerModule;
             bool useInstantiatingStub;
             ceeInfoGetCallInfo(
                 ref pResolvedToken, 
@@ -1115,6 +1143,8 @@ namespace Internal.JitInterface
                 out constrainedType, 
                 out originalMethod, 
                 out exactType,
+                out callerMethod,
+                out callerModule,
                 out useInstantiatingStub);
 
             if (pResult->thisTransform == CORINFO_THIS_TRANSFORM.CORINFO_BOX_THIS)
@@ -1136,7 +1166,7 @@ namespace Internal.JitInterface
 
                         pResult->codePointerOrStubLookup.constLookup = CreateConstLookupToSymbol(
                             _compilation.SymbolNodeFactory.InterfaceDispatchCell(targetMethod,
-                            new ModuleToken(_tokenContext, (mdToken)pResolvedToken.token),
+                            new ModuleToken(callerModule, (mdToken)pResolvedToken.token),
                             _signatureContext,
                             isUnboxingStub: false,
                             _compilation.NameMangler.GetMangledMethodName(MethodBeingCompiled).ToString()));
@@ -1161,7 +1191,7 @@ namespace Internal.JitInterface
                         // READYTORUN: FUTURE: Direct calls if possible
                         pResult->codePointerOrStubLookup.constLookup = CreateConstLookupToSymbol(
                             _compilation.NodeFactory.ImportedMethodNode(methodToCall, constrainedType, originalMethod,
-                            new ModuleToken(_tokenContext, pResolvedToken.token),
+                            new ModuleToken(callerModule, pResolvedToken.token),
                             isUnboxingStub: false,
                             isInstantiatingStub: useInstantiatingStub,
                             _signatureContext));
@@ -1179,7 +1209,7 @@ namespace Internal.JitInterface
                         bool atypicalCallsite = (flags & CORINFO_CALLINFO_FLAGS.CORINFO_CALLINFO_ATYPICAL_CALLSITE) != 0;
                         pResult->codePointerOrStubLookup.constLookup = CreateConstLookupToSymbol(
                             _compilation.NodeFactory.DynamicHelperCell(
-                                new MethodWithToken(targetMethod, new ModuleToken(_tokenContext, pResolvedToken.token)),
+                                new MethodWithToken(targetMethod, new ModuleToken(callerModule, pResolvedToken.token)),
                                 _signatureContext));
 
                         Debug.Assert(!pResult->sig.hasTypeArg());
@@ -1207,7 +1237,7 @@ namespace Internal.JitInterface
                     {
                         pResult->instParamLookup = CreateConstLookupToSymbol(_compilation.SymbolNodeFactory.ReadyToRunHelper(
                             ReadyToRunHelperId.MethodDictionary,
-                            new MethodWithToken(targetMethod, new ModuleToken(_tokenContext, pResolvedToken.token)),
+                            new MethodWithToken(targetMethod, new ModuleToken(callerModule, pResolvedToken.token)),
                             signatureContext: _signatureContext));
                     }
                     else
@@ -1474,6 +1504,122 @@ namespace Internal.JitInterface
             // TODO: READYTORUN FUTURE: Handle this case correctly
             MethodDesc methodDesc = HandleToObject(handle);
             throw new RequiresRuntimeJitException("embedMethodHandle: " + methodDesc.ToString());
+        }
+
+        private bool IsLayoutFixedInCurrentVersionBubble(TypeDesc type)
+        {
+            // Primitive types and enums have fixed layout
+            if (type.IsPrimitive || type.IsEnum)
+            {
+                return true;
+            }
+
+            if (!_compilation.NodeFactory.CompilationModuleGroup.ContainsType(type))
+            {
+                if (!type.IsValueType)
+                {
+                    // Eventually, we may respect the non-versionable attribute for reference types too. For now, we are going
+                    // to play it safe and ignore it.
+                    return false;
+                }
+
+                // Valuetypes with non-versionable attribute are candidates for fixed layout. Reject the rest.
+                return type is MetadataType metadataType && metadataType.HasCustomAttribute("System.Runtime.Versioning", "NonVersionableAttribute");
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Is field layout of the inheritance chain fixed within the current version bubble?
+        /// </summary>
+        private bool IsInheritanceChainLayoutFixedInCurrentVersionBubble(TypeDesc type)
+        {
+            // This method is not expected to be called for value types
+            Debug.Assert(!type.IsValueType);
+
+            while (!type.IsObject && type != null)
+            {
+                if (!IsLayoutFixedInCurrentVersionBubble(type))
+                {
+                    return false;
+                }
+                type = type.BaseType;
+            }
+
+            return true;
+        }
+
+        private bool HasLayoutMetadata(TypeDesc type)
+        {
+            if (type.IsValueType && (MarshalUtils.IsBlittableType(type) || MarshalUtils.IsManagedSequentialType(type)))
+            {
+                // Sequential layout
+                return true;
+            }
+            else
+            {
+                // <BUGNUM>workaround for B#104780 - VC fails to set SequentialLayout on some classes
+                // with ClassSize. Too late to fix compiler for V1.
+                //
+                // To compensate, we treat AutoLayout classes as Sequential if they
+                // meet all of the following criteria:
+                //
+                //    - ClassSize present and nonzero.
+                //    - No instance fields declared
+                //    - Base class is System.ValueType.
+                //</BUGNUM>
+                return type.BaseType.IsValueType && !type.GetFields().GetEnumerator().MoveNext();
+            }
+        }
+
+        private void EncodeFieldBaseOffset(FieldDesc field, CORINFO_FIELD_INFO* pResult)
+        {
+            TypeDesc pMT = field.OwningType;
+
+            if (pResult->fieldAccessor != CORINFO_FIELD_ACCESSOR.CORINFO_FIELD_INSTANCE)
+            {
+                // No-op except for instance fields
+            }
+            else if (!IsLayoutFixedInCurrentVersionBubble(pMT))
+            {
+                if (pMT.IsValueType)
+                {
+                    // ENCODE_CHECK_FIELD_OFFSET
+                    // TODO: root field check import
+                }
+                else
+                {
+                    // ENCODE_FIELD_OFFSET
+                    pResult->offset = 0;
+                    pResult->fieldAccessor = CORINFO_FIELD_ACCESSOR.CORINFO_FIELD_INSTANCE_WITH_BASE;
+                    pResult->fieldLookup = CreateConstLookupToSymbol(_compilation.SymbolNodeFactory.FieldOffset(field, _signatureContext));
+                }
+            }
+            else if (pMT.IsValueType)
+            {
+                // ENCODE_NONE
+            }
+            else if (IsInheritanceChainLayoutFixedInCurrentVersionBubble(pMT.BaseType))
+            {
+                // ENCODE_NONE
+            }
+            else if (HasLayoutMetadata(pMT))
+            {
+                // We won't try to be smart for classes with layout.
+                // They are complex to get right, and very rare anyway.
+                // ENCODE_FIELD_OFFSET
+                pResult->offset = 0;
+                pResult->fieldAccessor = CORINFO_FIELD_ACCESSOR.CORINFO_FIELD_INSTANCE_WITH_BASE;
+                pResult->fieldLookup = CreateConstLookupToSymbol(_compilation.SymbolNodeFactory.FieldOffset(field, _signatureContext));
+            }
+            else
+            {
+                // ENCODE_FIELD_BASE_OFFSET
+                pResult->offset -= (uint)pMT.BaseType.InstanceByteCount.AsInt;
+                pResult->fieldAccessor = CORINFO_FIELD_ACCESSOR.CORINFO_FIELD_INSTANCE_WITH_BASE;
+                pResult->fieldLookup = CreateConstLookupToSymbol(_compilation.SymbolNodeFactory.FieldBaseOffset(field.OwningType, _signatureContext));
+            }
         }
     }
 }

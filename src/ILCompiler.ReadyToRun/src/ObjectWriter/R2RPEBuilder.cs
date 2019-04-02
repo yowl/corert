@@ -125,6 +125,11 @@ namespace ILCompiler.PEWriter
         private int _corHeaderFileOffset;
 
         /// <summary>
+        /// File offset of the metadata blob in the output file.
+        /// </summary>
+        private int _metadataFileOffset;
+
+        /// <summary>
         /// COR header decoded from the input MSIL file.
         /// </summary>
         public CorHeaderBuilder CorHeader => _corHeaderBuilder;
@@ -280,6 +285,28 @@ namespace ILCompiler.PEWriter
         }
 
         /// <summary>
+        /// Relocate the contents of the metadata blob, which contains two tables with embedded RVAs.
+        /// </summary>
+        public void RelocateMetadataBlob(Stream outputStream)
+        {
+            long initialStreamLength = outputStream.Length;
+            outputStream.Position = 0;
+            
+            // The output is already a valid PE file so use that to access the output metadata blob
+            PEReader peReader = new PEReader(outputStream);
+
+            // Create a patched up metadata blob whose RVAs are correct w.r.t the output image
+            BlobBuilder relocatedMetadataBlob = MetadataRvaFixupBuilder.Relocate(peReader, RelocateRVA);
+
+            Debug.Assert(_metadataFileOffset > 0);
+            outputStream.Position = _metadataFileOffset;
+
+            // Splice the new metadata blob back into the output stream
+            relocatedMetadataBlob.WriteContentTo(outputStream);
+            Debug.Assert(initialStreamLength == outputStream.Length);
+        }
+
+        /// <summary>
         /// Provide an array of sections for the PEBuilder to use.
         /// </summary>
         protected override ImmutableArray<Section> CreateSections()
@@ -332,15 +359,21 @@ namespace ILCompiler.PEWriter
                     {
                         sectionDataBuilder = new BlobBuilder();
                         sectionDataBuilder.WriteBytes(inputSectionReader.CurrentPointer, inputSectionReader.RemainingBytes);
-                        
-                        int corHeaderRvaDelta = _peReader.PEHeaders.PEHeader.CorHeaderTableDirectory.RelativeVirtualAddress - sectionHeader.VirtualAddress;
-                        if (corHeaderRvaDelta >= 0 && corHeaderRvaDelta < bytesToRead)
-                        {
-                            // Assume COR header resides in this section, deserialize it and store its location
-                            _corHeaderFileOffset = location.PointerToRawData + corHeaderRvaDelta;
-                            inputSectionReader.Offset = corHeaderRvaDelta;
-                            _corHeaderBuilder = new CorHeaderBuilder(ref inputSectionReader);
-                        }
+                    }
+
+                    int metadataRvaDelta = _peReader.PEHeaders.CorHeader.MetadataDirectory.RelativeVirtualAddress - sectionHeader.VirtualAddress;
+                    if (metadataRvaDelta >= 0 && metadataRvaDelta < bytesToRead)
+                    {
+                        _metadataFileOffset = location.PointerToRawData + metadataRvaDelta;
+                    }
+
+                    int corHeaderRvaDelta = _peReader.PEHeaders.PEHeader.CorHeaderTableDirectory.RelativeVirtualAddress - sectionHeader.VirtualAddress;
+                    if (corHeaderRvaDelta >= 0 && corHeaderRvaDelta < bytesToRead)
+                    {
+                        // Assume COR header resides in this section, deserialize it and store its location
+                        _corHeaderFileOffset = location.PointerToRawData + corHeaderRvaDelta;
+                        inputSectionReader.Offset = corHeaderRvaDelta;
+                        _corHeaderBuilder = new CorHeaderBuilder(ref inputSectionReader);
                     }
 
                     int alignedSize = sectionHeader.VirtualSize;

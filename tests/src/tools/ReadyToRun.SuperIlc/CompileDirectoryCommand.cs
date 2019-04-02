@@ -3,6 +3,8 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 
@@ -10,45 +12,52 @@ namespace ReadyToRun.SuperIlc
 {
     class CompileDirectoryCommand
     {
-        public static int CompileDirectory(DirectoryInfo toolDirectory, DirectoryInfo inputDirectory, DirectoryInfo outputDirectory, bool crossgen, bool cpaot, DirectoryInfo[] referencePath)
+        public static int CompileDirectory(BuildOptions options)
         {
-            if (toolDirectory == null)
+            if (options.InputDirectory == null)
             {
-                Console.WriteLine("--tool-directory is a required argument.");
+                Console.Error.WriteLine("--input-directory is a required argument.");
                 return 1;
             }
 
-            if (inputDirectory == null)
+            if (options.OutputDirectory == null)
             {
-                Console.WriteLine("--input-directory is a required argument.");
+                options.OutputDirectory = options.InputDirectory;
+            }
+
+            if (options.OutputDirectory.IsParentOf(options.InputDirectory))
+            {
+                Console.Error.WriteLine("Error: Input and output folders must be distinct, and the output directory (which gets deleted) better not be a parent of the input directory.");
                 return 1;
             }
 
-            if (outputDirectory == null)
+            IEnumerable<string> referencePaths = options.ReferencePaths();
+            string coreRunPath = SuperIlcHelpers.FindCoreRun(referencePaths);
+
+            IEnumerable<CompilerRunner> runners = options.CompilerRunners();
+
+            PathExtensions.DeleteOutputFolders(options.OutputDirectory.FullName, recursive: false);
+
+            Application application = Application.FromDirectory(options.InputDirectory.FullName, runners, options.OutputDirectory.FullName, options.NoExe, options.NoEtw, coreRunPath);
+            if (application == null)
             {
-                Console.WriteLine("--output-directory is a required argument.");
-                return 1;
+                Console.Error.WriteLine($"No managed app found in {options.InputDirectory.FullName}");
             }
 
-            CompilerRunner runner;
-            if (cpaot)
-            {
-                runner = new CpaotRunner(toolDirectory.ToString(), inputDirectory.ToString(), outputDirectory.ToString(), referencePath?.Select(x => x.ToString())?.ToList());
-            }
-            else
-            {
-                runner = new CrossgenRunner(toolDirectory.ToString(), inputDirectory.ToString(), outputDirectory.ToString(), referencePath?.Select(x => x.ToString())?.ToList());
-            }
+            string timeStamp = DateTime.Now.ToString("MMdd-hhmm");
+            string applicationSetLogPath = Path.Combine(options.InputDirectory.ToString(), "directory-" + timeStamp + ".log");
 
-            bool success = true;
-            foreach (var assemblyToOptimize in ComputeManagedAssemblies.GetManagedAssembliesInFolder(inputDirectory.ToString()))
+            using (ApplicationSet applicationSet = new ApplicationSet(new Application[] { application }, runners, coreRunPath, applicationSetLogPath))
             {
-                // Compile all assemblies in the input folder
-                if (!runner.CompileAssembly(assemblyToOptimize))
-                    success = false;
-            }
+                bool success = applicationSet.Build(coreRunPath, runners, applicationSetLogPath);
 
-            return success ? 0 : 1;
+                if (!options.NoCleanup)
+                {
+                    PathExtensions.DeleteOutputFolders(options.OutputDirectory.FullName, recursive: false);
+                }
+
+                return success ? 0 : 1;
+            }
         }
     }    
 }
