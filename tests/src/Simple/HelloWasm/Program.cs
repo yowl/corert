@@ -907,9 +907,9 @@ internal static class Program
 
         TestTryCatchThrowException(new Exception());
 
-        TestTryCatchException();
+        TestTryCatchExceptionFromCall();
 
-        TestCatchExceptionType(new Exception());
+        TestCatchExceptionType();
 
         TestTryFinallyThrowException();
     }
@@ -973,7 +973,7 @@ internal static class Program
         }
     }
 
-    private static void TestTryCatchException()
+    private static void TestTryCatchExceptionFromCall()
     {
         bool caught = false;
         StartTest("Catch called when exception thrown from call");
@@ -988,9 +988,9 @@ internal static class Program
         EndTest(caught);
     }
 
-    private static void TestCatchExceptionType(Exception e)
+    private static void TestCatchExceptionType()
     {
-        int i = 0;
+        int i = 1;
         StartTest("Catch called for exception type and order");
         try
         {
@@ -998,17 +998,20 @@ internal static class Program
         }
         catch (ArgumentException)
         {
-            i += 1;
-        }
-        catch (NullReferenceException)
-        {
             i += 10;
+        }
+        catch (NullReferenceException e)
+        {
+            if (e.Message == "test")
+            {
+                i += 100;
+            }
         }
         catch (Exception)
         {
-            i += 100;
+            i += 1000;
         }
-        EndTest(i == 10);
+        EndTest(i == 101);
     }
 
     private static void ThrowException(Exception e)

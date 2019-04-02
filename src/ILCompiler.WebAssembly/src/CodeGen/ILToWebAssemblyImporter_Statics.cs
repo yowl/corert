@@ -148,24 +148,17 @@ namespace Internal.IL
                     LLVM.PointerType(LLVM.Int8Type(), 0), // shadow stack
                     LLVM.PointerType(LLVM.Int8Type(), 0)
                 }, false));
-            var block = LLVM.AppendBasicBlock(LlvmCatchFunclet, "GenericCatch");
+            var block = LLVM.AppendBasicBlock(LlvmCatchFunclet, "Catch");
             LLVMBuilderRef funcletBuilder = LLVM.CreateBuilder();
             LLVM.PositionBuilderAtEnd(funcletBuilder, block);
-            //            EmitTrapCall(funcletBuilder);
 
-            var catchFunclet = LLVM.GetParam(LlvmCatchFunclet, 1);
-            var castShadowStack = LLVM.GetParam(LlvmCatchFunclet, 2);  
-            var mainBuilder = _builder;  // if not doing the CallRuntime and remove this
-            var currentFunclet = _currentFunclet;
-            _currentFunclet = LlvmCatchFunclet;
-            _builder = funcletBuilder;
+            LLVMValueRef ex = LLVM.GetParam(LlvmCatchFunclet, 0);
+            LLVMValueRef catchFunclet = LLVM.GetParam(LlvmCatchFunclet, 1);
+            LLVMValueRef castShadowStack = LLVM.GetParam(LlvmCatchFunclet, 2);
 
             List<LLVMValueRef> llvmArgs = new List<LLVMValueRef>();
             llvmArgs.Add(castShadowStack);
-
-            LLVMValueRef leaveToILOffset = LLVM.BuildCall(_builder, catchFunclet, llvmArgs.ToArray(), string.Empty);
-            _builder = mainBuilder;
-            _currentFunclet = currentFunclet;
+            LLVMValueRef leaveToILOffset = LLVM.BuildCall(funcletBuilder, catchFunclet, llvmArgs.ToArray(), string.Empty);
             LLVM.BuildRet(funcletBuilder, leaveToILOffset);
             LLVM.DisposeBuilder(funcletBuilder);
         }

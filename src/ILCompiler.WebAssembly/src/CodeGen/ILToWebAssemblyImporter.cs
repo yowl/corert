@@ -2366,6 +2366,7 @@ namespace Internal.IL
             var leaveDestination = LLVM.BuildAlloca(landingPadBuilder, LLVMTypeRef.Int32Type(), "leaveDest"); // create a variable to store the operand of the leave as we can't use the result of the call directly due to domination/branches
             LLVM.BuildStore(landingPadBuilder, LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0, false), leaveDestination); 
             var foundCatchBlock = LLVM.AppendBasicBlock(_currentFunclet, "LPFoundCatch");
+            // If it didn't find a catch block, we can rethrow (resume in LLVM) the C++ exception to continue the stack walk.
             var noCatch = LLVM.BuildICmp(landingPadBuilder, LLVMIntPredicate.LLVMIntEQ, LLVM.ConstInt(LLVMTypeRef.Int32Type(), 0, false),
                 handler.ValueAsInt32(landingPadBuilder, false), "testCatch");
             var secondPassBlock = LLVM.AppendBasicBlock(_currentFunclet, "SecondPass");
@@ -2374,12 +2375,10 @@ namespace Internal.IL
 
             LLVM.PositionBuilderAtEnd(landingPadBuilder, foundCatchBlock);
 
-            //
+            // put the exception in the spilled slot, exception slot is at 0, but will this work for nested exceptions?
+            var addressValue = CastIfNecessary(landingPadBuilder, LoadVarAddress(_spilledExpressions[0].LocalIndex, LocalVarKind.Temp, out TypeDesc unused), LLVM.PointerType(LLVMTypeRef.Int32Type(), 0));
+            LLVM.BuildStore(landingPadBuilder, managedPtr, addressValue);
 
-            // If it didn't find a catch block, we can rethrow (resume in LLVM) the C++ exception to continue the stack walk.
-
-            //                internal extern static unsafe IntPtr RhpCallCatchFunclet(
-            //                    object exceptionObj, byte* pHandlerIP, void* pvRegDisplay, ref EH.ExInfo exInfo);
             var handlerFunc = LLVM.BuildLoad(landingPadBuilder, handlerFuncPtr, "handlerFunc");
             LLVMValueRef[] callCatchArgs = new LLVMValueRef[]
                                   {
@@ -2411,24 +2410,7 @@ namespace Internal.IL
 
             // Use the else as the path for no exception handler found for this exception
             var @switch = LLVM.BuildSwitch(landingPadBuilder, CastIfNecessary(landingPadBuilder, leaveDestination, LLVMTypeRef.Int32Type()), GetOrCreateUnreachableBlock(), 1 /* number of cases, but fortunately this doesn't seem to make much difference */);
-//            var passedCurrent = false;
-//            for (var i = 0; i < _basicBlocks.Length; i++)
-//            {
-//                var basicBlock = _basicBlocks[i];
-//                if (basicBlock == null) continue;
-//                if (!passedCurrent)
-//                {
-//                    if (basicBlock == _currentBasicBlock) // cant leave from a catch and go backwards presumably
-//                    {
-//                        passedCurrent = true;
-//                    }
-//                    continue;
-//                }
-//                if (!basicBlock.HandlerStart && !basicBlock.FilterStart)
-//                {
-//                    LLVM.AddCase(@switch, BuildConstInt32(i), GetLLVMBasicBlockForBlock(basicBlock));
-//                }
-//            }
+
             if (_leaveTargets != null)
             {
                 foreach (var leaveTarget in _leaveTargets)
