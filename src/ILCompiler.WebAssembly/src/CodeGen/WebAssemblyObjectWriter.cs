@@ -6,19 +6,16 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 
 using ILCompiler.DependencyAnalysisFramework;
 
 using Internal.Text;
 using Internal.TypeSystem;
-using Internal.TypeSystem.TypesDebugInfo;
-using Internal.JitInterface;
 using ObjectData = ILCompiler.DependencyAnalysis.ObjectNode.ObjectData;
 
 using LLVMSharp;
 using ILCompiler.CodeGen;
-using System.Linq;
+using ILCompiler.Compiler.DependencyAnalysis;
 using Internal.IL;
 
 namespace ILCompiler.DependencyAnalysis
@@ -30,14 +27,13 @@ namespace ILCompiler.DependencyAnalysis
     {
         public static string GetBaseSymbolName(ISymbolNode symbol, NameMangler nameMangler, bool objectWriterUse = false)
         {
-            if (symbol is WebAssemblyMethodCodeNode)
+            if (symbol is WebAssemblyMethodCodeNode || symbol is WebAssemblyBlockRefNode)
             {
                 return symbol.GetMangledName(nameMangler);
             }
 
             if (symbol is ObjectNode)
             {
-                ObjectNode objNode = (ObjectNode)symbol;
                 ISymbolDefinitionNode symbolDefNode = (ISymbolDefinitionNode)symbol;
                 if (symbolDefNode.Offset == 0)
                 {
@@ -100,7 +96,7 @@ namespace ILCompiler.DependencyAnalysis
 
         private static int GetNumericOffsetFromBaseSymbolValue(ISymbolNode symbol)
         {
-            if (symbol is WebAssemblyMethodCodeNode)
+            if (symbol is WebAssemblyMethodCodeNode || symbol is WebAssemblyBlockRefNode)
             {
                 return 0;
             }
@@ -186,11 +182,12 @@ namespace ILCompiler.DependencyAnalysis
 
             EmitDebugMetadata();
 
-            LLVM.WriteBitcodeToFile(Module, _objectFilePath);
 #if DEBUG
             LLVM.PrintModuleToFile(Module, Path.ChangeExtension(_objectFilePath, ".txt"), out string unused2);
 #endif //DEBUG
             LLVM.VerifyModule(Module, LLVMVerifierFailureAction.LLVMAbortProcessAction, out string unused);
+
+            LLVM.WriteBitcodeToFile(Module, _objectFilePath);
 
             //throw new NotImplementedException(); // This function isn't complete
         }
@@ -387,16 +384,8 @@ namespace ILCompiler.DependencyAnalysis
                     if (ObjectSymbolRefs.TryGetValue(curOffset, out symbolRef))
                     {
                         LLVMValueRef pointedAtValue = symbolRef.ToLLVMValueRef(module);
-                        //TODO: why did this come back null
-                        if (pointedAtValue.Pointer != IntPtr.Zero)
-                        {
-                            var ptrValue = LLVM.ConstBitCast(pointedAtValue, intPtrType);
-                            entries.Add(ptrValue);
-                        }
-                        else
-                        {
-                            entries.Add(LLVM.ConstPointerNull(intPtrType));
-                        }
+                        var ptrValue = LLVM.ConstBitCast(pointedAtValue, intPtrType);
+                        entries.Add(ptrValue);
                     }
                     else
                     {
@@ -424,7 +413,6 @@ namespace ILCompiler.DependencyAnalysis
 
         public void DoneObjectNode()
         {
-            int pointerSize = _nodeFactory.Target.PointerSize;
             EmitAlignment(_nodeFactory.Target.PointerSize);
             Debug.Assert(_nodeFactory.Target.PointerSize == 4);
             int countOfPointerSizedElements = _currentObjectData.Count / _nodeFactory.Target.PointerSize;
@@ -586,7 +574,7 @@ namespace ILCompiler.DependencyAnalysis
                 return pointerSize;
             }
             int offsetFromBase = GetNumericOffsetFromBaseSymbolValue(target);
-            return EmitSymbolRef(realSymbolName, offsetFromBase, target is WebAssemblyMethodCodeNode, relocType, delta);
+            return EmitSymbolRef(realSymbolName, offsetFromBase, target is WebAssemblyMethodCodeNode || target is WebAssemblyBlockRefNode, relocType, delta);
         }
 
         public void EmitBlobWithRelocs(byte[] blob, Relocation[] relocs)
@@ -824,7 +812,6 @@ namespace ILCompiler.DependencyAnalysis
                     {
                         // Emit symbol definitions if necessary
                         objectWriter.EmitSymbolDefinition(i);
-
                         if (i == nextRelocOffset)
                         {
                             Relocation reloc = relocs[nextRelocIndex];
@@ -837,7 +824,16 @@ namespace ILCompiler.DependencyAnalysis
                                     delta = Relocation.ReadValue(reloc.RelocType, location);
                                 }
                             }
-                            int size = objectWriter.EmitSymbolReference(reloc.Target, (int)delta, reloc.RelocType);
+                            ISymbolNode symbolToWrite = reloc.Target;
+                            var eeTypeNode = reloc.Target as EETypeNode;
+                            if (eeTypeNode != null)
+                            {
+                                if (eeTypeNode.ShouldSkipEmittingObjectNode(factory))
+                                {
+                                    symbolToWrite = factory.ConstructedTypeSymbol(eeTypeNode.Type);
+                                }
+                            }
+                            int size = objectWriter.EmitSymbolReference(symbolToWrite, (int)delta, reloc.RelocType);
 
                             /*
                              WebAssembly has no thumb 

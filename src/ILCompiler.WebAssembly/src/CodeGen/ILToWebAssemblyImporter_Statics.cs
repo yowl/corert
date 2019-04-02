@@ -84,7 +84,7 @@ namespace Internal.IL
                     ilImporter.SetParameterNames(parameters);*/
 
                 ilImporter.Import();
-
+                ilImporter.CreateEHData(methodCodeNodeNeedingCode);
                 methodCodeNodeNeedingCode.CompilationCompleted = true;
             }
             catch (Exception e)
@@ -115,7 +115,13 @@ namespace Internal.IL
         static LLVMValueRef DebugtrapFunction = default(LLVMValueRef);
         static LLVMValueRef TrapFunction = default(LLVMValueRef);
         static LLVMValueRef DoNothingFunction = default(LLVMValueRef);
+        static LLVMValueRef RhpThrowEx = default(LLVMValueRef);
+        static LLVMValueRef RhpCallCatchFunclet = default(LLVMValueRef);
+        static LLVMValueRef LlvmCatchFunclet = default(LLVMValueRef);
+        static LLVMValueRef LlvmFinallyFunclet = default(LLVMValueRef);
         static LLVMValueRef NullRefFunction = default(LLVMValueRef);
+        public static LLVMValueRef GxxPersonality = default(LLVMValueRef);
+        public static LLVMTypeRef GxxPersonalityType = default(LLVMTypeRef);
 
         private static IEnumerable<string> GetParameterNamesForMethod(MethodDesc method)
         {
@@ -132,5 +138,59 @@ namespace Internal.IL
             return null;
         }
 
+        void BuildCatchFunclet()
+        {
+            LlvmCatchFunclet = LLVM.AddFunction(Module, "LlvmCatchFunclet", LLVM.FunctionType(LLVM.Int32Type(),
+                new LLVMTypeRef[]
+                {
+                    LLVM.PointerType(LLVM.Int8Type(), 0),
+                    LLVM.PointerType(LLVM.FunctionType(LLVMTypeRef.Int32Type(), new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0)}, false), 0), // pHandlerIP - catch funcletAddress
+                    LLVM.PointerType(LLVM.Int8Type(), 0), // shadow stack
+                    LLVM.PointerType(LLVM.Int8Type(), 0)
+                }, false));
+            var block = LLVM.AppendBasicBlock(LlvmCatchFunclet, "Catch");
+            LLVMBuilderRef funcletBuilder = LLVM.CreateBuilder();
+            LLVM.PositionBuilderAtEnd(funcletBuilder, block);
+
+            LLVMValueRef ex = LLVM.GetParam(LlvmCatchFunclet, 0);
+            LLVMValueRef catchFunclet = LLVM.GetParam(LlvmCatchFunclet, 1);
+            LLVMValueRef castShadowStack = LLVM.GetParam(LlvmCatchFunclet, 2);
+
+            List<LLVMValueRef> llvmArgs = new List<LLVMValueRef>();
+            llvmArgs.Add(castShadowStack);
+            LLVMValueRef leaveToILOffset = LLVM.BuildCall(funcletBuilder, catchFunclet, llvmArgs.ToArray(), string.Empty);
+            LLVM.BuildRet(funcletBuilder, leaveToILOffset);
+            LLVM.DisposeBuilder(funcletBuilder);
+        }
+
+        void BuildFinallyFunclet()
+        {
+            LlvmFinallyFunclet = LLVM.AddFunction(Module, "LlvmFinallyFunclet", LLVM.FunctionType(LLVM.VoidType(),
+                new LLVMTypeRef[]
+                {
+                    LLVM.PointerType(LLVM.FunctionType(LLVMTypeRef.VoidType(), new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0)}, false), 0), // finallyHandler
+                    LLVM.PointerType(LLVM.Int8Type(), 0), // shadow stack
+                }, false));
+            var block = LLVM.AppendBasicBlock(LlvmFinallyFunclet, "GenericFinally");
+            LLVMBuilderRef funcletBuilder = LLVM.CreateBuilder();
+            LLVM.PositionBuilderAtEnd(funcletBuilder, block);
+            //            EmitTrapCall(funcletBuilder);
+
+            var finallyFunclet = LLVM.GetParam(LlvmFinallyFunclet, 0);
+            var castShadowStack = LLVM.GetParam(LlvmFinallyFunclet, 1);
+            var mainBuilder = _builder;  // if not doing the CallRuntime and remove this
+            var currentFunclet = _currentFunclet;
+            _currentFunclet = LlvmFinallyFunclet;
+            _builder = funcletBuilder;
+
+            List<LLVMValueRef> llvmArgs = new List<LLVMValueRef>();
+            llvmArgs.Add(castShadowStack);
+
+            LLVM.BuildCall(_builder, finallyFunclet, llvmArgs.ToArray(), string.Empty);
+            _builder = mainBuilder;
+            _currentFunclet = currentFunclet;
+            LLVM.BuildRetVoid(funcletBuilder);
+            LLVM.DisposeBuilder(funcletBuilder);
+        }
     }
 }

@@ -25,9 +25,10 @@ namespace ILCompiler
             IEnumerable<ICompilationRootProvider> roots,
             ILProvider ilProvider,
             DebugInformationProvider debugInformationProvider,
+            PInvokeILEmitterConfiguration pinvokePolicy,
             Logger logger,
             CppCodegenConfigProvider options)
-            : base(dependencyGraph, nodeFactory, GetCompilationRoots(roots, nodeFactory), ilProvider, debugInformationProvider, null, logger)
+            : base(dependencyGraph, nodeFactory, GetCompilationRoots(roots, nodeFactory), ilProvider, debugInformationProvider, null, pinvokePolicy, logger)
         {
             Options = options;
         }
@@ -53,9 +54,22 @@ namespace ILCompiler
 
         protected override void ComputeDependencyNodeDependencies(List<DependencyNodeCore<NodeFactory>> obj)
         {
-            foreach (CppMethodCodeNode methodCodeNodeNeedingCode in obj)
+            foreach (var dependency in obj)
             {
-                _cppWriter.CompileMethod(methodCodeNodeNeedingCode);
+                var methodCodeNodeNeedingCode = dependency as CppMethodCodeNode;
+                if (methodCodeNodeNeedingCode == null)
+                {
+                    // To compute dependencies of the shadow method that tracks dictionary
+                    // dependencies we need to ensure there is code for the canonical method body.
+                    var dependencyMethod = (ShadowConcreteMethodNode)dependency;
+                    methodCodeNodeNeedingCode = (CppMethodCodeNode)dependencyMethod.CanonicalMethodNode;
+                }
+
+                // We might have already compiled this method.
+                if (methodCodeNodeNeedingCode.StaticDependenciesAreComputed)
+                    continue;
+
+                _cppWriter.CompileMethod((CppMethodCodeNode)methodCodeNodeNeedingCode);
             }
         }
 

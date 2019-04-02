@@ -12,7 +12,7 @@
       <Version>4.3.0</Version>
     </PackageReference>
     <PackageReference Include="System.Reflection.Metadata">
-      <Version>1.4.2</Version>
+      <Version>$(SystemReflectionMetadataVersion)</Version>
     </PackageReference>
     <PackageReference Include="Microsoft.DiaSymReader">
       <Version>1.0.8</Version>
@@ -75,6 +75,9 @@
     </Compile>
     <Compile Include="..\..\Common\src\TypeSystem\Canon\TypeSystemContext.Canon.cs">
       <Link>TypeSystem\Canon\TypeSystemContext.Canon.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Common\src\TypeSystem\CodeGen\FieldDesc.CodeGen.cs">
+      <Link>TypeSystem\CodeGen\FieldDesc.CodeGen.cs</Link>
     </Compile>
     <Compile Include="..\..\Common\src\TypeSystem\CodeGen\MethodDesc.CodeGen.cs">
       <Link>TypeSystem\CodeGen\MethodDesc.CodeGen.cs</Link>
@@ -220,6 +223,9 @@
     <Compile Include="..\..\Common\src\TypeSystem\Common\TargetDetails.cs">
       <Link>TypeSystem\Common\TargetDetails.cs</Link>
     </Compile>
+    <Compile Include="..\..\Common\src\TypeSystem\Common\TargetDetails.ToString.cs">
+      <Link>TypeSystem\Common\TargetDetails.ToString.cs</Link>
+    </Compile>
     <Compile Include="..\..\Common\src\TypeSystem\Common\ThreadSafeFlags.cs">
       <Link>TypeSystem\Common\ThreadSafeFlags.cs</Link>
     </Compile>
@@ -295,6 +301,12 @@
     <Compile Include="..\..\Common\src\TypeSystem\Ecma\EcmaField.Sorting.cs">
       <Link>Ecma\EcmaField.Sorting.cs</Link>
     </Compile>
+    <Compile Include="..\..\Common\src\TypeSystem\Ecma\EcmaField.CodeGen.cs">
+      <Link>Ecma\EcmaField.CodeGen.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Common\src\TypeSystem\Ecma\EcmaField.Serialization.cs">
+      <Link>Ecma\EcmaField.Serialization.cs</Link>
+    </Compile>
     <Compile Include="..\..\Common\src\TypeSystem\Ecma\EcmaGenericParameter.Sorting.cs">
       <Link>Ecma\EcmaGenericParameter.Sorting.cs</Link>
     </Compile>
@@ -303,6 +315,9 @@
     </Compile>
     <Compile Include="..\..\Common\src\TypeSystem\Ecma\EcmaModule.Sorting.cs">
       <Link>Ecma\EcmaModule.Sorting.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Common\src\TypeSystem\Ecma\EcmaType.Serialization.cs">
+      <Link>Ecma\EcmaType.Serialization.cs</Link>
     </Compile>
     <Compile Include="..\..\Common\src\TypeSystem\Ecma\EcmaType.Sorting.cs">
       <Link>Ecma\EcmaType.Sorting.cs</Link>
@@ -448,6 +463,9 @@
     <Compile Include="..\..\Common\src\TypeSystem\Interop\IL\MarshalHelpers.cs">
       <Link>Interop\IL\MarshalHelpers.cs</Link>
     </Compile>
+    <Compile Include="..\..\Common\src\TypeSystem\Interop\IL\MarshalUtils.cs">
+      <Link>Interop\IL\MarshalUtils.cs</Link>
+    </Compile>
     <Compile Include="..\..\Common\src\TypeSystem\Interop\IL\Marshaller.cs">
       <Link>Interop\IL\Marshaller.cs</Link>
     </Compile>
@@ -510,6 +528,12 @@
     </Compile>
     <Compile Include="..\..\Common\src\TypeSystem\Interop\IL\NativeStructType.cs">
       <Link>TypeSystem\Interop\IL\NativeStructType.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Common\src\TypeSystem\Serialization\FieldDesc.Serialization.cs">
+      <Link>TypeSystem\CodeGen\FieldDesc.Serialization.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Common\src\TypeSystem\Serialization\TypeDesc.Serialization.cs">
+      <Link>TypeSystem\CodeGen\TypeDesc.Serialization.cs</Link>
     </Compile>
     <Compile Include="..\..\Common\src\TypeSystem\Sorting\FieldDesc.Sorting.cs">
       <Link>TypeSystem\Sorting\FieldDesc.Sorting.cs</Link>

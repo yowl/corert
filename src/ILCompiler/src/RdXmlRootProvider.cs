@@ -72,7 +72,7 @@ namespace ILCompiler
 
                 foreach (TypeDesc type in ((EcmaModule)assembly).GetAllTypes())
                 {
-                    RootType(rootProvider, type);
+                    RootType(rootProvider, type, "RD.XML root");
                 }
             }
 
@@ -102,8 +102,8 @@ namespace ILCompiler
             {
                 if (dynamicDegreeAttribute.Value != "Required All")
                     throw new NotSupportedException();
-                
-                RootType(rootProvider, type);
+
+                RootType(rootProvider, type, "RD.XML root");
             }
 
             foreach (var element in typeElement.Elements())
@@ -150,30 +150,62 @@ namespace ILCompiler
                 method = method.MakeInstantiatedMethod(methodInst);
             }
 
-            RootMethod(rootProvider, method);
+            RootMethod(rootProvider, method, "RD.XML root");
         }
 
-        private void RootType(IRootingServiceProvider rootProvider, TypeDesc type)
+        public static void RootType(IRootingServiceProvider rootProvider, TypeDesc type, string reason)
         {
-            rootProvider.AddCompilationRoot(type, "RD.XML root");
+            rootProvider.AddCompilationRoot(type, reason);
 
+            // Instantiate generic types over something that will be useful at runtime
             if (type.IsGenericDefinition)
-                return;
-            
+            {
+                Instantiation inst = GetInstantiationThatMeetsConstraints(type.Instantiation);
+                if (inst.IsNull)
+                    return;
+
+                type = ((MetadataType)type).MakeInstantiatedType(inst);
+
+                rootProvider.AddCompilationRoot(type, reason);
+            }
+
+            // Also root base types. This is so that we make methods on the base types callable.
+            // This helps in cases like "class Foo : Bar<int> { }" where we discover new
+            // generic instantiations.
+            DefType baseType = type.BaseType;
+            while (baseType != null)
+            {
+                RootType(rootProvider, baseType, reason);
+                baseType = baseType.BaseType;
+            }
+
             if (type.IsDefType)
             {
                 foreach (var method in type.GetMethods())
                 {
-                    // We don't know what to instantiate generic methods over
                     if (method.HasInstantiation)
-                        continue;
-
-                    RootMethod(rootProvider, method);
+                    {
+                        // Generic methods on generic types could end up as Foo<object>.Bar<__Canon>(),
+                        // so for simplicity, we just don't handle them right now to make this more
+                        // predictable.
+                        if (!method.OwningType.HasInstantiation)
+                        {
+                            Instantiation inst = GetInstantiationThatMeetsConstraints(method.Instantiation);
+                            if (!inst.IsNull)
+                            {
+                                RootMethod(rootProvider, method.MakeInstantiatedMethod(inst), reason);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        RootMethod(rootProvider, method, reason);
+                    }
                 }
             }
         }
 
-        private void RootMethod(IRootingServiceProvider rootProvider, MethodDesc method)
+        private static void RootMethod(IRootingServiceProvider rootProvider, MethodDesc method, string reason)
         {
             try
             {
@@ -181,10 +213,10 @@ namespace ILCompiler
 
                 // Virtual methods should be rooted as if they were called virtually
                 if (method.IsVirtual)
-                    rootProvider.RootVirtualMethodForReflection(method, "RD.XML root");
+                    rootProvider.RootVirtualMethodForReflection(method, reason);
 
                 if (!method.IsAbstract)
-                    rootProvider.AddCompilationRoot(method, "RD.XML root");
+                    rootProvider.AddCompilationRoot(method, reason);
             }
             catch (TypeSystemException)
             {
@@ -196,6 +228,52 @@ namespace ILCompiler
 
                 // TODO: Log as a warning
             }
+        }
+
+        private static Instantiation GetInstantiationThatMeetsConstraints(Instantiation inst)
+        {
+            TypeDesc[] resultArray = new TypeDesc[inst.Length];
+            for (int i = 0; i < inst.Length; i++)
+            {
+                TypeDesc instArg = GetTypeThatMeetsConstraints((GenericParameterDesc)inst[i]);
+                if (instArg == null)
+                    return default(Instantiation);
+                resultArray[i] = instArg;
+            }
+
+            return new Instantiation(resultArray);
+        }
+
+        private static TypeDesc GetTypeThatMeetsConstraints(GenericParameterDesc genericParam)
+        {
+            TypeSystemContext context = genericParam.Context;
+
+            // Universal canon is the best option if it's supported
+            if (context.SupportsUniversalCanon)
+                return context.UniversalCanonType;
+
+            // Try normal canon next
+            if (!context.SupportsCanon)
+                return null;
+
+            // Not nullable type is the only thing where reference canon doesn't make sense.
+            GenericConstraints constraints = genericParam.Constraints;
+            if ((constraints & GenericConstraints.NotNullableValueTypeConstraint) != 0)
+                return null;
+
+            foreach (var c in genericParam.TypeConstraints)
+            {
+                // Could be e.g. "where T : U"
+                // We could try to dig into the U and solve it, but that just opens us up to
+                // recursion and it's just not worth it.
+                if (c.IsSignatureVariable)
+                    return null;
+
+                if (!c.IsGCPointer)
+                    return null;
+            }
+
+            return genericParam.Context.CanonType;
         }
     }
 }

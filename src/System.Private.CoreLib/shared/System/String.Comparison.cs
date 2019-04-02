@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using System.Globalization;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -511,9 +512,7 @@ namespace System
                 return 1;
             }
 
-            string other = value as string;
-
-            if (other == null)
+            if (!(value is string other))
             {
                 throw new ArgumentException(SR.Arg_MustBeString);
             }
@@ -568,7 +567,8 @@ namespace System
                     return CompareInfo.Invariant.IsSuffix(this, value, GetCaseCompareOfComparisonCulture(comparisonType));
 
                 case StringComparison.Ordinal:
-                    return this.Length < value.Length ? false : (CompareOrdinalHelper(this, this.Length - value.Length, value.Length, value, 0, value.Length) == 0);
+                    int offset = this.Length - value.Length;
+                    return (uint)offset <= (uint)this.Length && this.AsSpan(offset).SequenceEqual(value);
 
                 case StringComparison.OrdinalIgnoreCase:
                     return this.Length < value.Length ? false : (CompareInfo.CompareOrdinalIgnoreCase(this, this.Length - value.Length, value.Length, value, 0, value.Length) == 0);
@@ -596,8 +596,8 @@ namespace System
 
         public bool EndsWith(char value)
         {
-            int thisLen = Length;
-            return thisLen != 0 && this[thisLen - 1] == value;
+            int lastPos = Length - 1;
+            return ((uint)lastPos < (uint)Length) && this[lastPos] == value;
         }
 
         // Determines whether two strings match.
@@ -606,8 +606,7 @@ namespace System
             if (object.ReferenceEquals(this, obj))
                 return true;
 
-            string str = obj as string;
-            if (str == null)
+            if (!(obj is string str))
                 return false;
 
             if (this.Length != str.Length)
@@ -748,7 +747,7 @@ namespace System
         public override int GetHashCode()
         {
             ulong seed = Marvin.DefaultSeed;
-            return Marvin.ComputeHash32(ref Unsafe.As<char, byte>(ref _firstChar), _stringLength * 2, (uint)seed, (uint)(seed >> 32));
+            return Marvin.ComputeHash32(ref Unsafe.As<char, byte>(ref _firstChar), _stringLength * 2 /* in bytes, not chars */, (uint)seed, (uint)(seed >> 32));
         }
 
         // Gets a hash code for this string and this comparison. If strings A and B and comparison C are such
@@ -759,7 +758,48 @@ namespace System
         internal int GetHashCodeOrdinalIgnoreCase()
         {
             ulong seed = Marvin.DefaultSeed;
-            return Marvin.ComputeHash32OrdinalIgnoreCase(ref _firstChar, _stringLength, (uint)seed, (uint)(seed >> 32));
+            return Marvin.ComputeHash32OrdinalIgnoreCase(ref _firstChar, _stringLength /* in chars, not bytes */, (uint)seed, (uint)(seed >> 32));
+        }
+
+        // A span-based equivalent of String.GetHashCode(). Computes an ordinal hash code.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int GetHashCode(ReadOnlySpan<char> value)
+        {
+            ulong seed = Marvin.DefaultSeed;
+            return Marvin.ComputeHash32(ref Unsafe.As<char, byte>(ref MemoryMarshal.GetReference(value)), value.Length * 2 /* in bytes, not chars */, (uint)seed, (uint)(seed >> 32));
+        }
+
+        // A span-based equivalent of String.GetHashCode(StringComparison). Uses the specified comparison type.
+        public static int GetHashCode(ReadOnlySpan<char> value, StringComparison comparisonType)
+        {
+            switch (comparisonType)
+            {
+                case StringComparison.CurrentCulture:
+                case StringComparison.CurrentCultureIgnoreCase:
+                    return CultureInfo.CurrentCulture.CompareInfo.GetHashCode(value, GetCaseCompareOfComparisonCulture(comparisonType));
+
+                case StringComparison.InvariantCulture:
+                case StringComparison.InvariantCultureIgnoreCase:
+                    return CultureInfo.InvariantCulture.CompareInfo.GetHashCode(value, GetCaseCompareOfComparisonCulture(comparisonType));
+
+                case StringComparison.Ordinal:
+                    return GetHashCode(value);
+
+                case StringComparison.OrdinalIgnoreCase:
+                    return GetHashCodeOrdinalIgnoreCase(value);
+
+                default:
+                    ThrowHelper.ThrowArgumentException(ExceptionResource.NotSupported_StringComparison, ExceptionArgument.comparisonType);
+                    Debug.Fail("Should not reach this point.");
+                    return default;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static int GetHashCodeOrdinalIgnoreCase(ReadOnlySpan<char> value)
+        {
+            ulong seed = Marvin.DefaultSeed;
+            return Marvin.ComputeHash32OrdinalIgnoreCase(ref MemoryMarshal.GetReference(value), value.Length /* in chars, not bytes */, (uint)seed, (uint)(seed >> 32));
         }
 
         // Use this if and only if 'Denial of Service' attacks are not a concern (i.e. never used for free-form user input),
@@ -781,15 +821,15 @@ namespace System
                 {
                     length -= 4;
                     // Where length is 4n-1 (e.g. 3,7,11,15,19) this additionally consumes the null terminator
-                    hash1 = (((hash1 << 5) | (hash1 >> 27)) + hash1) ^ ptr[0];
-                    hash2 = (((hash2 << 5) | (hash2 >> 27)) + hash2) ^ ptr[1];
+                    hash1 = (BitOperations.RotateLeft(hash1, 5) + hash1) ^ ptr[0];
+                    hash2 = (BitOperations.RotateLeft(hash2, 5) + hash2) ^ ptr[1];
                     ptr += 2;
                 }
 
                 if (length > 0)
                 {
                     // Where length is 4n-3 (e.g. 1,5,9,13,17) this additionally consumes the null terminator
-                    hash2 = (((hash2 << 5) | (hash2 >> 27)) + hash2) ^ ptr[0];
+                    hash2 = (BitOperations.RotateLeft(hash2, 5) + hash2) ^ ptr[0];
                 }
 
                 return (int)(hash1 + (hash2 * 1566083941));

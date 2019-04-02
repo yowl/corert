@@ -23,11 +23,12 @@ namespace ILCompiler
         private MetadataFieldLayoutAlgorithm _metadataFieldLayoutAlgorithm = new CompilerMetadataFieldLayoutAlgorithm();
         private RuntimeDeterminedFieldLayoutAlgorithm _runtimeDeterminedFieldLayoutAlgorithm = new RuntimeDeterminedFieldLayoutAlgorithm();
         private VectorOfTFieldLayoutAlgorithm _vectorOfTFieldLayoutAlgorithm;
+        private VectorFieldLayoutAlgorithm _vectorFieldLayoutAlgorithm;
         private MetadataRuntimeInterfacesAlgorithm _metadataRuntimeInterfacesAlgorithm = new MetadataRuntimeInterfacesAlgorithm();
         private ArrayOfTRuntimeInterfacesAlgorithm _arrayOfTRuntimeInterfacesAlgorithm;
         private MetadataVirtualMethodAlgorithm _virtualMethodAlgorithm = new MetadataVirtualMethodAlgorithm();
 
-        private SimdHelper _simdHelper;
+        protected SimdHelper _simdHelper;
 
         private TypeDesc[] _arrayOfTInterfaces;
         
@@ -104,6 +105,7 @@ namespace ILCompiler
             _genericsMode = genericsMode;
 
             _vectorOfTFieldLayoutAlgorithm = new VectorOfTFieldLayoutAlgorithm(_metadataFieldLayoutAlgorithm);
+            _vectorFieldLayoutAlgorithm = new VectorFieldLayoutAlgorithm(_metadataFieldLayoutAlgorithm);
 
             GenericsConfig = new SharedGenericsConfiguration();
         }
@@ -236,7 +238,7 @@ namespace ILCompiler
                 PEReader peReader = OpenPEFile(filePath, out mappedViewAccessor);
                 pdbReader = OpenAssociatedSymbolFile(filePath, peReader);
 
-                EcmaModule module = EcmaModule.Create(this, peReader, pdbReader);
+                EcmaModule module = EcmaModule.Create(this, peReader, containingAssembly: null, pdbReader);
 
                 MetadataReader metadataReader = module.MetadataReader;
                 string simpleName = metadataReader.GetString(metadataReader.GetAssemblyDefinition().Name);
@@ -289,6 +291,8 @@ namespace ILCompiler
                 return _runtimeDeterminedFieldLayoutAlgorithm;
             else if (_simdHelper.IsVectorOfT(type))
                 return _vectorOfTFieldLayoutAlgorithm;
+            else if (VectorFieldLayoutAlgorithm.IsVectorType(type))
+                return _vectorFieldLayoutAlgorithm;
             else
                 return _metadataFieldLayoutAlgorithm;
         }

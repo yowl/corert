@@ -206,7 +206,7 @@ namespace System.Runtime
         private static void OnFirstChanceExceptionViaClassLib(object exception)
         {
             IntPtr pOnFirstChanceFunction =
-                (IntPtr)InternalCalls.RhpGetClasslibFunctionFromEEType((IntPtr)exception.m_pEEType, ClassLibFunctionId.OnFirstChance);
+                (IntPtr)InternalCalls.RhpGetClasslibFunctionFromEEType((IntPtr)exception.EEType, ClassLibFunctionId.OnFirstChance);
 
             if (pOnFirstChanceFunction == IntPtr.Zero)
             {
@@ -264,10 +264,10 @@ namespace System.Runtime
             RH_EH_FIRST_RETHROW_FRAME = 2,
         }
 
-        private static void AppendExceptionStackFrameViaClasslib(object exception, IntPtr IP,
+        private static void AppendExceptionStackFrameViaClasslib(object exception, IntPtr ip,
             ref bool isFirstRethrowFrame, ref bool isFirstFrame)
         {
-            IntPtr pAppendStackFrame = (IntPtr)InternalCalls.RhpGetClasslibFunctionFromCodeAddress(IP,
+            IntPtr pAppendStackFrame = (IntPtr)InternalCalls.RhpGetClasslibFunctionFromCodeAddress(ip,
                 ClassLibFunctionId.AppendExceptionStackFrame);
 
             if (pAppendStackFrame != IntPtr.Zero)
@@ -277,7 +277,7 @@ namespace System.Runtime
 
                 try
                 {
-                    CalliIntrinsics.CallVoid(pAppendStackFrame, exception, IP, flags);
+                    CalliIntrinsics.CallVoid(pAppendStackFrame, exception, ip, flags);
                 }
                 catch when (true)
                 {
@@ -652,6 +652,7 @@ namespace System.Runtime
             bool isFirstFrame = true;
 
             byte* prevControlPC = null;
+            byte* prevOriginalPC = null;
             UIntPtr prevFramePtr = UIntPtr.Zero;
             bool unwoundReversePInvoke = false;
 
@@ -659,7 +660,7 @@ namespace System.Runtime
             Debug.Assert(isValid, "RhThrowEx called with an unexpected context");
 
             OnFirstChanceExceptionViaClassLib(exceptionObj);
-            DebuggerNotify.BeginFirstPass(exceptionObj, frameIter.ControlPC, frameIter.SP);
+            DebuggerNotify.BeginFirstPass(exceptionObj, frameIter.OriginalControlPC, frameIter.SP);
 
             for (; isValid; isValid = frameIter.Next(out startIdx, out unwoundReversePInvoke))
             {
@@ -669,6 +670,7 @@ namespace System.Runtime
                     break;
 
                 prevControlPC = frameIter.ControlPC;
+                prevOriginalPC = frameIter.OriginalControlPC;
 
                 DebugScanCallFrame(exInfo._passNumber, frameIter.ControlPC, frameIter.SP);
 
@@ -676,9 +678,9 @@ namespace System.Runtime
                 // exInfo._notifyDebuggerSP can be populated by the debugger from out of process
                 // at any time.
                 if (exInfo._notifyDebuggerSP == frameIter.SP)
-                    DebuggerNotify.FirstPassFrameEntered(exceptionObj, frameIter.ControlPC, frameIter.SP);
+                    DebuggerNotify.FirstPassFrameEntered(exceptionObj, frameIter.OriginalControlPC, frameIter.SP);
 
-                UpdateStackTrace(exceptionObj, ref exInfo, ref isFirstRethrowFrame, ref prevFramePtr, ref isFirstFrame);
+                UpdateStackTrace(exceptionObj, exInfo._frameIter.FramePointer, (IntPtr)frameIter.OriginalControlPC, ref isFirstRethrowFrame, ref prevFramePtr, ref isFirstFrame);
 
                 byte* pHandler;
                 if (FindFirstPassHandler(exceptionObj, startIdx, ref frameIter,
@@ -698,7 +700,7 @@ namespace System.Runtime
                 UnhandledExceptionFailFastViaClasslib(
                     RhFailFastReason.PN_UnhandledException,
                     exceptionObj,
-                    (IntPtr)prevControlPC, // IP of the last frame that did not handle the exception
+                    (IntPtr)prevOriginalPC, // IP of the last frame that did not handle the exception
                     ref exInfo);
             }
 
@@ -769,7 +771,7 @@ namespace System.Runtime
                 "Handling frame must have a valid stack frame pointer");
         }
 
-        private static void UpdateStackTrace(object exceptionObj, ref ExInfo exInfo,
+        private static void UpdateStackTrace(object exceptionObj, UIntPtr curFramePtr, IntPtr ip, 
             ref bool isFirstRethrowFrame, ref UIntPtr prevFramePtr, ref bool isFirstFrame)
         {
             // We use the fact that all funclet stack frames belonging to the same logical method activation 
@@ -777,11 +779,10 @@ namespace System.Runtime
             // callbacks for all the funclet stack frames, one right after the other.  The classlib doesn't 
             // want to know about funclets, so we strip them out by only reporting the first frame of a 
             // sequence of funclets.  This is correct because the leafmost funclet is first in the sequence
-            // and corresponds to the current 'IP state' of the method.
-            UIntPtr curFramePtr = exInfo._frameIter.FramePointer;
+            // and corresponds to the current 'IP state' of the method.            
             if ((prevFramePtr == UIntPtr.Zero) || (curFramePtr != prevFramePtr))
             {
-                AppendExceptionStackFrameViaClasslib(exceptionObj, (IntPtr)exInfo._frameIter.ControlPC,
+                AppendExceptionStackFrameViaClasslib(exceptionObj, ip,
                     ref isFirstRethrowFrame, ref isFirstFrame);
             }
             prevFramePtr = curFramePtr;
@@ -863,6 +864,98 @@ namespace System.Runtime
                         return true;
                     }
                 }
+            }
+
+            return false;
+        }
+
+        // WASMTODO: remove unused fields
+        internal struct RhEHClauseWasm
+        {
+            internal uint _tryStartOffset;
+            internal EHClauseIterator.RhEHClauseKindWasm _clauseKind;
+            internal uint _tryEndOffset;
+            internal uint _handlerOffset;
+            internal uint _typeSymbol;
+            internal byte* _handlerAddress; // an alternative to this would be to create a switch (on _handlerOffset) in LLVM for all possible handlers 
+            internal uint _filterOffset;
+
+            public bool ContainsCodeOffset(uint idxTryLandingStart)
+            {
+                return idxTryLandingStart == _tryStartOffset;
+//                return ((idxTryLandingStart >= _tryStartOffset) &&
+//                        (idxTryLandingStart < _tryEndOffset));
+            }
+        }
+
+        // TODO: temporary to try things out, when working look to see how to refactor with FindFirstPassHandler
+        private static bool FindFirstPassHandlerWasm(object exception, uint idxStart, uint idxTryLandingStart /* this start IL idx of the try region for the landing pad, will use in place of PC */, 
+            ref EHClauseIterator clauseIter, out uint tryRegionIdx, out byte * pHandler)
+        {
+            pHandler = (byte *)0;
+            tryRegionIdx = MaxTryRegionIdx;
+            uint lastTryStart = 0, lastTryEnd = 0;
+            RhEHClauseWasm ehClause = new RhEHClauseWasm();
+            // for (uint curIdx = 0; InternalCalls.RhpEHEnumNext(&ehEnum, &ehClause); curIdx++)// TODO: would it be useful for GC also to have an implementation of ICodeManager, then could maybe use InternalCalls.RhpEHEnumNext?
+            for (uint curIdx = 0; clauseIter.Next(ref ehClause); curIdx++)
+            {
+                // 
+                // Skip to the starting try region.  This is used by collided unwinds and rethrows to pickup where
+                // the previous dispatch left off.
+                //
+                if (idxStart != MaxTryRegionIdx)
+                {
+                    if (curIdx <= idxStart)
+                    {
+                        lastTryStart = ehClause._tryStartOffset;
+                        lastTryEnd = ehClause._tryEndOffset;
+                        continue;
+                    }
+
+                    // Now, we continue skipping while the try region is identical to the one that invoked the 
+                    // previous dispatch.
+                    if ((ehClause._tryStartOffset == lastTryStart) && (ehClause._tryEndOffset == lastTryEnd))
+                    {
+                        continue;
+                    }
+
+                    // We are done skipping. This is required to handle empty finally block markers that are used
+                    // to separate runs of different try blocks with same native code offsets.
+                    idxStart = MaxTryRegionIdx;
+                }
+
+                EHClauseIterator.RhEHClauseKindWasm clauseKind = ehClause._clauseKind;
+                if (((clauseKind != EHClauseIterator.RhEHClauseKindWasm.RH_EH_CLAUSE_TYPED) &&
+                     (clauseKind != EHClauseIterator.RhEHClauseKindWasm.RH_EH_CLAUSE_FILTER))
+                    || !ehClause.ContainsCodeOffset(idxTryLandingStart))
+                {
+                    continue;
+                }
+
+                // Found a containing clause. Because of the order of the clauses, we know this is the
+                // most containing.
+                if (clauseKind == EHClauseIterator.RhEHClauseKindWasm.RH_EH_CLAUSE_TYPED)
+                {
+                    if (ShouldTypedClauseCatchThisException(exception, (EEType*)ehClause._typeSymbol))
+                    {
+                        pHandler = ehClause._handlerAddress;
+                        tryRegionIdx = curIdx;
+                        return true;
+                    }
+                }
+                //                else
+                //                {
+                //                    byte* pFilterFunclet = ehClause._filterAddress;
+                //                    bool shouldInvokeHandler =
+                //                        InternalCalls.RhpCallFilterFunclet(exception, pFilterFunclet, clauseIter.RegisterSet);
+                //
+                //                    if (shouldInvokeHandler)
+                //                    {
+                //                        pHandler = ehClause._handlerAddress;
+                //                        tryRegionIdx = curIdx;
+                //                        return true;
+                //                    }
+                //                }
             }
 
             return false;
@@ -970,6 +1063,65 @@ namespace System.Runtime
                 exInfo._idxCurClause = curIdx;
                 InternalCalls.RhpCallFinallyFunclet(pFinallyHandler, exInfo._frameIter.RegisterSet);
                 exInfo._idxCurClause = MaxTryRegionIdx;
+            }
+        }
+
+        private static void InvokeSecondPassWasm(uint idxStart, uint idxTryLandingStart, ref EHClauseIterator clauseIter, uint idxLimit, void *shadowStack)
+        {
+            uint lastTryStart = 0, lastTryEnd = 0;
+            // Search the clauses for one that contains the current offset.
+            RhEHClauseWasm ehClause = new RhEHClauseWasm();
+            for (uint curIdx = 0; clauseIter.Next(ref ehClause) && curIdx < idxLimit; curIdx++)
+            {
+                // 
+                // Skip to the starting try region.  This is used by collided unwinds and rethrows to pickup where
+                // the previous dispatch left off.
+                //
+                if (idxStart != MaxTryRegionIdx)
+                {
+                    if (curIdx <= idxStart)
+                    {
+                        lastTryStart = ehClause._tryStartOffset;
+                        lastTryEnd = ehClause._tryEndOffset;
+                        continue;
+                    }
+
+                    // Now, we continue skipping while the try region is identical to the one that invoked the 
+                    // previous dispatch.
+                    if ((ehClause._tryStartOffset == lastTryStart) && (ehClause._tryEndOffset == lastTryEnd))
+                        continue;
+
+                    // We are done skipping. This is required to handle empty finally block markers that are used
+                    // to separate runs of different try blocks with same native code offsets.
+                    idxStart = MaxTryRegionIdx;
+                }
+
+                EHClauseIterator.RhEHClauseKindWasm clauseKind = ehClause._clauseKind;
+
+                if ((clauseKind != EHClauseIterator.RhEHClauseKindWasm.RH_EH_CLAUSE_FAULT)
+                    || !ehClause.ContainsCodeOffset(idxTryLandingStart))
+                {
+                    continue;
+                }
+
+                // Found a containing clause. Because of the order of the clauses, we know this is the
+                // most containing.
+
+                // N.B. -- We need to suppress GC "in-between" calls to finallys in this loop because we do
+                // not have the correct next-execution point live on the stack and, therefore, may cause a GC
+                // hole if we allow a GC between invocation of finally funclets (i.e. after one has returned
+                // here to the dispatcher, but before the next one is invoked).  Once they are running, it's 
+                // fine for them to trigger a GC, obviously.
+                // 
+                // As a result, RhpCallFinallyFunclet will set this state in the runtime upon return from the
+                // funclet, and we need to reset it if/when we fall out of the loop and we know that the 
+                // method will no longer get any more GC callbacks.
+
+                byte* pFinallyHandler = ehClause._handlerAddress;
+
+                //                exInfo._idxCurClause = curIdx;
+                InternalCalls.RhpCallFinallyFunclet(pFinallyHandler, shadowStack);
+//                exInfo._idxCurClause = MaxTryRegionIdx;
             }
         }
 
