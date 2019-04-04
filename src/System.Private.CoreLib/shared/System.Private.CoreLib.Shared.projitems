@@ -1088,7 +1088,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)System\Runtime\InteropServices\Marshal.NoCom.cs" Condition="'$(TargetsCoreRT)' != 'true'" />
     <Compile Include="$(MSBuildThisFileDirectory)System\Runtime\InteropServices\ComEventsHelpers.NoCom.cs" Condition="'$(TargetsCoreRT)' != 'true'" />
   </ItemGroup>
-  <ItemGroup Condition="'$(FeatureCominterop)' == 'true'">
+  <ItemGroup Condition="'$(FeatureCominterop)' == 'true' or '$(Platform)' == 'wasm'" >
     <Compile Include="$(MSBuildThisFileDirectory)System\Runtime\InteropServices\WindowsRuntime\EventRegistrationToken.cs" />
   </ItemGroup>
   <ItemGroup Condition="$(TargetsWindows) and '$(EnableWinRT)' != 'true'">

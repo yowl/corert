@@ -231,7 +231,7 @@ namespace Internal.IL
                     if (_exceptionRegions.Length == 0)
                     {
                         string argName = String.Empty;
-                        if (argNames != null && argNames[argOffset] != null)
+                        if (argNames != null && argOffset < argNames.Length && argNames[argOffset] != null)
                         {
                             argName = argNames[argOffset] + "_";
                         }

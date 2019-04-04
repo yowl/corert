@@ -183,7 +183,7 @@ namespace ILCompiler.DependencyAnalysis
 #if DEBUG
             LLVM.PrintModuleToFile(Module, Path.ChangeExtension(_objectFilePath, ".txt"), out string unused2);
 #endif //DEBUG
-            LLVM.VerifyModule(Module, LLVMVerifierFailureAction.LLVMAbortProcessAction, out string unused);
+            LLVM.VerifyModule(Module, LLVMVerifierFailureAction.LLVMPrintMessageAction, out string unused);
 
             LLVM.WriteBitcodeToFile(Module, _objectFilePath);
 
