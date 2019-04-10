@@ -581,11 +581,11 @@ namespace Internal.IL
                     string fullPath = curSequencePoint.Document;
                     string fileName = Path.GetFileName(fullPath);
                     string directory = Path.GetDirectoryName(fullPath) ?? String.Empty;
-                    LLVMMetadataRef fileMetadata = LLVMPInvokes.LLVMDIBuilderCreateFile(_compilation.DIBuilder, fullPath, fullPath.Length,
-                        directory, directory.Length);
+                    LLVMMetadataRef fileMetadata = LLVM.DIBuilderCreateFile(_compilation.DIBuilder, fullPath, (ulong)fullPath.Length,
+                        directory, (ulong)directory.Length);
 
                     // todo: get the right value for isOptimized
-                    LLVMMetadataRef compileUnitMetadata = LLVMPInvokes.LLVMDIBuilderCreateCompileUnit(_compilation.DIBuilder, LLVMDWARFSourceLanguage.LLVMDWARFSourceLanguageC,
+                    LLVMMetadataRef compileUnitMetadata = LLVM.DIBuilderCreateCompileUnit(_compilation.DIBuilder, LLVMDWARFSourceLanguage.LLVMDWARFSourceLanguageC,
                         fileMetadata, "ILC", 3, isOptimized: false, String.Empty, 0, 1, String.Empty, 0, LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, 0, false, false);
                     LLVM.AddNamedMetadataOperand(Module, "llvm.dbg.cu", LLVM.MetadataAsValue(Context, compileUnitMetadata));
 
@@ -599,7 +599,7 @@ namespace Internal.IL
                         (uint)_debugInformation.GetSequencePoints().FirstOrDefault().LineNumber, default(LLVMMetadataRef), 1, 1, 1, 0, IsOptimized: 0, _llvmFunction);
                 }
 
-                LLVMMetadataRef currentLine = LLVMPInvokes.LLVMDIBuilderCreateDebugLocation(Context, (uint)curSequencePoint.LineNumber, 0, _debugFunction, default(LLVMMetadataRef));
+                LLVMMetadataRef currentLine = LLVM.DIBuilderCreateDebugLocation(Context, (uint)curSequencePoint.LineNumber, 0, _debugFunction, default(LLVMMetadataRef));
                 LLVM.SetCurrentDebugLocation(_builder, LLVM.MetadataAsValue(Context, currentLine));
             }
         }

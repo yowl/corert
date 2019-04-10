@@ -36,7 +36,7 @@ namespace ILCompiler
             Module = LLVM.ModuleCreateWithName("netscripten");
             LLVM.SetTarget(Module, "asmjs-unknown-emscripten");
             Options = options;
-            DIBuilder = LLVMPInvokes.LLVMCreateDIBuilder(Module);
+            DIBuilder = LLVM.CreateDIBuilder(Module);
             DebugMetadataMap = new Dictionary<string, DebugMetadata>();
         }
 
