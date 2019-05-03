@@ -581,12 +581,12 @@ namespace Internal.IL
                     string fullPath = curSequencePoint.Document;
                     string fileName = Path.GetFileName(fullPath);
                     string directory = Path.GetDirectoryName(fullPath) ?? String.Empty;
-                    LLVMMetadataRef fileMetadata = LLVMPInvokes.LLVMDIBuilderCreateFile(_compilation.DIBuilder, fullPath, fullPath.Length,
-                        directory, directory.Length);
+                    LLVMMetadataRef fileMetadata = LLVM.DIBuilderCreateFile(_compilation.DIBuilder, fileName,
+                        directory);
 
                     // todo: get the right value for isOptimized
-                    LLVMMetadataRef compileUnitMetadata = LLVMPInvokes.LLVMDIBuilderCreateCompileUnit(_compilation.DIBuilder, LLVMDWARFSourceLanguage.LLVMDWARFSourceLanguageC,
-                        fileMetadata, "ILC", 3, isOptimized: false, String.Empty, 0, 1, String.Empty, 0, LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, 0, false, false);
+                    LLVMMetadataRef compileUnitMetadata = LLVM.DIBuilderCreateCompileUnit(_compilation.DIBuilder, LLVMDWARFSourceLanguage.LLVMDWARFSourceLanguageC,
+                        fileMetadata, "ILC", (IntPtr)3, isOptimized: false, String.Empty, (IntPtr)0, 1, String.Empty, (IntPtr)0, LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, 0, false, false);
                     LLVM.AddNamedMetadataOperand(Module, "llvm.dbg.cu", LLVM.MetadataAsValue(Context, compileUnitMetadata));
 
                     debugMetadata = new DebugMetadata(fileMetadata, compileUnitMetadata);
@@ -595,14 +595,17 @@ namespace Internal.IL
 
                 if (_debugFunction.Pointer == IntPtr.Zero)
                 {
-                    _debugFunction = LLVM.DIBuilderCreateFunction(_compilation.DIBuilder, debugMetadata.CompileUnit, _method.Name, String.Empty, debugMetadata.File,
-                        (uint)_debugInformation.GetSequencePoints().FirstOrDefault().LineNumber, default(LLVMMetadataRef), 1, 1, 1, 0, IsOptimized: 0, _llvmFunction);
+                    //todo create the bools as statics
+                    _debugFunction = LLVM.DIBuilderCreateFunction(_compilation.DIBuilder, debugMetadata.CompileUnit, _method.Name, (IntPtr)_method.Name.Length, String.Empty, (IntPtr)0, debugMetadata.File,
+                        (uint)_debugInformation.GetSequencePoints().FirstOrDefault().LineNumber, default(LLVMMetadataRef), llvmBoolTrue, llvmBoolTrue, 1, 0, llvmBoolFalse);
                 }
 
-                LLVMMetadataRef currentLine = LLVMPInvokes.LLVMDIBuilderCreateDebugLocation(Context, (uint)curSequencePoint.LineNumber, 0, _debugFunction, default(LLVMMetadataRef));
+                LLVMMetadataRef currentLine = LLVM.DIBuilderCreateDebugLocation(Context, (uint)curSequencePoint.LineNumber, 0, _debugFunction, default(LLVMMetadataRef));
                 LLVM.SetCurrentDebugLocation(_builder, LLVM.MetadataAsValue(Context, currentLine));
             }
         }
+        static LLVMBool llvmBoolTrue = new LLVMBool(true);
+        static LLVMBool llvmBoolFalse = new LLVMBool(false);
 
         private void EndImportingInstruction()
         {
