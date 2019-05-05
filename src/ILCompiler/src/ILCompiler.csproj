@@ -1,4 +1,4 @@
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
   <PropertyGroup>
     <OutputPath>$(BaseOutputPath)$(OSPlatformConfig)/tools</OutputPath>
@@ -8,7 +8,7 @@
     <RootNamespace>ILCompiler</RootNamespace>
     <AssemblyName>ilc</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <TargetFramework>netcoreapp2.2</TargetFramework>
     <CopyNugetImplementations>false</CopyNugetImplementations>
     <!-- Force .dll extension even if output type is exe. -->
     <TargetExt>.dll</TargetExt>
@@ -28,6 +28,7 @@
     <PackageReference Include="System.CommandLine">
       <Version>0.1.0-e160909-1</Version>
     </PackageReference>
+    <PackageReference Include="System.Xml.XDocument" Version="4.3.0" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ConfigurablePInvokePolicy.cs" />
