@@ -29,6 +29,8 @@
       <Version>0.1.0-e160909-1</Version>
     </PackageReference>
     <PackageReference Include="System.Xml.XDocument" Version="4.3.0" />
+    <PackageReference Include="System.Console" Version="4.3.1" />
+    <PackageReference Include="System.Runtime.InteropServices.RuntimeInformation" Version="4.3.0" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ConfigurablePInvokePolicy.cs" />
