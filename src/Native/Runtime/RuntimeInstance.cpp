@@ -822,7 +822,7 @@ enum RuntimeHelperKind
 // Create indirections for all helpers used below
 
 #define DECLARE_INDIRECTION(HELPER_NAME) \
-    EXTERN_C void * HELPER_NAME; \
+    EXTERN_C void HELPER_NAME(); \
     const PTR_VOID indirection_##HELPER_NAME = (PTR_VOID)&HELPER_NAME
 
 #define INDIRECTION(HELPER_NAME) ((PTR_VOID)&indirection_##HELPER_NAME)
@@ -909,7 +909,7 @@ COOP_PINVOKE_HELPER(PTR_VOID, RhGetRuntimeHelperForType, (EEType * pEEType, int 
 #undef INDIRECTION
 
 #ifdef FEATURE_CACHED_INTERFACE_DISPATCH
-EXTERN_C void * RhpInitialDynamicInterfaceDispatch;
+EXTERN_C void RhpInitialDynamicInterfaceDispatch();
 
 COOP_PINVOKE_HELPER(void *, RhNewInterfaceDispatchCell, (EEType * pInterface, Int32 slotNumber))
 {
