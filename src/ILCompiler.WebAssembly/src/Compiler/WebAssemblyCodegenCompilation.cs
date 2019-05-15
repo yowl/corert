@@ -34,7 +34,8 @@ namespace ILCompiler
         {
             NodeFactory = nodeFactory;
             Module = LLVM.ModuleCreateWithName("netscripten");
-            LLVM.SetTarget(Module, "asmjs-unknown-emscripten");
+//            LLVM.SetTarget(Module, "asmjs-unknown-emscripten");
+            LLVM.SetTarget(Module, "wasm32-unknown-emscripten");
             Options = options;
             DIBuilder = LLVM.CreateDIBuilder(Module);
             DebugMetadataMap = new Dictionary<string, DebugMetadata>();

@@ -401,8 +401,8 @@ namespace Internal.IL
 
         private void ImportCallMemset (LLVMValueRef targetPointer, byte value, LLVMValueRef length)
         {
-            var memsetSignature = LLVM.FunctionType(LLVM.VoidType(), new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0), LLVM.Int8Type(), LLVM.Int32Type(), LLVM.Int32Type(), LLVM.Int1Type() }, false);
-            LLVM.BuildCall(_builder, GetOrCreateLLVMFunction("llvm.memset.p0i8.i32", memsetSignature), new LLVMValueRef[] { targetPointer, BuildConstInt8(value), length, BuildConstInt32(1), BuildConstInt1(0) }, String.Empty);
+            var memsetSignature = LLVM.FunctionType(LLVM.VoidType(), new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0), LLVM.Int8Type(), LLVM.Int32Type(), LLVM.Int1Type() }, false);
+            LLVM.BuildCall(_builder, GetOrCreateLLVMFunction("llvm.memset.p0i8.i32", memsetSignature), new LLVMValueRef[] { targetPointer, BuildConstInt8(value), length, BuildConstInt1(0) }, String.Empty);
         }
 
         private void PushLoadExpression(StackValueKind kind, string name, LLVMValueRef rawLLVMValue, TypeDesc type)
@@ -581,8 +581,8 @@ namespace Internal.IL
                     string fullPath = curSequencePoint.Document;
                     string fileName = Path.GetFileName(fullPath);
                     string directory = Path.GetDirectoryName(fullPath) ?? String.Empty;
-                    LLVMMetadataRef fileMetadata = LLVM.DIBuilderCreateFile(_compilation.DIBuilder, fileName,
-                        directory);
+                    LLVMMetadataRef fileMetadata = LLVM.DIBuilderCreateFile(_compilation.DIBuilder, fileName, (IntPtr)fileName.Length,
+                        directory, (IntPtr)directory.Length);
 
                     // todo: get the right value for isOptimized
                     LLVMMetadataRef compileUnitMetadata = LLVM.DIBuilderCreateCompileUnit(_compilation.DIBuilder, LLVMDWARFSourceLanguage.LLVMDWARFSourceLanguageC,
@@ -1854,7 +1854,6 @@ namespace Internal.IL
                             LLVM.PointerType(LLVM.Int8Type(), 0),
                             LLVM.PointerType(LLVM.Int8Type(), 0),
                             LLVM.Int32Type(),
-                            LLVM.Int32Type(),
                             LLVM.Int1Type()
                             };
                             LLVMValueRef memcpyFunction = GetOrCreateLLVMFunction("llvm.memcpy.p0i8.p0i8.i32", LLVM.FunctionType(LLVM.VoidType(), argsType, false));
@@ -1864,7 +1863,6 @@ namespace Internal.IL
                             LLVM.BuildGEP(_builder, arrayObjPtr, new LLVMValueRef[] { ArrayBaseSize() }, string.Empty),
                             LLVM.BuildBitCast(_builder, src, LLVM.PointerType(LLVM.Int8Type(), 0), string.Empty),
                             BuildConstInt32(srcLength), // TODO: Handle destination array length to avoid runtime overflow.
-                            BuildConstInt32(0), // Assume no alignment
                             BuildConstInt1(0)
                             };
                             LLVM.BuildCall(_builder, memcpyFunction, args, string.Empty);
