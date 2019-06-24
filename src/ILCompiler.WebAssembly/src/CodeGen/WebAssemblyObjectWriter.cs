@@ -181,11 +181,12 @@ namespace ILCompiler.DependencyAnalysis
 
             EmitDebugMetadata();
 
+            LLVM.SetDataLayout(Module, "e-m:e-p:32:32-i64:64-n32:64-S128");
+            //LLVM.CreateTargetMachine()()
 #if DEBUG
             LLVM.PrintModuleToFile(Module, Path.ChangeExtension(_objectFilePath, ".txt"), out string unused2);
 #endif //DEBUG
-            LLVM.VerifyModule(Module, LLVMVerifierFailureAction.LLVMAbortProcessAction, out string unused);
-
+            LLVM.VerifyModule(Module, LLVMVerifierFailureAction.LLVMPrintMessageAction, out string unused);
             LLVM.WriteBitcodeToFile(Module, _objectFilePath);
 
             //throw new NotImplementedException(); // This function isn't complete
