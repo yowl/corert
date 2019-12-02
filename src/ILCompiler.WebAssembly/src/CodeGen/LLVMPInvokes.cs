@@ -2,77 +2,100 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System;
 using System.Runtime.InteropServices;
+using System.Text;
 using LLVMSharp;
 
 namespace ILCompiler.WebAssembly
 {
-    // LLVM P/Invokes copied from LLVMSharp that match the current LLVM surface area.
-    // If we get a new version of LLVMSharp containing these, this file should be removed.
-    internal class LLVMPInvokes
+    internal unsafe class LLVMUnsafeDIFunctions
     {
-        const string libraryPath = "libLLVM";
-        [DllImport(libraryPath, CallingConvention = CallingConvention.Cdecl)]
-        public static extern LLVMDIBuilderRef LLVMCreateDIBuilder(LLVMModuleRef M);
+        public static LLVMDIBuilderRef CreateDIBuilder(LLVMModuleRef module)
+        {
+            return new LLVMDIBuilderRef((IntPtr)LLVM.CreateDIBuilder((LLVMOpaqueModule*)module.Pointer));
+        }
 
-        [DllImport(libraryPath, EntryPoint = "LLVMDIBuilderCreateCompileUnit", CallingConvention = CallingConvention.Cdecl)]
-        public static extern LLVMMetadataRef LLVMDIBuilderCreateCompileUnit(LLVMDIBuilderRef @Builder, LLVMDWARFSourceLanguage @Lang, LLVMMetadataRef @FileRef, [MarshalAs(UnmanagedType.LPStr)] string @Producer, size_t @ProducerLen, LLVMBool @isOptimized, [MarshalAs(UnmanagedType.LPStr)] string @Flags, size_t @FlagsLen, uint @RuntimeVer, [MarshalAs(UnmanagedType.LPStr)] string @SplitName, size_t @SplitNameLen, LLVMDWARFEmissionKind @Kind, uint @DWOId, LLVMBool @SplitDebugInlining, LLVMBool @DebugInfoForProfiling);
+        public static LLVMMetadataRef DIBuilderCreateFile(LLVMDIBuilderRef builder, string filename, string directory)
+        {
+            byte[] filenameBytes = Encoding.ASCII.GetBytes(filename);
+            byte[] directoryBytes = Encoding.ASCII.GetBytes(directory);
+            fixed (byte* pFilename = filenameBytes)
+            fixed (byte* pDirectory = directoryBytes)
+            {
+                sbyte* filenameSBytePtr = (sbyte*)pFilename;
+                sbyte* directorySBytePtr = (sbyte*)pDirectory;
+                LLVMOpaqueMetadata* metadataPtr = LLVM.DIBuilderCreateFile((LLVMOpaqueDIBuilder*)builder.Pointer, filenameSBytePtr,
+                    (UIntPtr)filenameBytes.Length, directorySBytePtr, (UIntPtr)directoryBytes.Length);
+                return new LLVMMetadataRef((IntPtr)metadataPtr);
+            }
+        }
 
-        [DllImport(libraryPath, EntryPoint = "LLVMDIBuilderCreateFile", CallingConvention = CallingConvention.Cdecl)]
-        public static extern LLVMMetadataRef LLVMDIBuilderCreateFile(LLVMDIBuilderRef @Builder, [MarshalAs(UnmanagedType.LPStr)] string @Filename, size_t @FilenameLen, [MarshalAs(UnmanagedType.LPStr)] string @Directory, size_t @DirectoryLen);
+        public static LLVMMetadataRef DIBuilderCreateCompileUnit(LLVMDIBuilderRef builder, LLVMDWARFSourceLanguage lang,
+            LLVMMetadataRef fileMetadataRef, string producer, int isOptimized, string flags, uint runtimeVersion,
+            string splitName, LLVMDWARFEmissionKind dwarfEmissionKind, uint dWOld, int splitDebugInlining,
+            int debugInfoForProfiling)
+        {
+            byte[] producerBytes = Encoding.ASCII.GetBytes(producer);
+            byte[] flagsBytes = Encoding.ASCII.GetBytes(flags);
+            byte[] splitNameBytes = Encoding.ASCII.GetBytes(splitName);
 
-        [DllImport(libraryPath, EntryPoint = "LLVMDIBuilderCreateDebugLocation", CallingConvention = CallingConvention.Cdecl)]
-        public static extern LLVMMetadataRef LLVMDIBuilderCreateDebugLocation(LLVMContextRef @Ctx, uint @Line, uint @Column, LLVMMetadataRef @Scope, LLVMMetadataRef @InlinedAt);
-    }
+            fixed (byte* pProducer = producerBytes)
+            fixed (byte* pFlags = flagsBytes)
+            fixed (byte* pSplitName = splitNameBytes)
+            {
+                sbyte* producerSBytePtr = (sbyte*)pProducer;
+                sbyte* flagsSBytePtr = (sbyte*)pFlags;
+                sbyte* splitNameSBytePtr = (sbyte*)pSplitName;
+                LLVMOpaqueMetadata* metadataPtr = LLVM.DIBuilderCreateCompileUnit((LLVMOpaqueDIBuilder*)builder.Pointer,
+                    lang,
+                    (LLVMOpaqueMetadata*)fileMetadataRef.Pointer, producerSBytePtr, (UIntPtr)producerBytes.Length,
+                    isOptimized, flagsSBytePtr, (UIntPtr)flagsBytes.Length, runtimeVersion,
+                    splitNameSBytePtr, (UIntPtr)splitNameBytes.Length, dwarfEmissionKind, dWOld, splitDebugInlining,
+                    debugInfoForProfiling);
+                return new LLVMMetadataRef((IntPtr)metadataPtr);
+            }
+        }
 
-    internal enum LLVMDWARFSourceLanguage : int
-    {
-        @LLVMDWARFSourceLanguageC89 = 0,
-        @LLVMDWARFSourceLanguageC = 1,
-        @LLVMDWARFSourceLanguageAda83 = 2,
-        @LLVMDWARFSourceLanguageC_plus_plus = 3,
-        @LLVMDWARFSourceLanguageCobol74 = 4,
-        @LLVMDWARFSourceLanguageCobol85 = 5,
-        @LLVMDWARFSourceLanguageFortran77 = 6,
-        @LLVMDWARFSourceLanguageFortran90 = 7,
-        @LLVMDWARFSourceLanguagePascal83 = 8,
-        @LLVMDWARFSourceLanguageModula2 = 9,
-        @LLVMDWARFSourceLanguageJava = 10,
-        @LLVMDWARFSourceLanguageC99 = 11,
-        @LLVMDWARFSourceLanguageAda95 = 12,
-        @LLVMDWARFSourceLanguageFortran95 = 13,
-        @LLVMDWARFSourceLanguagePLI = 14,
-        @LLVMDWARFSourceLanguageObjC = 15,
-        @LLVMDWARFSourceLanguageObjC_plus_plus = 16,
-        @LLVMDWARFSourceLanguageUPC = 17,
-        @LLVMDWARFSourceLanguageD = 18,
-        @LLVMDWARFSourceLanguagePython = 19,
-        @LLVMDWARFSourceLanguageOpenCL = 20,
-        @LLVMDWARFSourceLanguageGo = 21,
-        @LLVMDWARFSourceLanguageModula3 = 22,
-        @LLVMDWARFSourceLanguageHaskell = 23,
-        @LLVMDWARFSourceLanguageC_plus_plus_03 = 24,
-        @LLVMDWARFSourceLanguageC_plus_plus_11 = 25,
-        @LLVMDWARFSourceLanguageOCaml = 26,
-        @LLVMDWARFSourceLanguageRust = 27,
-        @LLVMDWARFSourceLanguageC11 = 28,
-        @LLVMDWARFSourceLanguageSwift = 29,
-        @LLVMDWARFSourceLanguageJulia = 30,
-        @LLVMDWARFSourceLanguageDylan = 31,
-        @LLVMDWARFSourceLanguageC_plus_plus_14 = 32,
-        @LLVMDWARFSourceLanguageFortran03 = 33,
-        @LLVMDWARFSourceLanguageFortran08 = 34,
-        @LLVMDWARFSourceLanguageRenderScript = 35,
-        @LLVMDWARFSourceLanguageBLISS = 36,
-        @LLVMDWARFSourceLanguageMips_Assembler = 37,
-        @LLVMDWARFSourceLanguageGOOGLE_RenderScript = 38,
-        @LLVMDWARFSourceLanguageBORLAND_Delphi = 39,
-    }
+        public static void AddNamedMetadataOperand(LLVMContextRef context, LLVMModuleRef module, string name, LLVMMetadataRef compileUnitMetadata)
+        {
+            module.AddNamedMetadataOperand(name, MetadataAsOpaqueValue(context, compileUnitMetadata));
+        }
 
-    internal enum LLVMDWARFEmissionKind : int
-    {
-        @LLVMDWARFEmissionNone = 0,
-        @LLVMDWARFEmissionFull = 1,
-        @LLVMDWARFEmissionLineTablesOnly = 2,
+        static LLVMOpaqueValue* MetadataAsOpaqueValue(LLVMContextRef context, LLVMMetadataRef metadata)
+        {
+            return LLVM.MetadataAsValue(context, metadata);
+        }
+
+        public static LLVMValueRef MetadataAsValue(LLVMContextRef context, LLVMMetadataRef metadata)
+        {
+            return new LLVMValueRef((IntPtr)MetadataAsOpaqueValue(context, metadata));
+        }
+
+        public static LLVMMetadataRef DIBuilderCreateFunction(LLVMDIBuilderRef builder, LLVMMetadataRef debugMetadataCompileUnit, string methodName, string linkageName, LLVMMetadataRef debugMetadataFile, uint lineNumber, LLVMMetadataRef typeMetadata, int isLocalToUnit, 
+            int isDefinition, uint scopeLine, LLVMDIFlags llvmDiFlags, int IsOptimized)
+        {
+            byte[] methodNameBytes = Encoding.ASCII.GetBytes(methodName);
+            byte[] linkageNameBytes = Encoding.ASCII.GetBytes(linkageName);
+            fixed (byte* pMethodName = methodNameBytes)
+            fixed (byte* pLinkageNameBytes = linkageNameBytes)
+            {
+                sbyte* methodNameSBytePtr = (sbyte*)pMethodName;
+                sbyte* linkageNameSBytePtr = (sbyte*)pLinkageNameBytes;
+
+                return LLVM.DIBuilderCreateFunction((LLVMOpaqueDIBuilder*) builder.Pointer, (LLVMOpaqueMetadata*) debugMetadataCompileUnit.Pointer, methodNameSBytePtr, (UIntPtr)methodNameBytes.Length, linkageNameSBytePtr, (UIntPtr)linkageNameBytes.Length,
+                    (LLVMOpaqueMetadata*) debugMetadataFile.Pointer, lineNumber, typeMetadata, isLocalToUnit, isDefinition, scopeLine, llvmDiFlags, IsOptimized);
+            }
+        }
+
+        public static LLVMMetadataRef CreateDebugLocation(LLVMContextRef context, uint lineNumber, uint column, LLVMMetadataRef debugFunction, LLVMMetadataRef inlinedAt)
+        {
+            return LLVM.DIBuilderCreateDebugLocation((LLVMOpaqueContext*) context.Pointer, lineNumber, column, debugFunction, inlinedAt);
+        }
+
+        public static void DIBuilderFinalize(LLVMDIBuilderRef builder)
+        {
+            LLVM.DIBuilderFinalize(builder);
+        }
     }
 }

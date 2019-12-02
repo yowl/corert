@@ -10,7 +10,6 @@ using System.Linq;
 using Internal.TypeSystem;
 using ILCompiler;
 using LLVMSharp;
-using ILCompiler.CodeGen;
 using ILCompiler.DependencyAnalysis;
 using ILCompiler.DependencyAnalysisFramework;
 using ILCompiler.WebAssembly;
@@ -132,12 +131,12 @@ namespace Internal.IL
             }
             _llvmFunction = GetOrCreateLLVMFunction(mangledName, method.Signature);
             _currentFunclet = _llvmFunction;
-            _builder = LLVM.CreateBuilder();
             _pointerSize = compilation.NodeFactory.Target.PointerSize;
 
             _debugInformation = _compilation.GetDebugInfo(_methodIL);
 
-            Context = LLVM.GetModuleContext(Module);
+            Context = Module.Context;
+            _builder = Context.CreateBuilder();
         }
 
         public void Import()
@@ -152,24 +151,24 @@ namespace Internal.IL
             }
             catch
             {
-                LLVMBasicBlockRef trapBlock = LLVM.AppendBasicBlock(_llvmFunction, "Trap");
+                LLVMBasicBlockRef trapBlock = _llvmFunction.AppendBasicBlock("Trap");
                 
                 // Change the function body to trap
                 foreach (BasicBlock block in _basicBlocks)
                 {
                     if (block != null && block.Block.Pointer != IntPtr.Zero)
                     {
-                        LLVM.ReplaceAllUsesWith(block.Block, trapBlock);
-                        LLVM.DeleteBasicBlock(block.Block);
+                        block.Block.AsValue().ReplaceAllUsesWith(trapBlock.AsValue());
+                        block.Block.RemoveFromParent();
                     }
                 }
 
                 foreach (LLVMValueRef funclet in _exceptionFunclets)
                 {
-                    LLVM.DeleteFunction(funclet);
+                    funclet.DeleteFunction();
                 }
 
-                LLVM.PositionBuilderAtEnd(_builder, trapBlock);
+                _builder.PositionAtEnd(trapBlock);
                 EmitTrapCall();
                 throw;
             }
@@ -192,8 +191,8 @@ namespace Internal.IL
 
         private void GenerateProlog()
         {
-            LLVMBasicBlockRef prologBlock = LLVM.AppendBasicBlock(_llvmFunction, "Prolog");
-            LLVM.PositionBuilderAtEnd(_builder, prologBlock);
+            LLVMBasicBlockRef prologBlock = _llvmFunction.AppendBasicBlock("Prolog");
+            _builder.PositionAtEnd(prologBlock);
 
             // Copy arguments onto the stack to allow
             // them to be referenced by address
@@ -222,7 +221,7 @@ namespace Internal.IL
                 if (CanStoreTypeOnStack(_signature[i]))
                 {
                     LLVMValueRef storageAddr;
-                    LLVMValueRef argValue = LLVM.GetParam(_llvmFunction, (uint)signatureIndex);
+                    LLVMValueRef argValue = _llvmFunction.GetParam((uint)signatureIndex);
 
                     // The caller will always pass the argument on the stack. If this function doesn't have 
                     // EH, we can put it in an alloca for efficiency and better debugging. Otherwise,
@@ -237,15 +236,15 @@ namespace Internal.IL
                         }
                         argName += $"arg{argOffset}_";
 
-                        storageAddr = LLVM.BuildAlloca(_builder, GetLLVMTypeForTypeDesc(_signature[i]), argName);
+                        storageAddr = _builder.BuildAlloca(GetLLVMTypeForTypeDesc(_signature[i]), argName);
                         _argSlots[i] = storageAddr;                        
                     }
                     else
                     {
-                        storageAddr = CastIfNecessary(LoadVarAddress(argOffset, LocalVarKind.Argument, out _), LLVM.PointerType(LLVM.TypeOf(argValue), 0));
+                        storageAddr = CastIfNecessary(LoadVarAddress(argOffset, LocalVarKind.Argument, out _), LLVMTypeRef.CreatePointer(argValue.TypeOf, 0));
                     }
 
-                    LLVM.BuildStore(_builder, argValue, storageAddr);
+                    _builder.BuildStore(argValue, storageAddr);
                     signatureIndex++;
                 }
             }
@@ -276,7 +275,7 @@ namespace Internal.IL
 
                     localName += $"local{i}_";
 
-                    LLVMValueRef localStackSlot = LLVM.BuildAlloca(_builder, GetLLVMTypeForTypeDesc(_locals[i].Type), localName);
+                    LLVMValueRef localStackSlot = _builder.BuildAlloca(GetLLVMTypeForTypeDesc(_locals[i].Type), localName);
                     _localSlots[i] = localStackSlot;
                 }
             }
@@ -289,29 +288,29 @@ namespace Internal.IL
                     if(CanStoreVariableOnStack(localType))
                     {
                         LLVMTypeRef llvmType = GetLLVMTypeForTypeDesc(localType);
-                        LLVMTypeKind typeKind = LLVM.GetTypeKind(llvmType);
+                        LLVMTypeKind typeKind = llvmType.Kind;
                         switch (typeKind)
                         {
                             case LLVMTypeKind.LLVMIntegerTypeKind:
-                                if (llvmType.Equals(LLVM.Int1Type()))
+                                if (llvmType.Equals(LLVMTypeRef.Int1))
                                 {
-                                    LLVM.BuildStore(_builder, BuildConstInt1(0), localAddr);
+                                    _builder.BuildStore(BuildConstInt1(0), localAddr);
                                 }
-                                else if (llvmType.Equals(LLVM.Int8Type()))
+                                else if (llvmType.Equals(LLVMTypeRef.Int8))
                                 {
-                                    LLVM.BuildStore(_builder, BuildConstInt8(0), localAddr);
+                                    _builder.BuildStore(BuildConstInt8(0), localAddr);
                                 }
-                                else if (llvmType.Equals(LLVM.Int16Type()))
+                                else if (llvmType.Equals(LLVMTypeRef.Int16))
                                 {
-                                    LLVM.BuildStore(_builder, BuildConstInt16(0), localAddr);
+                                    _builder.BuildStore(BuildConstInt16(0), localAddr);
                                 }
-                                else if (llvmType.Equals(LLVM.Int32Type()))
+                                else if (llvmType.Equals(LLVMTypeRef.Int32))
                                 {
-                                    LLVM.BuildStore(_builder, BuildConstInt32(0), localAddr);
+                                    _builder.BuildStore(BuildConstInt32(0), localAddr);
                                 }
-                                else if (llvmType.Equals(LLVM.Int64Type()))
+                                else if (llvmType.Equals(LLVMTypeRef.Int64))
                                 {
-                                    LLVM.BuildStore(_builder, BuildConstInt64(0), localAddr);
+                                    _builder.BuildStore(BuildConstInt64(0), localAddr);
                                 }
                                 else
                                 {
@@ -320,18 +319,18 @@ namespace Internal.IL
                                 break;
 
                             case LLVMTypeKind.LLVMPointerTypeKind:
-                                LLVM.BuildStore(_builder, LLVM.ConstPointerNull(llvmType), localAddr);
+                                _builder.BuildStore(LLVMValueRef.CreateConstPointerNull(llvmType), localAddr);
                                 break;
 
                             default:
-                                LLVMValueRef castAddr = LLVM.BuildPointerCast(_builder, localAddr, LLVM.PointerType(LLVM.Int8Type(), 0), $"cast_local{i}_");
+                                LLVMValueRef castAddr = _builder.BuildPointerCast(localAddr, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), $"cast_local{i}_");
                                 ImportCallMemset(castAddr, 0, localType.GetElementSize().AsInt);
                                 break;
                         }
                     }
                     else
                     {
-                        LLVMValueRef castAddr = LLVM.BuildPointerCast(_builder, localAddr, LLVM.PointerType(LLVM.Int8Type(), 0), $"cast_local{i}_");
+                        LLVMValueRef castAddr = _builder.BuildPointerCast(localAddr, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), $"cast_local{i}_");
                         ImportCallMemset(castAddr, 0, localType.GetElementSize().AsInt);
                     }
                 }
@@ -345,17 +344,17 @@ namespace Internal.IL
             }
 
             LLVMBasicBlockRef block0 = GetLLVMBasicBlockForBlock(_basicBlocks[0]);
-            LLVM.BuildBr(_builder, block0);
+            _builder.BuildBr(block0);
         }
 
         private LLVMValueRef CreateLLVMFunction(string mangledName, MethodSignature signature)
         {
-            return LLVM.AddFunction(Module, mangledName, GetLLVMSignatureForMethod(signature));
+            return Module.AddFunction(mangledName, GetLLVMSignatureForMethod(signature));
         }
 
         private LLVMValueRef GetOrCreateLLVMFunction(string mangledName, MethodSignature signature)
         {
-            LLVMValueRef llvmFunction = LLVM.GetNamedFunction(Module, mangledName);
+            LLVMValueRef llvmFunction = Module.GetNamedFunction(mangledName);
 
             if(llvmFunction.Pointer == IntPtr.Zero)
             {
@@ -366,11 +365,11 @@ namespace Internal.IL
 
         private LLVMValueRef GetOrCreateLLVMFunction(string mangledName, LLVMTypeRef functionType)
         {
-            LLVMValueRef llvmFunction = LLVM.GetNamedFunction(Module, mangledName);
+            LLVMValueRef llvmFunction = Module.GetNamedFunction(mangledName);
 
             if (llvmFunction.Pointer == IntPtr.Zero)
             {
-                return LLVM.AddFunction(Module, mangledName, functionType);
+                return Module.AddFunction(mangledName, functionType);
             }
             return llvmFunction;
         }
@@ -381,12 +380,12 @@ namespace Internal.IL
         private LLVMValueRef GetOrCreateFunclet(ILExceptionRegionKind kind, int handlerOffset)
         {
             string funcletName = _mangledName + "$" + kind.ToString() + handlerOffset.ToString("X");
-            LLVMValueRef funclet = LLVM.GetNamedFunction(Module, funcletName);
+            LLVMValueRef funclet = Module.GetNamedFunction(funcletName);
             if (funclet.Pointer == IntPtr.Zero)
             {
                 // Funclets only accept a shadow stack pointer
-                LLVMTypeRef universalFuncletSignature = LLVM.FunctionType(LLVM.VoidType(), new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0) }, false);
-                funclet = LLVM.AddFunction(Module, funcletName, universalFuncletSignature);
+                LLVMTypeRef universalFuncletSignature = LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }, false);
+                funclet = Module.AddFunction(funcletName, universalFuncletSignature);
                 _exceptionFunclets.Add(funclet);
             }
 
@@ -401,8 +400,8 @@ namespace Internal.IL
 
         private void ImportCallMemset (LLVMValueRef targetPointer, byte value, LLVMValueRef length)
         {
-            var memsetSignature = LLVM.FunctionType(LLVM.VoidType(), new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0), LLVM.Int8Type(), LLVM.Int32Type(), LLVM.Int32Type(), LLVM.Int1Type() }, false);
-            LLVM.BuildCall(_builder, GetOrCreateLLVMFunction("llvm.memset.p0i8.i32", memsetSignature), new LLVMValueRef[] { targetPointer, BuildConstInt8(value), length, BuildConstInt32(1), BuildConstInt1(0) }, String.Empty);
+            var memsetSignature = LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), LLVMTypeRef.Int8, LLVMTypeRef.Int32, LLVMTypeRef.Int32, LLVMTypeRef.Int1 }, false);
+            _builder.BuildCall(GetOrCreateLLVMFunction("llvm.memset.p0i8.i32", memsetSignature), new LLVMValueRef[] { targetPointer, BuildConstInt8(value), length, BuildConstInt32(1), BuildConstInt1(0) }, String.Empty);
         }
 
         private void PushLoadExpression(StackValueKind kind, string name, LLVMValueRef rawLLVMValue, TypeDesc type)
@@ -430,7 +429,7 @@ namespace Internal.IL
                             && !type.IsWellKnownType(WellKnownType.UInt32)
                             && !type.IsWellKnownType(WellKnownType.UIntPtr))
                         {
-                            llvmValue = LLVM.BuildIntCast(_builder, llvmValue, LLVM.Int32Type(), "");
+                            llvmValue = _builder.BuildIntCast(llvmValue, LLVMTypeRef.Int32, "");
                         }
                     }
                     break;
@@ -440,7 +439,7 @@ namespace Internal.IL
                         if (!type.IsWellKnownType(WellKnownType.Int64)
                             && !(type.IsWellKnownType(WellKnownType.UInt64)))
                         {
-                            llvmValue = LLVM.BuildIntCast(_builder, llvmValue, LLVM.Int64Type(), "");
+                            llvmValue = _builder.BuildIntCast(llvmValue, LLVMTypeRef.Int64, "");
                         }
                     }
                     break;
@@ -462,7 +461,7 @@ namespace Internal.IL
             {
                 LLVMValueRef blockFunclet = GetFuncletForBlock(block);
 
-                block.Block = LLVM.AppendBasicBlock(blockFunclet, "Block" + block.StartOffset.ToString("X"));
+                block.Block = blockFunclet.AppendBasicBlock("Block" + block.StartOffset.ToString("X"));
             }
             return block.Block;
         }
@@ -525,12 +524,12 @@ namespace Internal.IL
             _curBasicBlock = GetLLVMBasicBlockForBlock(basicBlock);
             _currentFunclet = GetFuncletForBlock(basicBlock);
 
-            LLVM.PositionBuilderAtEnd(_builder, _curBasicBlock);
+            _builder.PositionAtEnd(_curBasicBlock);
         }
 
         private void EndImportingBasicBlock(BasicBlock basicBlock)
         {
-            var terminator = basicBlock.Block.GetBasicBlockTerminator();
+            var terminator = basicBlock.Block.Terminator;
             if (terminator.Pointer == IntPtr.Zero)
             {
                 if (_basicBlocks.Length > _currentOffset)
@@ -538,7 +537,7 @@ namespace Internal.IL
                     if (_basicBlocks[_currentOffset].StartOffset == 0)
                         throw new InvalidProgramException();
                     MarkBasicBlock(_basicBlocks[_currentOffset]);
-                    LLVM.BuildBr(_builder, GetLLVMBasicBlockForBlock(_basicBlocks[_currentOffset]));
+                    _builder.BuildBr(GetLLVMBasicBlockForBlock(_basicBlocks[_currentOffset]));
                 }
             }
         }
@@ -581,13 +580,12 @@ namespace Internal.IL
                     string fullPath = curSequencePoint.Document;
                     string fileName = Path.GetFileName(fullPath);
                     string directory = Path.GetDirectoryName(fullPath) ?? String.Empty;
-                    LLVMMetadataRef fileMetadata = LLVMPInvokes.LLVMDIBuilderCreateFile(_compilation.DIBuilder, fullPath, fullPath.Length,
-                        directory, directory.Length);
+                    LLVMMetadataRef fileMetadata = LLVMUnsafeDIFunctions.DIBuilderCreateFile(_compilation.DIBuilder, fullPath, directory);
 
                     // todo: get the right value for isOptimized
-                    LLVMMetadataRef compileUnitMetadata = LLVMPInvokes.LLVMDIBuilderCreateCompileUnit(_compilation.DIBuilder, LLVMDWARFSourceLanguage.LLVMDWARFSourceLanguageC,
-                        fileMetadata, "ILC", 3, isOptimized: false, String.Empty, 0, 1, String.Empty, 0, LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, 0, false, false);
-                    LLVM.AddNamedMetadataOperand(Module, "llvm.dbg.cu", LLVM.MetadataAsValue(Context, compileUnitMetadata));
+                    LLVMMetadataRef compileUnitMetadata = LLVMUnsafeDIFunctions.DIBuilderCreateCompileUnit(_compilation.DIBuilder, LLVMDWARFSourceLanguage.LLVMDWARFSourceLanguageC,
+                        fileMetadata, "ILC",  0 /* Optimized */, String.Empty, 1, String.Empty, LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, 0, 0, 0);
+                    LLVMUnsafeDIFunctions.AddNamedMetadataOperand(Context, Module, "llvm.dbg.cu", compileUnitMetadata);
 
                     debugMetadata = new DebugMetadata(fileMetadata, compileUnitMetadata);
                     _compilation.DebugMetadataMap[fullPath] = debugMetadata;
@@ -595,12 +593,11 @@ namespace Internal.IL
 
                 if (_debugFunction.Pointer == IntPtr.Zero)
                 {
-                    _debugFunction = LLVM.DIBuilderCreateFunction(_compilation.DIBuilder, debugMetadata.CompileUnit, _method.Name, String.Empty, debugMetadata.File,
-                        (uint)_debugInformation.GetSequencePoints().FirstOrDefault().LineNumber, default(LLVMMetadataRef), 1, 1, 1, 0, IsOptimized: 0, _llvmFunction);
+                    _debugFunction = LLVMUnsafeDIFunctions.DIBuilderCreateFunction(_compilation.DIBuilder, debugMetadata.CompileUnit, _method.Name, String.Empty, debugMetadata.File,
+                        (uint)_debugInformation.GetSequencePoints().FirstOrDefault().LineNumber, default(LLVMMetadataRef), 1, 1, 1, 0, 0);
                 }
-
-                LLVMMetadataRef currentLine = LLVMPInvokes.LLVMDIBuilderCreateDebugLocation(Context, (uint)curSequencePoint.LineNumber, 0, _debugFunction, default(LLVMMetadataRef));
-                LLVM.SetCurrentDebugLocation(_builder, LLVM.MetadataAsValue(Context, currentLine));
+                LLVMMetadataRef currentLine = LLVMUnsafeDIFunctions.CreateDebugLocation(Context, (uint)curSequencePoint.LineNumber, 0, _debugFunction, default(LLVMMetadataRef));
+                _builder.CurrentDebugLocation = LLVMUnsafeDIFunctions.MetadataAsValue(Context, currentLine);
             }
         }
 
@@ -611,7 +608,7 @@ namespace Internal.IL
             _constrainedType = null;
 
             // Reset the debug position so it doesn't end up applying to the wrong instructions
-            LLVM.SetCurrentDebugLocation(_builder, default(LLVMValueRef));
+            _builder.CurrentDebugLocation = default(LLVMValueRef);
         }
 
         private void ImportNop()
@@ -623,9 +620,9 @@ namespace Internal.IL
         {
             if (DebugtrapFunction.Pointer == IntPtr.Zero)
             {
-                DebugtrapFunction = LLVM.AddFunction(Module, "llvm.debugtrap", LLVM.FunctionType(LLVM.VoidType(), Array.Empty<LLVMTypeRef>(), false));
+                DebugtrapFunction = Module.AddFunction("llvm.debugtrap", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, Array.Empty<LLVMTypeRef>(), false));
             }
-            LLVM.BuildCall(_builder, DebugtrapFunction, Array.Empty<LLVMValueRef>(), string.Empty);
+            _builder.BuildCall(DebugtrapFunction, Array.Empty<LLVMValueRef>(), string.Empty);
         }
 
         private void ImportLoadVar(int index, bool argument)
@@ -637,93 +634,93 @@ namespace Internal.IL
         private LLVMValueRef LoadTemp(int index)
         {
             LLVMValueRef address = LoadVarAddress(index, LocalVarKind.Temp, out TypeDesc type);
-            return LLVM.BuildLoad(_builder, CastToPointerToTypeDesc(address, type, $"Temp{index}_"), $"LdTemp{index}_"); 
+            return _builder.BuildLoad(CastToPointerToTypeDesc(address, type, $"Temp{index}_"), $"LdTemp{index}_"); 
         }
 
         internal LLVMValueRef LoadTemp(int index, LLVMTypeRef asType)
         {
             LLVMValueRef address = LoadVarAddress(index, LocalVarKind.Temp, out TypeDesc type);
-            return LLVM.BuildLoad(_builder, CastIfNecessary(address, LLVM.PointerType(asType, 0), $"Temp{index}_"), $"LdTemp{index}_");
+            return _builder.BuildLoad(CastIfNecessary(address, LLVMTypeRef.CreatePointer(asType, 0), $"Temp{index}_"), $"LdTemp{index}_");
         }
 
         private void StoreTemp(int index, LLVMValueRef value, string name = null)
         {
             LLVMValueRef address = LoadVarAddress(index, LocalVarKind.Temp, out TypeDesc type);
-            LLVM.BuildStore(_builder, CastToTypeDesc(value, type, name), CastToPointerToTypeDesc(address, type, $"Temp{index}_"));
+            _builder.BuildStore(CastToTypeDesc(value, type, name), CastToPointerToTypeDesc(address, type, $"Temp{index}_"));
         }
 
         internal static LLVMValueRef LoadValue(LLVMBuilderRef builder, LLVMValueRef address, TypeDesc sourceType, LLVMTypeRef targetType, bool signExtend, string loadName = null)
         {
             var underlyingSourceType = sourceType.UnderlyingType;
-            if (targetType.TypeKind == LLVMTypeKind.LLVMIntegerTypeKind && underlyingSourceType.IsPrimitive && !underlyingSourceType.IsPointer)
+            if (targetType.Kind == LLVMTypeKind.LLVMIntegerTypeKind && underlyingSourceType.IsPrimitive && !underlyingSourceType.IsPointer)
             {
                 LLVMValueRef loadValueRef = CastIfNecessaryAndLoad(builder, address, underlyingSourceType, loadName);
                 return CastIntValue(builder, loadValueRef, targetType, signExtend);
             }
-            else if (targetType.TypeKind == LLVMTypeKind.LLVMDoubleTypeKind)
+            else if (targetType.Kind == LLVMTypeKind.LLVMDoubleTypeKind)
             {
                 LLVMValueRef loadValueRef = CastIfNecessaryAndLoad(builder, address, underlyingSourceType, loadName);
                 return CastDoubleValue(builder, loadValueRef, targetType);
             }
             else
             {
-                var typedAddress = CastIfNecessary(builder, address, LLVM.PointerType(targetType, 0));
-                return LLVM.BuildLoad(builder, typedAddress, loadName ?? "ldvalue");
+                var typedAddress = CastIfNecessary(builder, address, LLVMTypeRef.CreatePointer(targetType, 0));
+                return builder.BuildLoad(typedAddress, loadName ?? "ldvalue");
             }
         }
 
         private static LLVMValueRef CastIfNecessaryAndLoad(LLVMBuilderRef builder, LLVMValueRef address, TypeDesc sourceTypeDesc, string loadName)
         {
             LLVMTypeRef sourceLLVMType = ILImporter.GetLLVMTypeForTypeDesc(sourceTypeDesc);
-            LLVMValueRef typedAddress = CastIfNecessary(builder, address, LLVM.PointerType(sourceLLVMType, 0));
-            return LLVM.BuildLoad(builder, typedAddress, loadName ?? "ldvalue");
+            LLVMValueRef typedAddress = CastIfNecessary(builder, address, LLVMTypeRef.CreatePointer(sourceLLVMType, 0));
+            return builder.BuildLoad(typedAddress, loadName ?? "ldvalue");
         }
 
         private static LLVMValueRef CastIntValue(LLVMBuilderRef builder, LLVMValueRef value, LLVMTypeRef type, bool signExtend)
         {
-            LLVMTypeKind typeKind = LLVM.TypeOf(value).TypeKind;
-            if (LLVM.TypeOf(value).Pointer == type.Pointer)
+            LLVMTypeKind typeKind = value.TypeOf.Kind;
+            if (value.TypeOf.Pointer == type.Pointer)
             {
                 return value;
             }
             else if (typeKind == LLVMTypeKind.LLVMPointerTypeKind)
             {
-                return LLVM.BuildPtrToInt(builder, value, type, "intcast");
+                return builder.BuildPtrToInt(value, type, "intcast");
             }
             else if (typeKind == LLVMTypeKind.LLVMFloatTypeKind || typeKind == LLVMTypeKind.LLVMDoubleTypeKind)
             {
                 if (signExtend)
                 {
-                    return LLVM.BuildFPToSI(builder, value, type, "fptosi");
+                    return builder.BuildFPToSI(value, type, "fptosi");
                 }
                 else
                 {
-                    return LLVM.BuildFPToUI(builder, value, type, "fptoui");
+                    return builder.BuildFPToUI(value, type, "fptoui");
                 }
             }
-            else if (signExtend && type.GetIntTypeWidth() > LLVM.TypeOf(value).GetIntTypeWidth())
+            else if (signExtend && type.IntWidth > value.TypeOf.IntWidth)
             {
-                return LLVM.BuildSExtOrBitCast(builder, value, type, "SExtOrBitCast");
+                return builder.BuildSExtOrBitCast(value, type, "SExtOrBitCast");
             }
-            else if (type.GetIntTypeWidth() > LLVM.TypeOf(value).GetIntTypeWidth())
+            else if (type.IntWidth > value.TypeOf.IntWidth)
             {
-                return LLVM.BuildZExtOrBitCast(builder, value, type, "ZExtOrBitCast");
+                return builder.BuildZExtOrBitCast(value, type, "ZExtOrBitCast");
             }
             else
             {
                 Debug.Assert(typeKind == LLVMTypeKind.LLVMIntegerTypeKind);
-                return LLVM.BuildIntCast(builder, value, type, "intcast");
+                return builder.BuildIntCast(value, type, "intcast");
             }
         }
 
         private static LLVMValueRef CastDoubleValue(LLVMBuilderRef builder, LLVMValueRef value, LLVMTypeRef type)
         {
-            if (LLVM.TypeOf(value).Pointer == type.Pointer)
+            if (value.TypeOf.Pointer == type.Pointer)
             {
                 return value;
             }
-            Debug.Assert(LLVM.TypeOf(value).TypeKind == LLVMTypeKind.LLVMFloatTypeKind);
-            return LLVM.BuildFPExt(builder, value, type, "fpext");
+            Debug.Assert(value.TypeOf.Kind == LLVMTypeKind.LLVMFloatTypeKind);
+            return builder.BuildFPExt(value, type, "fpext");
         }
 
         private LLVMValueRef LoadVarAddress(int index, LocalVarKind kind, out TypeDesc type)
@@ -785,8 +782,8 @@ namespace Internal.IL
                 type = _spilledExpressions[index].Type;
             }
 
-            return LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_currentFunclet),
-                new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (uint)(varBase + varOffset), LLVMMisc.False) },
+            return _builder.BuildGEP(_currentFunclet.GetParam(0),
+                new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)(varBase + varOffset), false) },
                 $"{kind}{index}_");
 
         }
@@ -847,16 +844,16 @@ namespace Internal.IL
 
             LLVMValueRef typedToStore = CastIfNecessary(builder, toStore, valueType, name);
 
-            var storeLocation = LLVM.BuildGEP(builder, basePtr,
-                new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), offset, LLVMMisc.False) },
+            var storeLocation = builder.BuildGEP(basePtr,
+                new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, offset, false) },
                 String.Empty);
-            var typedStoreLocation = CastIfNecessary(builder, storeLocation, LLVM.PointerType(valueType, 0), "TypedStore" + (name ?? ""));
-            LLVM.BuildStore(builder, typedToStore, typedStoreLocation);
+            var typedStoreLocation = CastIfNecessary(builder, storeLocation, LLVMTypeRef.CreatePointer(valueType, 0), "TypedStore" + (name ?? ""));
+            builder.BuildStore(typedToStore, typedStoreLocation);
         }
 
         private LLVMValueRef CastToRawPointer(LLVMValueRef source, string name = null)
         {
-            return CastIfNecessary(source, LLVM.PointerType(LLVM.Int8Type(), 0), name);
+            return CastIfNecessary(source, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), name);
         }
 
         private LLVMValueRef CastToTypeDesc(LLVMValueRef source, TypeDesc type, string name = null)
@@ -866,13 +863,13 @@ namespace Internal.IL
 
         private LLVMValueRef CastToPointerToTypeDesc(LLVMValueRef source, TypeDesc type, string name = null)
         {
-            return CastIfNecessary(source, LLVM.PointerType(GetLLVMTypeForTypeDesc(type), 0), (name ?? "") + type.ToString());
+            return CastIfNecessary(source, LLVMTypeRef.CreatePointer(GetLLVMTypeForTypeDesc(type), 0), (name ?? "") + type.ToString());
         }
 
         private void CastingStore(LLVMValueRef address, StackEntry value, TypeDesc targetType, string targetName = null)
         {
             var typedStoreLocation = CastToPointerToTypeDesc(address, targetType, targetName);
-            LLVM.BuildStore(_builder, value.ValueAsType(targetType, _builder), typedStoreLocation);
+            _builder.BuildStore(value.ValueAsType(targetType, _builder), typedStoreLocation);
         }
 
         private LLVMValueRef CastIfNecessary(LLVMValueRef source, LLVMTypeRef valueType, string name = null)
@@ -882,29 +879,29 @@ namespace Internal.IL
 
         internal static LLVMValueRef CastIfNecessary(LLVMBuilderRef builder, LLVMValueRef source, LLVMTypeRef valueType, string name = null)
         {
-            LLVMTypeRef sourceType = LLVM.TypeOf(source);
+            LLVMTypeRef sourceType = source.TypeOf;
             if (sourceType.Pointer == valueType.Pointer)
                 return source;
 
-            LLVMTypeKind toStoreKind = LLVM.GetTypeKind(sourceType);
-            LLVMTypeKind valueTypeKind = LLVM.GetTypeKind(valueType);
+            LLVMTypeKind toStoreKind = sourceType.Kind;
+            LLVMTypeKind valueTypeKind = valueType.Kind;
 
             LLVMValueRef typedToStore = source;
             if (toStoreKind == LLVMTypeKind.LLVMPointerTypeKind && valueTypeKind == LLVMTypeKind.LLVMPointerTypeKind)
             {
-                typedToStore = LLVM.BuildPointerCast(builder, source, valueType, "CastPtr" + (name ?? ""));
+                typedToStore = builder.BuildPointerCast(source, valueType, "CastPtr" + (name ?? ""));
             }
             else if (toStoreKind == LLVMTypeKind.LLVMPointerTypeKind && valueTypeKind == LLVMTypeKind.LLVMIntegerTypeKind)
             {
-                typedToStore = LLVM.BuildPtrToInt(builder, source, valueType, "CastInt" + (name ?? ""));
+                typedToStore = builder.BuildPtrToInt(source, valueType, "CastInt" + (name ?? ""));
             }
             else if (toStoreKind == LLVMTypeKind.LLVMIntegerTypeKind && valueTypeKind == LLVMTypeKind.LLVMArrayTypeKind)
             {
-                typedToStore = LLVM.BuildLoad(builder, CastIfNecessary(builder, source, LLVM.PointerType(valueType, 0), name), "CastArrayLoad" + (name ?? ""));
+                typedToStore = builder.BuildLoad(CastIfNecessary(builder, source, LLVMTypeRef.CreatePointer(valueType, 0), name), "CastArrayLoad" + (name ?? ""));
             }
             else if (toStoreKind == LLVMTypeKind.LLVMPointerTypeKind && valueTypeKind == LLVMTypeKind.LLVMArrayTypeKind)
             {
-                typedToStore = LLVM.BuildLoad(builder, CastIfNecessary(builder, source, LLVM.PointerType(valueType, 0), name), "CastArrayLoad" + (name ?? ""));
+                typedToStore = builder.BuildLoad(CastIfNecessary(builder, source, LLVMTypeRef.CreatePointer(valueType, 0), name), "CastArrayLoad" + (name ?? ""));
             }
             else if (toStoreKind == LLVMTypeKind.LLVMPointerTypeKind && valueTypeKind != LLVMTypeKind.LLVMIntegerTypeKind)
             {
@@ -912,7 +909,7 @@ namespace Internal.IL
             }
             else if (toStoreKind == LLVMTypeKind.LLVMIntegerTypeKind && valueTypeKind == LLVMTypeKind.LLVMPointerTypeKind)
             {
-                typedToStore = LLVM.BuildIntToPtr(builder, source, valueType, "CastPtr" + (name ?? ""));
+                typedToStore = builder.BuildIntToPtr(source, valueType, "CastPtr" + (name ?? ""));
             }
             else if (toStoreKind != LLVMTypeKind.LLVMIntegerTypeKind && valueTypeKind == LLVMTypeKind.LLVMPointerTypeKind)
             {
@@ -920,12 +917,12 @@ namespace Internal.IL
             }
             else if (toStoreKind == LLVMTypeKind.LLVMFloatTypeKind && valueTypeKind == LLVMTypeKind.LLVMDoubleTypeKind)
             {
-                typedToStore = LLVM.BuildFPExt(builder, source, valueType, "CastFloatToDouble" + (name ?? ""));
+                typedToStore = builder.BuildFPExt(source, valueType, "CastFloatToDouble" + (name ?? ""));
             }
 
             else if (toStoreKind == LLVMTypeKind.LLVMDoubleTypeKind && valueTypeKind == LLVMTypeKind.LLVMFloatTypeKind)
             {
-                typedToStore = LLVM.BuildFPTrunc(builder, source, valueType, "CastDoubleToFloat" + (name ?? ""));
+                typedToStore = builder.BuildFPTrunc(source, valueType, "CastDoubleToFloat" + (name ?? ""));
             }
             else if (toStoreKind != valueTypeKind && toStoreKind != LLVMTypeKind.LLVMIntegerTypeKind && valueTypeKind != LLVMTypeKind.LLVMIntegerTypeKind)
             {
@@ -934,18 +931,18 @@ namespace Internal.IL
             else if (toStoreKind == valueTypeKind && toStoreKind == LLVMTypeKind.LLVMIntegerTypeKind)
             {
                 Debug.Assert(toStoreKind != LLVMTypeKind.LLVMPointerTypeKind && valueTypeKind != LLVMTypeKind.LLVMPointerTypeKind);
-                typedToStore = LLVM.BuildIntCast(builder, source, valueType, "CastInt" + (name ?? ""));
+                typedToStore = builder.BuildIntCast(source, valueType, "CastInt" + (name ?? ""));
             }
             else if (toStoreKind == LLVMTypeKind.LLVMIntegerTypeKind && (valueTypeKind == LLVMTypeKind.LLVMDoubleTypeKind || valueTypeKind == LLVMTypeKind.LLVMFloatTypeKind))
             {
                 //TODO: keep track of the TypeDesc so we can call BuildUIToFP when the integer is unsigned
-                typedToStore = LLVM.BuildSIToFP(builder, source, valueType, "CastSIToFloat" + (name ?? ""));
+                typedToStore = builder.BuildSIToFP(source, valueType, "CastSIToFloat" + (name ?? ""));
             }
             else if ((toStoreKind == LLVMTypeKind.LLVMDoubleTypeKind || toStoreKind == LLVMTypeKind.LLVMFloatTypeKind) && 
                 valueTypeKind == LLVMTypeKind.LLVMIntegerTypeKind)
             {
                 //TODO: keep track of the TypeDesc so we can call BuildFPToUI when the integer is unsigned
-                typedToStore = LLVM.BuildFPToSI(builder, source, valueType, "CastFloatSI" + (name ?? ""));
+                typedToStore = builder.BuildFPToSI(source, valueType, "CastFloatSI" + (name ?? ""));
             }
 
             return typedToStore;
@@ -956,20 +953,20 @@ namespace Internal.IL
             switch (type.Category)
             {
                 case TypeFlags.Boolean:
-                    return LLVM.Int1Type();
+                    return LLVMTypeRef.Int1;
 
                 case TypeFlags.SByte:
                 case TypeFlags.Byte:
-                    return LLVM.Int8Type();
+                    return LLVMTypeRef.Int8;
 
                 case TypeFlags.Int16:
                 case TypeFlags.UInt16:
                 case TypeFlags.Char:
-                    return LLVM.Int16Type();
+                    return LLVMTypeRef.Int16;
 
                 case TypeFlags.Int32:
                 case TypeFlags.UInt32:
-                    return LLVM.Int32Type();
+                    return LLVMTypeRef.Int32;
                 case TypeFlags.IntPtr:
                 case TypeFlags.UIntPtr:
                 case TypeFlags.Array:
@@ -977,20 +974,20 @@ namespace Internal.IL
                 case TypeFlags.ByRef:
                 case TypeFlags.Class:
                 case TypeFlags.Interface:
-                    return LLVM.PointerType(LLVM.Int8Type(), 0);
+                    return LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0);
 
                 case TypeFlags.Pointer:
-                    return LLVM.PointerType(type.GetParameterType().IsVoid ? LLVM.Int8Type() : GetLLVMTypeForTypeDesc(type.GetParameterType()), 0);
+                    return LLVMTypeRef.CreatePointer(type.GetParameterType().IsVoid ? LLVMTypeRef.Int8 : GetLLVMTypeForTypeDesc(type.GetParameterType()), 0);
 
                 case TypeFlags.Int64:
                 case TypeFlags.UInt64:
-                    return LLVM.Int64Type();
+                    return LLVMTypeRef.Int64;
 
                 case TypeFlags.Single:
-                    return LLVM.FloatType();
+                    return LLVMTypeRef.Float;
 
                 case TypeFlags.Double:
-                    return LLVM.DoubleType();
+                    return LLVMTypeRef.Double;
 
                 case TypeFlags.ValueType:
                 case TypeFlags.Nullable:
@@ -1004,12 +1001,12 @@ namespace Internal.IL
                             switch (structSize)
                             {
                                 case 1:
-                                    llvmStructType = LLVM.Int8Type();
+                                    llvmStructType = LLVMTypeRef.Int8;
                                     break;
                                 case 2:
                                     if (structAlignment == 2)
                                     {
-                                        llvmStructType = LLVM.Int16Type();
+                                        llvmStructType = LLVMTypeRef.Int16;
                                     }
                                     else
                                     {
@@ -1021,11 +1018,11 @@ namespace Internal.IL
                                     {
                                         if (StructIsWrappedPrimitive(type, type.Context.GetWellKnownType(WellKnownType.Single)))
                                         {
-                                            llvmStructType = LLVM.FloatType();
+                                            llvmStructType = LLVMTypeRef.Float;
                                         }
                                         else
                                         {
-                                            llvmStructType = LLVM.Int32Type();
+                                            llvmStructType = LLVMTypeRef.Int32;
                                         }
                                     }
                                     else
@@ -1038,11 +1035,11 @@ namespace Internal.IL
                                     {
                                         if (StructIsWrappedPrimitive(type, type.Context.GetWellKnownType(WellKnownType.Double)))
                                         {
-                                            llvmStructType = LLVM.DoubleType();
+                                            llvmStructType = LLVMTypeRef.Double;
                                         }
                                         else
                                         {
-                                            llvmStructType = LLVM.Int64Type();
+                                            llvmStructType = LLVMTypeRef.Int64;
                                         }
                                     }
                                     else
@@ -1054,7 +1051,7 @@ namespace Internal.IL
                                 default:
                                     // Forward-declare the struct in case there's a reference to it in the fields.
                                     // This must be a named struct or LLVM hits a stack overflow
-                                    llvmStructType = LLVM.StructCreateNamed(Context, type.ToString());
+                                    llvmStructType = Context.CreateNamedStruct(type.ToString());
                                     LlvmStructs[type] = llvmStructType;
 
                                     FieldDesc[] instanceFields = type.GetFields().Where(field => !field.IsStatic).ToArray();
@@ -1120,7 +1117,7 @@ namespace Internal.IL
                                         AddPaddingFields(structSize - totalSize, llvmFields);
                                     }
 
-                                    LLVM.StructSetBody(llvmStructType, llvmFields.ToArray(), true);
+                                    llvmStructType.StructSetBody(llvmFields.ToArray(), true);
                                     break;
                             }
 
@@ -1133,7 +1130,7 @@ namespace Internal.IL
                     return GetLLVMTypeForTypeDesc(type.UnderlyingType);
 
                 case TypeFlags.Void:
-                    return LLVM.VoidType();
+                    return LLVMTypeRef.Void;
 
                 default:
                     throw new NotImplementedException(type.Category.ToString());
@@ -1206,11 +1203,11 @@ namespace Internal.IL
             int numBytes = paddingSize - numInts * 4;
             for (int i = 0; i < numInts; i++)
             {
-                llvmFields.Add(LLVM.Int32Type());
+                llvmFields.Add(LLVMTypeRef.Int32);
             }
             for (int i = 0; i < numBytes; i++)
             {
-                llvmFields.Add(LLVM.Int8Type());
+                llvmFields.Add(LLVMTypeRef.Int8);
             }
         }
 
@@ -1490,14 +1487,14 @@ namespace Internal.IL
 
         private void ImportLoadNull()
         {
-            _stack.Push(new ExpressionEntry(StackValueKind.ObjRef, "null", LLVM.ConstInt(LLVM.Int32Type(), 0, LLVMMisc.False)));
+            _stack.Push(new ExpressionEntry(StackValueKind.ObjRef, "null", LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 0, false)));
         }
 
         private void ImportReturn()
         {
             if (_signature.ReturnType.IsVoid)
             {
-                LLVM.BuildRetVoid(_builder);
+                _builder.BuildRetVoid();
                 return;
             }
 
@@ -1507,12 +1504,12 @@ namespace Internal.IL
 
             if (NeedsReturnStackSlot(_signature))
             {
-                ImportStoreHelper(castValue, valueType, LLVM.GetNextParam(LLVM.GetFirstParam(_llvmFunction)), 0);
-                LLVM.BuildRetVoid(_builder);
+                ImportStoreHelper(castValue, valueType, _llvmFunction.GetParam(1), 0);
+                _builder.BuildRetVoid();
             }
             else
             {
-                LLVM.BuildRet(_builder, castValue);
+                _builder.BuildRet(castValue);
             }
         }
 
@@ -1543,11 +1540,11 @@ namespace Internal.IL
                 {
                     var paramCnt = callee.Signature.Length;
                     var eeTypeDesc = _compilation.TypeSystemContext.SystemModule.GetKnownType("Internal.Runtime", "EEType").MakePointerType();
-                    LLVMValueRef dimensions = LLVM.BuildArrayAlloca(_builder, LLVMTypeRef.Int32Type(), BuildConstInt32(paramCnt), "newobj_array_pdims_" + _currentOffset);
+                    LLVMValueRef dimensions = _builder.BuildArrayAlloca(LLVMTypeRef.Int32, BuildConstInt32(paramCnt), "newobj_array_pdims_" + _currentOffset);
                     for (int i = paramCnt - 1; i >= 0; --i)
                     {
-                        LLVM.BuildStore(_builder, _stack.Pop().ValueAsInt32(_builder, true),
-                            LLVM.BuildGEP(_builder, dimensions, new LLVMValueRef[] { BuildConstInt32(i) }, "pdims_ptr"));
+                        _builder.BuildStore(_stack.Pop().ValueAsInt32(_builder, true),
+                            _builder.BuildGEP(dimensions, new LLVMValueRef[] { BuildConstInt32(i) }, "pdims_ptr"));
                     }
                     var arguments = new StackEntry[]
                     {
@@ -1696,7 +1693,7 @@ namespace Internal.IL
             var vtableSlotSymbol = _compilation.NodeFactory.VTableSlot(method);
             _dependencies.Add(vtableSlotSymbol);
             LLVMValueRef slot = LoadAddressOfSymbolNode(vtableSlotSymbol);
-            return LLVM.BuildLoad(_builder, slot, $"{method.Name}_slot");
+            return _builder.BuildLoad(slot, $"{method.Name}_slot");
         }
 
         private LLVMValueRef GetCallableVirtualMethod(StackEntry objectPtr, MethodDesc method)
@@ -1706,7 +1703,7 @@ namespace Internal.IL
             var pointerSize = method.Context.Target.PointerSize;
             LLVMTypeRef llvmSignature = GetLLVMSignatureForMethod(method.Signature);
             LLVMValueRef functionPtr;
-            var thisPointer = objectPtr.ValueAsType(LLVM.PointerType(LLVM.Int8Type(), 0), _builder);
+            var thisPointer = objectPtr.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder);
             ThrowIfNull(thisPointer);
             if (method.OwningType.IsInterface)
             {
@@ -1714,14 +1711,14 @@ namespace Internal.IL
                 var interfaceEEType = new LoadExpressionEntry(StackValueKind.ValueType, "interfaceEEType", GetEETypePointerForTypeDesc(method.OwningType, true), eeTypeDesc);
                 var eeTypeExpression = new LoadExpressionEntry(StackValueKind.ValueType, "eeType", thisPointer, eeTypeDesc);
                 var targetEntry = CallRuntime(_compilation.TypeSystemContext, DispatchResolve, "FindInterfaceMethodImplementationTarget", new StackEntry[] { eeTypeExpression, interfaceEEType, new ExpressionEntry(StackValueKind.Int32, "slot", slot, GetWellKnownType(WellKnownType.UInt16)) });
-                functionPtr = targetEntry.ValueAsType(LLVM.PointerType(llvmSignature, 0), _builder);
+                functionPtr = targetEntry.ValueAsType(LLVMTypeRef.CreatePointer(llvmSignature, 0), _builder);
             }
             else
             {
-                var rawObjectPtr = CastIfNecessary(thisPointer, LLVM.PointerType(LLVM.PointerType(LLVM.PointerType(llvmSignature, 0), 0), 0), objectPtr.Name());
-                var eeType = LLVM.BuildLoad(_builder, rawObjectPtr, "ldEEType");
-                var slotPtr = LLVM.BuildGEP(_builder, eeType, new LLVMValueRef[] { slot }, "__getslot__");
-                functionPtr = LLVM.BuildLoad(_builder, slotPtr, "ld__getslot__");
+                var rawObjectPtr = CastIfNecessary(thisPointer, LLVMTypeRef.CreatePointer(LLVMTypeRef.CreatePointer(LLVMTypeRef.CreatePointer(llvmSignature, 0), 0), 0), objectPtr.Name());
+                var eeType = _builder.BuildLoad(rawObjectPtr, "ldEEType");
+                var slotPtr = _builder.BuildGEP(eeType, new LLVMValueRef[] { slot }, "__getslot__");
+                functionPtr = _builder.BuildLoad(slotPtr, "ld__getslot__");
             }
 
             return functionPtr;
@@ -1739,15 +1736,15 @@ namespace Internal.IL
             }
             else
             {
-                llvmReturnType = LLVM.VoidType();
+                llvmReturnType = LLVMTypeRef.Void;
             }
 
             List<LLVMTypeRef> signatureTypes = new List<LLVMTypeRef>();
-            signatureTypes.Add(LLVM.PointerType(LLVM.Int8Type(), 0)); // Shadow stack pointer
+            signatureTypes.Add(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)); // Shadow stack pointer
 
             if (!returnOnStack && returnType != GetWellKnownType(WellKnownType.Void))
             {
-                signatureTypes.Add(LLVM.PointerType(LLVM.Int8Type(), 0));
+                signatureTypes.Add(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0));
             }
 
             // Intentionally skipping the 'this' pointer since it could always be a GC reference
@@ -1760,7 +1757,7 @@ namespace Internal.IL
                 }
             }
 
-            return LLVM.FunctionType(llvmReturnType, signatureTypes.ToArray(), false);
+            return LLVMTypeRef.CreateFunction(llvmReturnType, signatureTypes.ToArray(), false);
         }
 
         private ExpressionEntry AllocateObject(TypeDesc type)
@@ -1775,33 +1772,33 @@ namespace Internal.IL
         private static LLVMValueRef BuildConstInt1(int number)
         {
             Debug.Assert(number == 0 || number == 1, "Non-boolean int1");
-            return LLVM.ConstInt(LLVM.Int1Type(), (ulong)number, LLVMMisc.False);
+            return LLVMValueRef.CreateConstInt(LLVMTypeRef.Int1, (ulong)number, false);
         }
 
         private static LLVMValueRef BuildConstInt8(byte number)
         {
-            return LLVM.ConstInt(LLVM.Int8Type(), number, LLVMMisc.False);
+            return LLVMValueRef.CreateConstInt(LLVMTypeRef.Int8, number, false);
         }
 
         private static LLVMValueRef BuildConstInt16(byte number)
         {
-            return LLVM.ConstInt(LLVM.Int16Type(), number, LLVMMisc.False);
+            return LLVMValueRef.CreateConstInt(LLVMTypeRef.Int16, number, false);
         }
 
         private static LLVMValueRef BuildConstInt32(int number)
         {
-            return LLVM.ConstInt(LLVM.Int32Type(), (ulong)number, LLVMMisc.False);
+            return LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (ulong)number, false);
         }
 
         private static LLVMValueRef BuildConstInt64(long number)
         {
-            return LLVM.ConstInt(LLVM.Int64Type(), (ulong)number, LLVMMisc.False);
+            return LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)number, false);
         }
 
         private LLVMValueRef GetEETypeForTypeDesc(TypeDesc target, bool constructed)
         {
             var eeTypePointer = GetEETypePointerForTypeDesc(target, constructed);
-            return LLVM.BuildLoad(_builder, eeTypePointer, "eeTypePtrLoad");
+            return _builder.BuildLoad(eeTypePointer, "eeTypePtrLoad");
         }
 
         private LLVMValueRef GetEETypePointerForTypeDesc(TypeDesc target, bool constructed)
@@ -1854,27 +1851,27 @@ namespace Internal.IL
                         if (arraySlot.Type.IsSzArray)
                         {
                             // Handle single dimensional arrays (vectors).
-                            LLVMValueRef arrayObjPtr = arraySlot.ValueAsType(LLVM.PointerType(LLVM.Int8Type(), 0), _builder);
+                            LLVMValueRef arrayObjPtr = arraySlot.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder);
 
                             var argsType = new LLVMTypeRef[]
                             {
-                            LLVM.PointerType(LLVM.Int8Type(), 0),
-                            LLVM.PointerType(LLVM.Int8Type(), 0),
-                            LLVM.Int32Type(),
-                            LLVM.Int32Type(),
-                            LLVM.Int1Type()
+                            LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0),
+                            LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0),
+                            LLVMTypeRef.Int32,
+                            LLVMTypeRef.Int32,
+                            LLVMTypeRef.Int1
                             };
-                            LLVMValueRef memcpyFunction = GetOrCreateLLVMFunction("llvm.memcpy.p0i8.p0i8.i32", LLVM.FunctionType(LLVM.VoidType(), argsType, false));
+                            LLVMValueRef memcpyFunction = GetOrCreateLLVMFunction("llvm.memcpy.p0i8.p0i8.i32", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, argsType, false));
 
                             var args = new LLVMValueRef[]
                             {
-                            LLVM.BuildGEP(_builder, arrayObjPtr, new LLVMValueRef[] { ArrayBaseSize() }, string.Empty),
-                            LLVM.BuildBitCast(_builder, src, LLVM.PointerType(LLVM.Int8Type(), 0), string.Empty),
+                            _builder.BuildGEP(arrayObjPtr, new LLVMValueRef[] { ArrayBaseSize() }, string.Empty),
+                            _builder.BuildBitCast(src, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), string.Empty),
                             BuildConstInt32(srcLength), // TODO: Handle destination array length to avoid runtime overflow.
                             BuildConstInt32(0), // Assume no alignment
                             BuildConstInt1(0)
                             };
-                            LLVM.BuildCall(_builder, memcpyFunction, args, string.Empty);
+                            _builder.BuildCall(memcpyFunction, args, string.Empty);
                         }
                         else if (arraySlot.Type.IsMdArray)
                         {
@@ -1913,8 +1910,8 @@ namespace Internal.IL
                         SpilledExpressionEntry spillEntry = new SpilledExpressionEntry(StackValueKind.ByRef, "byref" + _currentOffset, metadataType, spillIndex, this);
                         _spilledExpressions.Add(spillEntry);
                         LLVMValueRef addrOfValueType = LoadVarAddress(spillIndex, LocalVarKind.Temp, out TypeDesc unused);
-                        var typedAddress = CastIfNecessary(_builder, addrOfValueType, LLVM.PointerType(LLVM.Int32Type(), 0));
-                        LLVM.BuildStore(_builder, byRefValueParamHolder.ValueForStackKind(StackValueKind.ByRef, _builder, false), typedAddress);
+                        var typedAddress = CastIfNecessary(_builder, addrOfValueType, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int32, 0));
+                        _builder.BuildStore(byRefValueParamHolder.ValueForStackKind(StackValueKind.ByRef, _builder, false), typedAddress);
 
                         _stack.Push(spillEntry);
                         return true;
@@ -2011,14 +2008,14 @@ namespace Internal.IL
                 returnSlot = new SpilledExpressionEntry(GetStackValueKind(returnType), callee?.Name + "_return", returnType, returnIndex, this);
                 _spilledExpressions.Add(returnSlot);
                 returnAddress = LoadVarAddress(returnIndex, LocalVarKind.Temp, out TypeDesc unused);
-                castReturnAddress = LLVM.BuildPointerCast(_builder, returnAddress, LLVM.PointerType(LLVM.Int8Type(), 0), callee?.Name + "_castreturn");
+                castReturnAddress = _builder.BuildPointerCast(returnAddress, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), callee?.Name + "_castreturn");
             }
 
             int offset = GetTotalParameterOffset() + GetTotalLocalOffset();
-            LLVMValueRef shadowStack = LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_currentFunclet),
-                new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (uint)offset, LLVMMisc.False) },
+            LLVMValueRef shadowStack = _builder.BuildGEP(_currentFunclet.GetParam(0),
+                new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)offset, false) },
                 String.Empty);
-            var castShadowStack = LLVM.BuildPointerCast(_builder, shadowStack, LLVM.PointerType(LLVM.Int8Type(), 0), "castshadowstack");
+            var castShadowStack = _builder.BuildPointerCast(shadowStack, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), "castshadowstack");
 
             List<LLVMValueRef> llvmArgs = new List<LLVMValueRef>();
             llvmArgs.Add(castShadowStack);
@@ -2072,7 +2069,7 @@ namespace Internal.IL
             }
 
 
-            LLVMValueRef llvmReturn = LLVM.BuildCall(_builder, fn, llvmArgs.ToArray(), string.Empty);
+            LLVMValueRef llvmReturn = _builder.BuildCall(fn, llvmArgs.ToArray(), string.Empty);
             
             if (!returnType.IsVoid)
             {
@@ -2105,8 +2102,8 @@ namespace Internal.IL
                 fn = LLVMFunctionForMethod(callee, signature.IsStatic ? null : argumentValues[0], opcode == ILOpcode.callvirt, constrainedType);
             }
 
-            LLVMValueRef shadowStack = LLVM.BuildGEP(builder, baseShadowStack, new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (uint)offset, LLVMMisc.False) }, String.Empty);
-            var castShadowStack = LLVM.BuildPointerCast(builder, shadowStack, LLVM.PointerType(LLVM.Int8Type(), 0), "castshadowstack");
+            LLVMValueRef shadowStack = builder.BuildGEP(baseShadowStack, new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)offset, false) }, String.Empty);
+            var castShadowStack = builder.BuildPointerCast(shadowStack, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), "castshadowstack");
 
             List<LLVMValueRef> llvmArgs = new List<LLVMValueRef>();
             llvmArgs.Add(castShadowStack);
@@ -2159,7 +2156,7 @@ namespace Internal.IL
                 }
             }
 
-            LLVMValueRef llvmReturn = LLVM.BuildCall(builder, fn, llvmArgs.ToArray(), string.Empty);
+            LLVMValueRef llvmReturn = builder.BuildCall(fn, llvmArgs.ToArray(), string.Empty);
             return llvmReturn;
         }
 
@@ -2205,7 +2202,7 @@ namespace Internal.IL
             }
             MethodDesc existantDesc;
             LLVMValueRef nativeFunc;
-            LLVMValueRef realNativeFunc = LLVM.GetNamedFunction(Module, realMethodName);
+            LLVMValueRef realNativeFunc = Module.GetNamedFunction(realMethodName);
             if (_pinvokeMap.TryGetValue(realMethodName, out existantDesc))
             {
                 if (existantDesc != method)
@@ -2240,8 +2237,8 @@ namespace Internal.IL
 
             // Save the top of the shadow stack in case the callee reverse P/Invokes
             LLVMValueRef stackFrameSize = BuildConstInt32(GetTotalParameterOffset() + GetTotalLocalOffset());
-            LLVM.BuildStore(_builder, LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_currentFunclet), new LLVMValueRef[] { stackFrameSize }, "shadowStackTop"),
-                LLVM.GetNamedGlobal(Module, "t_pShadowStackTop"));
+            _builder.BuildStore(_builder.BuildGEP(_currentFunclet.GetParam(0), new LLVMValueRef[] { stackFrameSize }, "shadowStackTop"),
+                Module.GetNamedGlobal("t_pShadowStackTop"));
 
             LLVMValueRef pInvokeTransitionFrame = default;
             LLVMTypeRef pInvokeFunctionType = default;
@@ -2249,20 +2246,20 @@ namespace Internal.IL
             {
                 // add call to go to preemptive mode
                 LLVMTypeRef pInvokeTransitionFrameType =
-                    LLVM.StructType(new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0), LLVM.PointerType(LLVM.Int8Type(), 0), LLVM.PointerType(LLVM.Int8Type(), 0) }, false);
-                pInvokeFunctionType = LLVM.FunctionType(LLVM.VoidType(), new LLVMTypeRef[] { LLVM.PointerType(pInvokeTransitionFrameType, 0) }, false);
-                pInvokeTransitionFrame = LLVM.BuildAlloca(_builder, pInvokeTransitionFrameType, "PInvokeTransitionFrame");
+                    LLVMTypeRef.CreateStruct(new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }, false);
+                pInvokeFunctionType = LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(pInvokeTransitionFrameType, 0) }, false);
+                pInvokeTransitionFrame = _builder.BuildAlloca(pInvokeTransitionFrameType, "PInvokeTransitionFrame");
                 LLVMValueRef RhpPInvoke2 = GetOrCreateLLVMFunction("RhpPInvoke2", pInvokeFunctionType);
-                LLVM.BuildCall(_builder, RhpPInvoke2, new LLVMValueRef[] { pInvokeTransitionFrame }, "");
+                _builder.BuildCall(RhpPInvoke2, new LLVMValueRef[] { pInvokeTransitionFrame }, "");
             }
             // Don't name the return value if the function returns void, it's invalid
-            var returnValue = LLVM.BuildCall(_builder, nativeFunc, llvmArguments, !method.Signature.ReturnType.IsVoid ? "call" : string.Empty);
+            var returnValue = _builder.BuildCall(nativeFunc, llvmArguments, !method.Signature.ReturnType.IsVoid ? "call" : string.Empty);
 
             if (method.IsPInvoke)
             {
                 // add call to go to cooperative mode
                 LLVMValueRef RhpPInvokeReturn2 = GetOrCreateLLVMFunction("RhpPInvokeReturn2", pInvokeFunctionType);
-                LLVM.BuildCall(_builder, RhpPInvokeReturn2, new LLVMValueRef[] { pInvokeTransitionFrame }, "");
+                _builder.BuildCall(RhpPInvokeReturn2, new LLVMValueRef[] { pInvokeTransitionFrame }, "");
             }
 
             if (!method.Signature.ReturnType.IsVoid)
@@ -2281,16 +2278,16 @@ namespace Internal.IL
             }
 
             // Define the full signature
-            LLVMTypeRef nativeFuncType = LLVM.FunctionType(GetLLVMTypeForTypeDesc(method.Signature.ReturnType), paramTypes, LLVMMisc.False);
+            LLVMTypeRef nativeFuncType = LLVMTypeRef.CreateFunction(GetLLVMTypeForTypeDesc(method.Signature.ReturnType), paramTypes, false);
 
             if (realFunction.Pointer == IntPtr.Zero)
             {
-                nativeFunc = LLVM.AddFunction(Module, realMethodName, nativeFuncType);
-                LLVM.SetLinkage(nativeFunc, LLVMLinkage.LLVMDLLImportLinkage);
+                nativeFunc = Module.AddFunction(realMethodName, nativeFuncType);
+                nativeFunc.Linkage = LLVMLinkage.LLVMDLLImportLinkage;
             }
             else
             {
-                nativeFunc = LLVM.BuildPointerCast(_builder, realFunction, LLVM.PointerType(nativeFuncType, 0), realMethodName + "__slot__");
+                nativeFunc = _builder.BuildPointerCast(realFunction, LLVMTypeRef.CreatePointer(nativeFuncType, 0), realMethodName + "__slot__");
             }
             return nativeFunc;
         }
@@ -2302,10 +2299,10 @@ namespace Internal.IL
             {
                 if (s_shadowStackTop.Pointer.Equals(IntPtr.Zero))
                 {
-                    s_shadowStackTop = LLVM.AddGlobal(Module, LLVM.PointerType(LLVM.Int8Type(), 0), "t_pShadowStackTop");
-                    LLVM.SetLinkage(s_shadowStackTop, LLVMLinkage.LLVMInternalLinkage);
-                    LLVM.SetInitializer(s_shadowStackTop, LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0)));
-                    LLVM.SetThreadLocal(s_shadowStackTop, LLVMMisc.True);                    
+                    s_shadowStackTop = Module.AddGlobal(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), "t_pShadowStackTop");
+                    s_shadowStackTop.Linkage = LLVMLinkage.LLVMInternalLinkage;
+                    s_shadowStackTop.Initializer = LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0));
+                    s_shadowStackTop.ThreadLocalMode = LLVMThreadLocalMode.LLVMLocalDynamicTLSModel;
                 }
                 return s_shadowStackTop;
             }
@@ -2329,44 +2326,44 @@ namespace Internal.IL
                 llvmParams[i] = GetLLVMTypeForTypeDesc(method.Signature[i]);
             }
 
-            LLVMTypeRef thunkSig = LLVM.FunctionType(GetLLVMTypeForTypeDesc(method.Signature.ReturnType), llvmParams, false);
+            LLVMTypeRef thunkSig = LLVMTypeRef.CreateFunction(GetLLVMTypeForTypeDesc(method.Signature.ReturnType), llvmParams, false);
             LLVMValueRef thunkFunc = GetOrCreateLLVMFunction(nativeName, thunkSig);
 
-            LLVMBasicBlockRef shadowStackSetupBlock = LLVM.AppendBasicBlock(thunkFunc, "ShadowStackSetupBlock");
-            LLVMBasicBlockRef allocateShadowStackBlock = LLVM.AppendBasicBlock(thunkFunc, "allocateShadowStackBlock");
-            LLVMBasicBlockRef managedCallBlock = LLVM.AppendBasicBlock(thunkFunc, "ManagedCallBlock");
+            LLVMBasicBlockRef shadowStackSetupBlock = thunkFunc.AppendBasicBlock("ShadowStackSetupBlock");
+            LLVMBasicBlockRef allocateShadowStackBlock = thunkFunc.AppendBasicBlock("allocateShadowStackBlock");
+            LLVMBasicBlockRef managedCallBlock = thunkFunc.AppendBasicBlock("ManagedCallBlock");
 
-            LLVMBuilderRef builder = LLVM.CreateBuilder();
-            LLVM.PositionBuilderAtEnd(builder, shadowStackSetupBlock);
+            LLVMBuilderRef builder = Context.CreateBuilder();
+            builder.PositionAtEnd(shadowStackSetupBlock);
 
             // Allocate shadow stack if it's null
-            LLVMValueRef shadowStackPtr = LLVM.BuildAlloca(builder, LLVM.PointerType(LLVM.Int8Type(), 0), "ShadowStackPtr");
-            LLVMValueRef savedShadowStack = LLVM.BuildLoad(builder, ShadowStackTop, "SavedShadowStack");
-            LLVM.BuildStore(builder, savedShadowStack, shadowStackPtr);
-            LLVMValueRef shadowStackNull = LLVM.BuildICmp(builder, LLVMIntPredicate.LLVMIntEQ, savedShadowStack, LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0)), "ShadowStackNull");
-            LLVM.BuildCondBr(builder, shadowStackNull, allocateShadowStackBlock, managedCallBlock);
+            LLVMValueRef shadowStackPtr = builder.BuildAlloca(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), "ShadowStackPtr");
+            LLVMValueRef savedShadowStack = builder.BuildLoad(ShadowStackTop, "SavedShadowStack");
+            builder.BuildStore(savedShadowStack, shadowStackPtr);
+            LLVMValueRef shadowStackNull = builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, savedShadowStack, LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)), "ShadowStackNull");
+            builder.BuildCondBr(shadowStackNull, allocateShadowStackBlock, managedCallBlock);
 
-            LLVM.PositionBuilderAtEnd(builder, allocateShadowStackBlock);
+            builder.PositionAtEnd(allocateShadowStackBlock);
 
-            LLVMValueRef newShadowStack = LLVM.BuildArrayMalloc(builder, LLVM.Int8Type(), BuildConstInt32(1000000), "NewShadowStack");
-            LLVM.BuildStore(builder, newShadowStack, shadowStackPtr);
-            LLVM.BuildBr(builder, managedCallBlock);
+            LLVMValueRef newShadowStack = builder.BuildArrayMalloc(LLVMTypeRef.Int8, BuildConstInt32(1000000), "NewShadowStack");
+            builder.BuildStore(newShadowStack, shadowStackPtr);
+            builder.BuildBr(managedCallBlock);
 
-            LLVM.PositionBuilderAtEnd(builder, managedCallBlock);
-            LLVMTypeRef reversePInvokeFrameType = LLVM.StructType(new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0), LLVM.PointerType(LLVM.Int8Type(), 0) }, false);
+            builder.PositionAtEnd(managedCallBlock);
+            LLVMTypeRef reversePInvokeFrameType = LLVMTypeRef.CreateStruct(new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }, false);
             LLVMValueRef reversePInvokeFrame = default(LLVMValueRef);
-            LLVMTypeRef reversePInvokeFunctionType = LLVM.FunctionType(LLVM.VoidType(), new LLVMTypeRef[] { LLVM.PointerType(reversePInvokeFrameType, 0) }, false);
+            LLVMTypeRef reversePInvokeFunctionType = LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(reversePInvokeFrameType, 0) }, false);
             if (method.IsNativeCallable)
             {
-                reversePInvokeFrame = LLVM.BuildAlloca(builder, reversePInvokeFrameType, "ReversePInvokeFrame");
+                reversePInvokeFrame = builder.BuildAlloca(reversePInvokeFrameType, "ReversePInvokeFrame");
                 LLVMValueRef RhpReversePInvoke2 = GetOrCreateLLVMFunction("RhpReversePInvoke2", reversePInvokeFunctionType);
-                LLVM.BuildCall(builder, RhpReversePInvoke2, new LLVMValueRef[] { reversePInvokeFrame }, "");
+                builder.BuildCall(RhpReversePInvoke2, new LLVMValueRef[] { reversePInvokeFrame }, "");
             }
 
-            LLVMValueRef shadowStack = LLVM.BuildLoad(builder, shadowStackPtr, "ShadowStack");
+            LLVMValueRef shadowStack = builder.BuildLoad(shadowStackPtr, "ShadowStack");
             int curOffset = 0;
             curOffset = PadNextOffset(method.Signature.ReturnType, curOffset);
-            LLVMValueRef calleeFrame = LLVM.BuildGEP(builder, shadowStack, new LLVMValueRef[] { BuildConstInt32(curOffset) }, "calleeFrame");
+            LLVMValueRef calleeFrame = builder.BuildGEP(shadowStack, new LLVMValueRef[] { BuildConstInt32(curOffset) }, "calleeFrame");
 
             List<LLVMValueRef> llvmArgs = new List<LLVMValueRef>();
             llvmArgs.Add(calleeFrame);
@@ -2381,7 +2378,7 @@ namespace Internal.IL
 
             for (int i = 0; i < llvmParams.Length; i++)
             {
-                LLVMValueRef argValue = LLVM.GetParam(thunkFunc, (uint)i);
+                LLVMValueRef argValue = thunkFunc.GetParam((uint)i);
 
                 if (CanStoreTypeOnStack(method.Signature[i]))
                 {
@@ -2390,41 +2387,41 @@ namespace Internal.IL
                 else
                 {
                     curOffset = PadOffset(method.Signature[i], curOffset);
-                    LLVMValueRef argAddr = LLVM.BuildGEP(builder, shadowStack, new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (ulong)curOffset, LLVMMisc.False) }, "arg" + i);
-                    LLVM.BuildStore(builder, argValue, CastIfNecessary(builder, argAddr, LLVM.PointerType(llvmParams[i], 0), $"parameter{i}_"));
+                    LLVMValueRef argAddr = builder.BuildGEP(shadowStack, new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (ulong)curOffset, false) }, "arg" + i);
+                    builder.BuildStore(argValue, CastIfNecessary(builder, argAddr, LLVMTypeRef.CreatePointer(llvmParams[i], 0), $"parameter{i}_"));
                     curOffset = PadNextOffset(method.Signature[i], curOffset);
                 }
             }
 
-            LLVMValueRef llvmReturnValue = LLVM.BuildCall(builder, managedFunction, llvmArgs.ToArray(), "");
+            LLVMValueRef llvmReturnValue = builder.BuildCall(managedFunction, llvmArgs.ToArray(), "");
 
             if (method.IsNativeCallable)
             {
                 LLVMValueRef RhpReversePInvokeReturn2 = GetOrCreateLLVMFunction("RhpReversePInvokeReturn2", reversePInvokeFunctionType);
-                LLVM.BuildCall(builder, RhpReversePInvokeReturn2, new LLVMValueRef[] { reversePInvokeFrame }, "");
+                builder.BuildCall(RhpReversePInvokeReturn2, new LLVMValueRef[] { reversePInvokeFrame }, "");
             }
 
             if (!method.Signature.ReturnType.IsVoid)
             {
                 if (needsReturnSlot)
                 {
-                    LLVM.BuildRet(builder, LLVM.BuildLoad(builder, CastIfNecessary(builder, shadowStack, LLVM.PointerType(GetLLVMTypeForTypeDesc(method.Signature.ReturnType), 0)), "returnValue"));
+                    builder.BuildRet(builder.BuildLoad(CastIfNecessary(builder, shadowStack, LLVMTypeRef.CreatePointer(GetLLVMTypeForTypeDesc(method.Signature.ReturnType), 0)), "returnValue"));
                 }
                 else
                 {
-                    LLVM.BuildRet(builder, llvmReturnValue);
+                    builder.BuildRet(llvmReturnValue);
                 }
             }
             else
             {
-                LLVM.BuildRetVoid(builder);
+                builder.BuildRetVoid();
             }
         }
 
         private void ImportCalli(int token)
         {
             MethodSignature methodSignature = (MethodSignature)_methodIL.GetObject(token);
-            HandleCall(null, methodSignature, ILOpcode.calli, calliTarget: ((ExpressionEntry)_stack.Pop()).ValueAsType(LLVM.PointerType(GetLLVMSignatureForMethod(methodSignature), 0), _builder));
+            HandleCall(null, methodSignature, ILOpcode.calli, calliTarget: ((ExpressionEntry)_stack.Pop()).ValueAsType(LLVMTypeRef.CreatePointer(GetLLVMSignatureForMethod(methodSignature), 0), _builder));
         }
 
         private void ImportLdFtn(int token, ILOpcode opCode)
@@ -2463,7 +2460,7 @@ namespace Internal.IL
                     {
                         llvmParams[i] = GetLLVMTypeForTypeDesc(method.Signature[i]);
                     }
-                    LLVMTypeRef thunkSig = LLVM.FunctionType(GetLLVMTypeForTypeDesc(method.Signature.ReturnType), llvmParams, false);
+                    LLVMTypeRef thunkSig = LLVMTypeRef.CreateFunction(GetLLVMTypeForTypeDesc(method.Signature.ReturnType), llvmParams, false);
 
                     targetLLVMFunction = GetOrCreateLLVMFunction(mangledName, thunkSig);
                 }
@@ -2506,7 +2503,7 @@ namespace Internal.IL
             if (opcode == ILOpcode.br)
             {
                 ImportFallthrough(target);
-                LLVM.BuildBr(_builder, GetLLVMBasicBlockForBlock(target));
+                _builder.BuildBr(GetLLVMBasicBlockForBlock(target));
             }
             else
             {
@@ -2517,16 +2514,16 @@ namespace Internal.IL
                     var op = _stack.Pop();
                     LLVMValueRef value = op.ValueAsInt32(_builder, false);
 
-                    if (LLVM.TypeOf(value).TypeKind != LLVMTypeKind.LLVMIntegerTypeKind)
+                    if (value.TypeOf.Kind != LLVMTypeKind.LLVMIntegerTypeKind)
                         throw new InvalidProgramException("branch on non integer");
 
                     if (opcode == ILOpcode.brfalse)
                     {
-                        condition = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntEQ, value, LLVM.ConstInt(LLVM.TypeOf(value), 0, LLVMMisc.False), "brfalse");
+                        condition = _builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, value, LLVMValueRef.CreateConstInt(value.TypeOf, 0, false), "brfalse");
                     }
                     else
                     {
-                        condition = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntNE, value, LLVM.ConstInt(LLVM.TypeOf(value), 0, LLVMMisc.False), "brtrue");
+                        condition = _builder.BuildICmp(LLVMIntPredicate.LLVMIntNE, value, LLVMValueRef.CreateConstInt(value.TypeOf, 0, false), "brtrue");
                     }
                 }
                 else
@@ -2554,34 +2551,34 @@ namespace Internal.IL
                         switch (opcode)
                         {
                             case ILOpcode.beq:
-                                condition = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntEQ, left, right, "beq");
+                                condition = _builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, left, right, "beq");
                                 break;
                             case ILOpcode.bge:
-                                condition = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntSGE, left, right, "bge");
+                                condition = _builder.BuildICmp(LLVMIntPredicate.LLVMIntSGE, left, right, "bge");
                                 break;
                             case ILOpcode.bgt:
-                                condition = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntSGT, left, right, "bgt");
+                                condition = _builder.BuildICmp(LLVMIntPredicate.LLVMIntSGT, left, right, "bgt");
                                 break;
                             case ILOpcode.ble:
-                                condition = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntSLE, left, right, "ble");
+                                condition = _builder.BuildICmp(LLVMIntPredicate.LLVMIntSLE, left, right, "ble");
                                 break;
                             case ILOpcode.blt:
-                                condition = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntSLT, left, right, "blt");
+                                condition = _builder.BuildICmp(LLVMIntPredicate.LLVMIntSLT, left, right, "blt");
                                 break;
                             case ILOpcode.bne_un:
-                                condition = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntNE, left, right, "bne_un");
+                                condition = _builder.BuildICmp(LLVMIntPredicate.LLVMIntNE, left, right, "bne_un");
                                 break;
                             case ILOpcode.bge_un:
-                                condition = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntUGE, left, right, "bge_un");
+                                condition = _builder.BuildICmp(LLVMIntPredicate.LLVMIntUGE, left, right, "bge_un");
                                 break;
                             case ILOpcode.bgt_un:
-                                condition = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntUGT, left, right, "bgt_un");
+                                condition = _builder.BuildICmp(LLVMIntPredicate.LLVMIntUGT, left, right, "bgt_un");
                                 break;
                             case ILOpcode.ble_un:
-                                condition = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntULE, left, right, "ble_un");
+                                condition = _builder.BuildICmp(LLVMIntPredicate.LLVMIntULE, left, right, "ble_un");
                                 break;
                             case ILOpcode.blt_un:
-                                condition = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntULT, left, right, "blt_un");
+                                condition = _builder.BuildICmp(LLVMIntPredicate.LLVMIntULT, left, right, "blt_un");
                                 break;
                             default:
                                 throw new NotSupportedException(); // unreachable
@@ -2591,43 +2588,43 @@ namespace Internal.IL
                     {
                         if (op1.Type.IsWellKnownType(WellKnownType.Double) && op2.Type.IsWellKnownType(WellKnownType.Single))
                         {
-                            left = LLVM.BuildFPExt(_builder, left, LLVM.DoubleType(), "fpextop2");
+                            left = _builder.BuildFPExt(left, LLVMTypeRef.Double, "fpextop2");
                         }
                         else if (op2.Type.IsWellKnownType(WellKnownType.Double) && op1.Type.IsWellKnownType(WellKnownType.Single))
                         {
-                            right = LLVM.BuildFPExt(_builder, right, LLVM.DoubleType(), "fpextop1");
+                            right = _builder.BuildFPExt(right, LLVMTypeRef.Double, "fpextop1");
                         }
                         switch (opcode)
                         {
                             case ILOpcode.beq:
-                                condition = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealOEQ, left, right, "beq");
+                                condition = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealOEQ, left, right, "beq");
                                 break;
                             case ILOpcode.bge:
-                                condition = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealOGE, left, right, "bge");
+                                condition = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealOGE, left, right, "bge");
                                 break;
                             case ILOpcode.bgt:
-                                condition = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealOGT, left, right, "bgt");
+                                condition = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealOGT, left, right, "bgt");
                                 break;
                             case ILOpcode.ble:
-                                condition = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealOLE, left, right, "ble");
+                                condition = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealOLE, left, right, "ble");
                                 break;
                             case ILOpcode.blt:
-                                condition = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealOLT, left, right, "blt");
+                                condition = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealOLT, left, right, "blt");
                                 break;
                             case ILOpcode.bne_un:
-                                condition = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealONE, left, right, "bne_un");
+                                condition = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealONE, left, right, "bne_un");
                                 break;
                             case ILOpcode.bge_un:
-                                condition = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealUGE, left, right, "bge_un");
+                                condition = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGE, left, right, "bge_un");
                                 break;
                             case ILOpcode.bgt_un:
-                                condition = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealUGT, left, right, "bgt_un");
+                                condition = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGT, left, right, "bgt_un");
                                 break;
                             case ILOpcode.ble_un:
-                                condition = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealULE, left, right, "ble_un");
+                                condition = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealULE, left, right, "ble_un");
                                 break;
                             case ILOpcode.blt_un:
-                                condition = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealULT, left, right, "blt_un");
+                                condition = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealULT, left, right, "blt_un");
                                 break;
                             default:
                                 throw new NotSupportedException(); // unreachable
@@ -2637,7 +2634,7 @@ namespace Internal.IL
 
                 ImportFallthrough(target);
                 ImportFallthrough(fallthrough);
-                LLVM.BuildCondBr(_builder, condition, GetLLVMBasicBlockForBlock(target), GetLLVMBasicBlockForBlock(fallthrough));
+                _builder.BuildCondBr(condition, GetLLVMBasicBlockForBlock(target), GetLLVMBasicBlockForBlock(fallthrough));
             }
         }
 
@@ -2645,11 +2642,11 @@ namespace Internal.IL
         {
             var operand = _stack.Pop();
 
-            var @switch = LLVM.BuildSwitch(_builder, operand.ValueAsInt32(_builder, false), GetLLVMBasicBlockForBlock(fallthrough), (uint)jmpDelta.Length);
+            var @switch = _builder.BuildSwitch(operand.ValueAsInt32(_builder, false), GetLLVMBasicBlockForBlock(fallthrough), (uint)jmpDelta.Length);
             for (var i = 0; i < jmpDelta.Length; i++)
             {
                 var target = _basicBlocks[_currentOffset + jmpDelta[i]];
-                LLVM.AddCase(@switch, LLVM.ConstInt(LLVM.Int32Type(), (ulong)i, false), GetLLVMBasicBlockForBlock(target));
+                @switch.AddCase(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (ulong)i, false), GetLLVMBasicBlockForBlock(target));
                 ImportFallthrough(target);
             }
 
@@ -2695,11 +2692,11 @@ namespace Internal.IL
             }
             else
             {
-                typedPointer = destinationPointer.ValueAsType(LLVM.PointerType(LLVM.Int32Type(), 0), _builder);
+                typedPointer = destinationPointer.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int32, 0), _builder);
                 typedValue = value.ValueAsInt32(_builder, false);
             }
 
-            LLVM.BuildStore(_builder, typedValue, typedPointer);
+            _builder.BuildStore(typedValue, typedPointer);
         }
 
         private void ImportBinaryOperation(ILOpcode opcode)
@@ -2736,42 +2733,42 @@ namespace Internal.IL
             {
                 if(op1.Type.IsWellKnownType(WellKnownType.Double) && op2.Type.IsWellKnownType(WellKnownType.Single))
                 {
-                    left = LLVM.BuildFPExt(_builder, left, LLVM.DoubleType(), "fpextop2");
+                    left = _builder.BuildFPExt(left, LLVMTypeRef.Double, "fpextop2");
                 }
                 else if (op2.Type.IsWellKnownType(WellKnownType.Double) && op1.Type.IsWellKnownType(WellKnownType.Single))
                 {
-                    right = LLVM.BuildFPExt(_builder, right, LLVM.DoubleType(), "fpextop1");
+                    right = _builder.BuildFPExt(right, LLVMTypeRef.Double, "fpextop1");
                 }
                 switch (opcode)
                 {
                     case ILOpcode.add:
-                        result = LLVM.BuildFAdd(_builder, left, right, "fadd");
+                        result = _builder.BuildFAdd(left, right, "fadd");
                         break;
                     case ILOpcode.sub:
-                        result = LLVM.BuildFSub(_builder, left, right, "fsub");
+                        result = _builder.BuildFSub(left, right, "fsub");
                         break;
                     case ILOpcode.mul:
-                        result = LLVM.BuildFMul(_builder, left, right, "fmul");
+                        result = _builder.BuildFMul(left, right, "fmul");
                         break;
                     case ILOpcode.div:
-                        result = LLVM.BuildFDiv(_builder, left, right, "fdiv");
+                        result = _builder.BuildFDiv(left, right, "fdiv");
                         break;
                     case ILOpcode.rem:
-                        result = LLVM.BuildFRem(_builder, left, right, "frem");
+                        result = _builder.BuildFRem(left, right, "frem");
                         break;
 
                     // TODO: Overflow checks
                     case ILOpcode.add_ovf:
                     case ILOpcode.add_ovf_un:
-                        result = LLVM.BuildFAdd(_builder, left, right, "fadd");
+                        result = _builder.BuildFAdd(left, right, "fadd");
                         break;
                     case ILOpcode.sub_ovf:
                     case ILOpcode.sub_ovf_un:
-                        result = LLVM.BuildFSub(_builder, left, right, "fsub");
+                        result = _builder.BuildFSub(left, right, "fsub");
                         break;
                     case ILOpcode.mul_ovf:
                     case ILOpcode.mul_ovf_un:
-                        result = LLVM.BuildFMul(_builder, left, right, "fmul");
+                        result = _builder.BuildFMul(left, right, "fmul");
                         break;
 
                     default:
@@ -2785,48 +2782,48 @@ namespace Internal.IL
                 switch (opcode)
                 {
                     case ILOpcode.add:
-                        result = LLVM.BuildAdd(_builder, left, right, "add");
+                        result = _builder.BuildAdd(left, right, "add");
                         break;
                     case ILOpcode.sub:
-                        result = LLVM.BuildSub(_builder, left, right, "sub");
+                        result = _builder.BuildSub(left, right, "sub");
                         break;
                     case ILOpcode.mul:
-                        result = LLVM.BuildMul(_builder, left, right, "mul");
+                        result = _builder.BuildMul(left, right, "mul");
                         break;
                     case ILOpcode.div:
-                        result = LLVM.BuildSDiv(_builder, left, right, "sdiv");
+                        result = _builder.BuildSDiv(left, right, "sdiv");
                         break;
                     case ILOpcode.div_un:
-                        result = LLVM.BuildUDiv(_builder, left, right, "udiv");
+                        result = _builder.BuildUDiv(left, right, "udiv");
                         break;
                     case ILOpcode.rem:
-                        result = LLVM.BuildSRem(_builder, left, right, "srem");
+                        result = _builder.BuildSRem(left, right, "srem");
                         break;
                     case ILOpcode.rem_un:
-                        result = LLVM.BuildURem(_builder, left, right, "urem");
+                        result = _builder.BuildURem(left, right, "urem");
                         break;
                     case ILOpcode.and:
-                        result = LLVM.BuildAnd(_builder, left, right, "and");
+                        result = _builder.BuildAnd(left, right, "and");
                         break;
                     case ILOpcode.or:
-                        result = LLVM.BuildOr(_builder, left, right, "or");
+                        result = _builder.BuildOr(left, right, "or");
                         break;
                     case ILOpcode.xor:
-                        result = LLVM.BuildXor(_builder, left, right, "xor");
+                        result = _builder.BuildXor(left, right, "xor");
                         break;
 
                     // TODO: Overflow checks
                     case ILOpcode.add_ovf:
                     case ILOpcode.add_ovf_un:
-                        result = LLVM.BuildAdd(_builder, left, right, "add");
+                        result = _builder.BuildAdd(left, right, "add");
                         break;
                     case ILOpcode.sub_ovf:
                     case ILOpcode.sub_ovf_un:
-                        result = LLVM.BuildSub(_builder, left, right, "sub");
+                        result = _builder.BuildSub(left, right, "sub");
                         break;
                     case ILOpcode.mul_ovf:
                     case ILOpcode.mul_ovf_un:
-                        result = LLVM.BuildMul(_builder, left, right, "mul");
+                        result = _builder.BuildMul(left, right, "mul");
                         break;
 
                     default:
@@ -2867,7 +2864,7 @@ namespace Internal.IL
 
             // while it seems excessive that the bits to shift should need to be 64 bits, the LLVM docs say that both operands must be the same type and a compilation failure results if this is not the case.
             LLVMValueRef rhs;
-            if (valueToShiftValue.TypeOf().Equals(LLVM.Int64Type()))
+            if (valueToShiftValue.TypeOf.Equals(LLVMTypeRef.Int64))
             {
                 rhs = numBitsToShift.ValueAsInt64(_builder, false);
             }
@@ -2878,13 +2875,13 @@ namespace Internal.IL
             switch (opcode)
             {
                 case ILOpcode.shl:
-                    result = LLVM.BuildShl(_builder, valueToShiftValue, rhs, "shl");
+                    result = _builder.BuildShl(valueToShiftValue, rhs, "shl");
                     break;
                 case ILOpcode.shr:
-                    result = LLVM.BuildAShr(_builder, valueToShiftValue, rhs, "shr");
+                    result = _builder.BuildAShr(valueToShiftValue, rhs, "shr");
                     break;
                 case ILOpcode.shr_un:
-                    result = LLVM.BuildLShr(_builder, valueToShiftValue, rhs, "shr");
+                    result = _builder.BuildLShr(valueToShiftValue, rhs, "shr");
                     break;
                 default:
                     throw new InvalidOperationException(); // Should be unreachable
@@ -2940,19 +2937,19 @@ namespace Internal.IL
                 switch (opcode)
                 {
                     case ILOpcode.ceq:
-                        result = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntEQ, typeSaneOp2, typeSaneOp1, "ceq");
+                        result = _builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, typeSaneOp2, typeSaneOp1, "ceq");
                         break;
                     case ILOpcode.cgt:
-                        result = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntSGT, typeSaneOp2, typeSaneOp1, "cgt");
+                        result = _builder.BuildICmp(LLVMIntPredicate.LLVMIntSGT, typeSaneOp2, typeSaneOp1, "cgt");
                         break;
                     case ILOpcode.clt:
-                        result = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntSLT, typeSaneOp2, typeSaneOp1, "clt");
+                        result = _builder.BuildICmp(LLVMIntPredicate.LLVMIntSLT, typeSaneOp2, typeSaneOp1, "clt");
                         break;
                     case ILOpcode.cgt_un:
-                        result = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntUGT, typeSaneOp2, typeSaneOp1, "cgt_un");
+                        result = _builder.BuildICmp(LLVMIntPredicate.LLVMIntUGT, typeSaneOp2, typeSaneOp1, "cgt_un");
                         break;
                     case ILOpcode.clt_un:
-                        result = LLVM.BuildICmp(_builder, LLVMIntPredicate.LLVMIntULT, typeSaneOp2, typeSaneOp1, "clt_un");
+                        result = _builder.BuildICmp(LLVMIntPredicate.LLVMIntULT, typeSaneOp2, typeSaneOp1, "clt_un");
                         break;
                     default:
                         throw new NotSupportedException(); // unreachable
@@ -2962,28 +2959,28 @@ namespace Internal.IL
             {
                 if (op1.Type.IsWellKnownType(WellKnownType.Double) && op2.Type.IsWellKnownType(WellKnownType.Single))
                 {
-                    typeSaneOp2 = LLVM.BuildFPExt(_builder, typeSaneOp2, LLVM.DoubleType(), "fpextop2");
+                    typeSaneOp2 = _builder.BuildFPExt(typeSaneOp2, LLVMTypeRef.Double, "fpextop2");
                 }
                 else if (op2.Type.IsWellKnownType(WellKnownType.Double) && op1.Type.IsWellKnownType(WellKnownType.Single))
                 {
-                    typeSaneOp1 = LLVM.BuildFPExt(_builder, typeSaneOp1, LLVM.DoubleType(), "fpextop1");
+                    typeSaneOp1 = _builder.BuildFPExt(typeSaneOp1, LLVMTypeRef.Double, "fpextop1");
                 }
                 switch (opcode)
                 {
                     case ILOpcode.ceq:
-                        result = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealOEQ, typeSaneOp2, typeSaneOp1, "ceq");
+                        result = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealOEQ, typeSaneOp2, typeSaneOp1, "ceq");
                         break;
                     case ILOpcode.cgt:
-                        result = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealOGT, typeSaneOp2, typeSaneOp1, "cgt");
+                        result = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealOGT, typeSaneOp2, typeSaneOp1, "cgt");
                         break;
                     case ILOpcode.clt:
-                        result = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealOLT, typeSaneOp2, typeSaneOp1, "clt");
+                        result = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealOLT, typeSaneOp2, typeSaneOp1, "clt");
                         break;
                     case ILOpcode.cgt_un:
-                        result = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealUGT, typeSaneOp2, typeSaneOp1, "cgt_un");
+                        result = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGT, typeSaneOp2, typeSaneOp1, "cgt_un");
                         break;
                     case ILOpcode.clt_un:
-                        result = LLVM.BuildFCmp(_builder, LLVMRealPredicate.LLVMRealULT, typeSaneOp2, typeSaneOp1, "clt_un");
+                        result = _builder.BuildFCmp(LLVMRealPredicate.LLVMRealULT, typeSaneOp2, typeSaneOp1, "clt_un");
                         break;
                     default:
                         throw new NotSupportedException(); // unreachable
@@ -3014,15 +3011,15 @@ namespace Internal.IL
                 case ILOpcode.neg:
                     if (argument.Kind == StackValueKind.Float)
                     {
-                        result = LLVM.BuildFNeg(_builder, argument.ValueForStackKind(argument.Kind, _builder, false), "neg");
+                        result = _builder.BuildFNeg(argument.ValueForStackKind(argument.Kind, _builder, false), "neg");
                     }   
                     else
                     {
-                        result = LLVM.BuildNeg(_builder, argument.ValueForStackKind(argument.Kind, _builder, true), "neg");
+                        result = _builder.BuildNeg(argument.ValueForStackKind(argument.Kind, _builder, true), "neg");
                     }
                     break;
                 case ILOpcode.not:
-                    result = LLVM.BuildNot(_builder, argument.ValueForStackKind(argument.Kind, _builder, true), "not");
+                    result = _builder.BuildNot(argument.ValueForStackKind(argument.Kind, _builder, true), "not");
                     break;
                 default:
                     throw new NotSupportedException(); // unreachable
@@ -3056,9 +3053,9 @@ namespace Internal.IL
 
             var pointerType = GetLLVMTypeForTypeDesc(type.MakePointerType());
 
-            var value = LLVM.BuildLoad(_builder, src.ValueAsType(pointerType, _builder), "cpobj.load");
+            var value = _builder.BuildLoad(src.ValueAsType(pointerType, _builder), "cpobj.load");
 
-            LLVM.BuildStore(_builder, value, dest.ValueAsType(pointerType, _builder));
+            _builder.BuildStore(value, dest.ValueAsType(pointerType, _builder));
         }
 
         private void ImportUnbox(int token, ILOpcode opCode)
@@ -3078,7 +3075,7 @@ namespace Internal.IL
             else //unbox_any
             {
                 Debug.Assert(opCode == ILOpcode.unbox_any);
-                LLVMValueRef untypedObjectValue = LLVM.BuildAlloca(_builder, GetLLVMTypeForTypeDesc(type), "objptr");
+                LLVMValueRef untypedObjectValue = _builder.BuildAlloca(GetLLVMTypeForTypeDesc(type), "objptr");
                 var arguments = new StackEntry[]
                 {
                     boxedObject,
@@ -3120,7 +3117,7 @@ namespace Internal.IL
             else if (ldtokenValue is FieldDesc)
             {
                 ldtokenKind = WellKnownType.RuntimeFieldHandle;
-                LLVMValueRef fieldHandle = LLVM.ConstStruct(new LLVMValueRef[] { BuildConstInt32(0) }, true);
+                LLVMValueRef fieldHandle = LLVMValueRef.CreateConstStruct(new LLVMValueRef[] { BuildConstInt32(0) }, true);
                 value = new LdTokenEntry<FieldDesc>(StackValueKind.ValueType, null, (FieldDesc)ldtokenValue, fieldHandle, GetWellKnownType(ldtokenKind));
                 _stack.Push(value);
             }
@@ -3138,8 +3135,8 @@ namespace Internal.IL
         {
             StackEntry allocSizeEntry = _stack.Pop();
             LLVMValueRef allocSize = allocSizeEntry.ValueAsInt32(_builder, false);
-            LLVMValueRef allocatedMemory = LLVM.BuildArrayAlloca(_builder, LLVMTypeRef.Int8Type(), allocSize, "localloc" + _currentOffset);
-            LLVM.SetAlignment(allocatedMemory, (uint)_pointerSize);
+            LLVMValueRef allocatedMemory = _builder.BuildArrayAlloca(LLVMTypeRef.Int8, allocSize, "localloc" + _currentOffset);
+            allocatedMemory.Alignment = (uint)_pointerSize;
             if (_methodIL.IsInitLocals)
             {
                 ImportCallMemset(allocatedMemory, 0, allocSize);
@@ -3169,7 +3166,7 @@ namespace Internal.IL
         {
             TypeDesc type = (TypeDesc)_methodIL.GetObject(token);
             int size = type.GetElementSize().AsInt;
-            PushExpression(StackValueKind.Int32, "sizeof", LLVM.ConstInt(LLVM.Int32Type(), (ulong)size, LLVMMisc.False), GetWellKnownType(WellKnownType.Int32));
+            PushExpression(StackValueKind.Int32, "sizeof", LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (ulong)size, false), GetWellKnownType(WellKnownType.Int32));
         }
 
         private void ImportRefAnyType()
@@ -3216,15 +3213,15 @@ namespace Internal.IL
         {
             if (NullRefFunction.Pointer == IntPtr.Zero)
             {
-                NullRefFunction = LLVM.AddFunction(Module, "corert.throwifnull", LLVM.FunctionType(LLVM.VoidType(), new LLVMTypeRef[] { LLVM.PointerType(LLVMTypeRef.Int8Type(), 0), LLVM.PointerType(LLVMTypeRef.Int8Type(), 0) }, false));
-                var builder = LLVM.CreateBuilder();
-                var block = LLVM.AppendBasicBlock(NullRefFunction, "Block");
-                var throwBlock = LLVM.AppendBasicBlock(NullRefFunction, "ThrowBlock");
-                var retBlock = LLVM.AppendBasicBlock(NullRefFunction, "RetBlock");
-                LLVM.PositionBuilderAtEnd(builder, block);
-                LLVM.BuildCondBr(builder, LLVM.BuildICmp(builder, LLVMIntPredicate.LLVMIntEQ, LLVM.GetParam(NullRefFunction, 1), LLVM.ConstPointerNull(LLVM.PointerType(LLVMTypeRef.Int8Type(), 0)), "nullCheck"),
+                NullRefFunction = Module.AddFunction("corert.throwifnull", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }, false));
+                var builder = Context.CreateBuilder();
+                var block = NullRefFunction.AppendBasicBlock("Block");
+                var throwBlock = NullRefFunction.AppendBasicBlock("ThrowBlock");
+                var retBlock = NullRefFunction.AppendBasicBlock("RetBlock");
+                builder.PositionAtEnd(block);
+                builder.BuildCondBr(builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, NullRefFunction.GetParam(1), LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)), "nullCheck"),
                     throwBlock, retBlock);
-                LLVM.PositionBuilderAtEnd(builder, throwBlock);
+                builder.PositionAtEnd(throwBlock);
                 MetadataType nullRefType = _compilation.NodeFactory.TypeSystemContext.SystemModule.GetType("System", "NullReferenceException");
 
                 var eeTypeDesc = _compilation.TypeSystemContext.SystemModule.GetKnownType("System", "EETypePtr");
@@ -3232,23 +3229,23 @@ namespace Internal.IL
 
                 MetadataType helperType = _compilation.TypeSystemContext.SystemModule.GetKnownType("System.Runtime", RuntimeExport);
                 MethodDesc helperMethod = helperType.GetKnownMethod("RhNewObject", null);
-                var resultAddress = LLVM.BuildIntCast(builder, LLVM.BuildAlloca(builder, LLVM.Int32Type(), "resultAddress"), LLVM.PointerType(LLVMTypeRef.Int8Type(), 0), "castResultAddress");
-                HandleCall(helperMethod, helperMethod.Signature, arguments, ILOpcode.call, null, default(LLVMValueRef), 0, LLVM.GetParam(NullRefFunction, 0), builder, true, resultAddress);
+                var resultAddress = builder.BuildIntCast(builder.BuildAlloca(LLVMTypeRef.Int32, "resultAddress"), LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), "castResultAddress");
+                HandleCall(helperMethod, helperMethod.Signature, arguments, ILOpcode.call, null, default(LLVMValueRef), 0, NullRefFunction.GetParam(0), builder, true, resultAddress);
 
                 var exceptionEntry = new ExpressionEntry(GetStackValueKind(nullRefType), "RhNewObject_return", resultAddress, nullRefType);
 
                 var ctorDef = nullRefType.GetDefaultConstructor();
 
-                var constructedExceptionObject = HandleCall(ctorDef, ctorDef.Signature, new StackEntry[] { exceptionEntry }, ILOpcode.call, null, default(LLVMValueRef), 0, LLVM.GetParam(NullRefFunction, 0), builder, false, default(LLVMValueRef));
+                var constructedExceptionObject = HandleCall(ctorDef, ctorDef.Signature, new StackEntry[] { exceptionEntry }, ILOpcode.call, null, default(LLVMValueRef), 0, NullRefFunction.GetParam(0), builder, false, default(LLVMValueRef));
 
                 EmitTrapCall(builder);
-                LLVM.PositionBuilderAtEnd(builder, retBlock);
-                LLVM.BuildRetVoid(builder);
+                builder.PositionAtEnd(retBlock);
+                builder.BuildRetVoid();
             }
 
-            LLVMValueRef shadowStack = LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_currentFunclet), new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (uint)(GetTotalLocalOffset() + GetTotalParameterOffset()), LLVMMisc.False) }, String.Empty);
+            LLVMValueRef shadowStack = _builder.BuildGEP(_currentFunclet.GetParam(0), new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)(GetTotalLocalOffset() + GetTotalParameterOffset()), false) }, String.Empty);
 
-            LLVM.BuildCall(_builder, NullRefFunction, new LLVMValueRef[] { shadowStack, entry }, string.Empty);
+            _builder.BuildCall(NullRefFunction, new LLVMValueRef[] { shadowStack, entry }, string.Empty);
         }
 
         private LLVMValueRef GetInstanceFieldAddress(StackEntry objectEntry, FieldDesc field)
@@ -3264,14 +3261,14 @@ namespace Internal.IL
                 }
                 else
                 {
-                    untypedObjectValue = LLVM.BuildAlloca(_builder, llvmObjectType, "objptr");
-                    LLVM.BuildStore(_builder, objectEntry.ValueAsType(llvmObjectType, _builder), untypedObjectValue);
-                    untypedObjectValue = LLVM.BuildPointerCast(_builder, untypedObjectValue, LLVM.PointerType(LLVMTypeRef.Int8Type(), 0), "objptrcast");
+                    untypedObjectValue = _builder.BuildAlloca(llvmObjectType, "objptr");
+                    _builder.BuildStore(objectEntry.ValueAsType(llvmObjectType, _builder), untypedObjectValue);
+                    untypedObjectValue = _builder.BuildPointerCast(untypedObjectValue, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), "objptrcast");
                 }
             }
             else
             {
-                untypedObjectValue = objectEntry.ValueAsType(LLVM.PointerType(LLVMTypeRef.Int8Type(), 0), _builder);
+                untypedObjectValue = objectEntry.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder);
             }
 
             if (field.Offset.AsInt == 0)
@@ -3280,8 +3277,8 @@ namespace Internal.IL
             }
             else
             {
-                var loadLocation = LLVM.BuildGEP(_builder, untypedObjectValue,
-                    new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (ulong)field.Offset.AsInt, LLVMMisc.False) }, String.Empty);
+                var loadLocation = _builder.BuildGEP(untypedObjectValue,
+                    new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (ulong)field.Offset.AsInt, false) }, String.Empty);
                 return loadLocation;
             }
         }
@@ -3329,7 +3326,7 @@ namespace Internal.IL
                         {
                             node = _compilation.NodeFactory.TypeGCStaticsSymbol(owningType);
                             LLVMValueRef basePtrPtr = LoadAddressOfSymbolNode(node);
-                            staticBase = LLVM.BuildLoad(_builder, LLVM.BuildLoad(_builder, LLVM.BuildPointerCast(_builder, basePtrPtr, LLVM.PointerType(LLVM.PointerType(LLVM.PointerType(LLVM.Int8Type(), 0), 0), 0), "castBasePtrPtr"), "basePtr"), "base");
+                            staticBase = _builder.BuildLoad(_builder.BuildLoad(_builder.BuildPointerCast(basePtrPtr, LLVMTypeRef.CreatePointer(LLVMTypeRef.CreatePointer(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), 0), 0), "castBasePtrPtr"), "basePtr"), "base");
                         }
                         else
                         {
@@ -3346,8 +3343,8 @@ namespace Internal.IL
 
                 _dependencies.Add(node);
 
-                LLVMValueRef castStaticBase = LLVM.BuildPointerCast(_builder, staticBase, LLVM.PointerType(LLVM.Int8Type(), 0), owningType.Name + "_statics");
-                LLVMValueRef fieldAddr = LLVM.BuildGEP(_builder, castStaticBase, new LLVMValueRef[] { BuildConstInt32(fieldOffset) }, field.Name + "_addr");
+                LLVMValueRef castStaticBase = _builder.BuildPointerCast(staticBase, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), owningType.Name + "_statics");
+                LLVMValueRef fieldAddr = _builder.BuildGEP(castStaticBase, new LLVMValueRef[] { BuildConstInt32(fieldOffset) }, field.Name + "_addr");
 
 
                 return fieldAddr;
@@ -3369,7 +3366,7 @@ namespace Internal.IL
 
             // TODO: Codegen could check whether it has already run rather than calling into EnsureClassConstructorRun
             // but we'd have to figure out how to manage the additional basic blocks
-            LLVMValueRef classConstructionContextPtr = LLVM.BuildGEP(_builder, firstNonGcStatic, new LLVMValueRef[] { BuildConstInt32(-2) }, "classConstructionContext");
+            LLVMValueRef classConstructionContextPtr = _builder.BuildGEP(firstNonGcStatic, new LLVMValueRef[] { BuildConstInt32(-2) }, "classConstructionContext");
             StackEntry classConstructionContext = new AddressExpressionEntry(StackValueKind.NativeInt, "classConstructionContext", classConstructionContextPtr, GetWellKnownType(WellKnownType.IntPtr));
             CallRuntime("System.Runtime.CompilerServices", _compilation.TypeSystemContext, ClassConstructorRunner, "EnsureClassConstructorRun", new StackEntry[] { classConstructionContext });
         }
@@ -3384,7 +3381,7 @@ namespace Internal.IL
 
             StackEntry typeManagerSlotEntry = new LoadExpressionEntry(StackValueKind.ValueType, "typeManagerSlot", threadStaticIndex, GetWellKnownType(WellKnownType.Int32));
             LLVMValueRef typeTlsIndexPtr =
-                LLVM.BuildGEP(_builder, threadStaticIndex, new LLVMValueRef[] { BuildConstInt32(1) }, "typeTlsIndexPtr"); // index is the second field after the ptr.
+                _builder.BuildGEP(threadStaticIndex, new LLVMValueRef[] { BuildConstInt32(1) }, "typeTlsIndexPtr"); // index is the second field after the ptr.
             StackEntry tlsIndexExpressionEntry = new LoadExpressionEntry(StackValueKind.ValueType, "typeTlsIndex", typeTlsIndexPtr, GetWellKnownType(WellKnownType.Int32));
 
             if (needsCctorCheck)
@@ -3395,7 +3392,7 @@ namespace Internal.IL
 
                 // TODO: Codegen could check whether it has already run rather than calling into EnsureClassConstructorRun
                 // but we'd have to figure out how to manage the additional basic blocks
-                LLVMValueRef classConstructionContextPtr = LLVM.BuildGEP(_builder, firstNonGcStatic, new LLVMValueRef[] { BuildConstInt32(-2) }, "classConstructionContext");
+                LLVMValueRef classConstructionContextPtr = _builder.BuildGEP(firstNonGcStatic, new LLVMValueRef[] { BuildConstInt32(-2) }, "classConstructionContext");
                 StackEntry classConstructionContext = new AddressExpressionEntry(StackValueKind.NativeInt, "classConstructionContext", classConstructionContextPtr,
                     GetWellKnownType(WellKnownType.IntPtr));
 
@@ -3445,7 +3442,7 @@ namespace Internal.IL
         {
             LLVMValueRef addressOfAddress = WebAssemblyObjectWriter.GetSymbolValuePointer(Module, node, _compilation.NameMangler, false);
             //return addressOfAddress;
-            return LLVM.BuildLoad(_builder, addressOfAddress, "LoadAddressOfSymbolNode");
+            return _builder.BuildLoad(addressOfAddress, "LoadAddressOfSymbolNode");
         }
 
         private void ImportLoadString(int token)
@@ -3464,16 +3461,16 @@ namespace Internal.IL
             TypeDesc type = ResolveTypeToken(token);
             var valueEntry = _stack.Pop();
             var llvmType = GetLLVMTypeForTypeDesc(type);
-            if (llvmType.TypeKind == LLVMTypeKind.LLVMStructTypeKind)
+            if (llvmType.Kind == LLVMTypeKind.LLVMStructTypeKind)
             {
-                ImportCallMemset(valueEntry.ValueAsType(LLVM.PointerType(LLVM.Int8Type(), 0), _builder), 0, type.GetElementSize().AsInt);
+                ImportCallMemset(valueEntry.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), 0, type.GetElementSize().AsInt);
             }
-            else if (llvmType.TypeKind == LLVMTypeKind.LLVMIntegerTypeKind)
-                LLVM.BuildStore(_builder, LLVM.ConstInt(llvmType, 0, LLVMMisc.False), valueEntry.ValueAsType(LLVM.PointerType(llvmType, 0), _builder));
-            else if (llvmType.TypeKind == LLVMTypeKind.LLVMPointerTypeKind)
-                LLVM.BuildStore(_builder, LLVM.ConstNull(llvmType), valueEntry.ValueAsType(LLVM.PointerType(llvmType, 0), _builder));
-            else if (llvmType.TypeKind == LLVMTypeKind.LLVMFloatTypeKind || llvmType.TypeKind == LLVMTypeKind.LLVMDoubleTypeKind)
-                LLVM.BuildStore(_builder, LLVM.ConstReal(llvmType, 0.0), valueEntry.ValueAsType(LLVM.PointerType(llvmType, 0), _builder));
+            else if (llvmType.Kind == LLVMTypeKind.LLVMIntegerTypeKind)
+                _builder.BuildStore(LLVMValueRef.CreateConstInt(llvmType, 0, false), valueEntry.ValueAsType(LLVMTypeRef.CreatePointer(llvmType, 0), _builder));
+            else if (llvmType.Kind == LLVMTypeKind.LLVMPointerTypeKind)
+                _builder.BuildStore(LLVMValueRef.CreateConstNull(llvmType), valueEntry.ValueAsType(LLVMTypeRef.CreatePointer(llvmType, 0), _builder));
+            else if (llvmType.Kind == LLVMTypeKind.LLVMFloatTypeKind || llvmType.Kind == LLVMTypeKind.LLVMDoubleTypeKind)
+                _builder.BuildStore(LLVMValueRef.CreateConstReal(llvmType, 0.0), valueEntry.ValueAsType(LLVMTypeRef.CreatePointer(llvmType, 0), _builder));
             else
                 throw new NotImplementedException();
         }
@@ -3510,12 +3507,12 @@ namespace Internal.IL
                     // Work backwards through containing finally blocks to call them in the right order
                     BasicBlock finallyBlock = _basicBlocks[r.ILRegion.HandlerOffset];
                     MarkBasicBlock(finallyBlock);
-                    LLVM.BuildCall(_builder, GetFuncletForBlock(finallyBlock), new LLVMValueRef[] { LLVM.GetFirstParam(_currentFunclet) }, String.Empty);
+                    _builder.BuildCall(GetFuncletForBlock(finallyBlock), new LLVMValueRef[] { _currentFunclet.GetParam(0) }, String.Empty);
                 }
             }
 
             MarkBasicBlock(target);
-            LLVM.BuildBr(_builder, GetLLVMBasicBlockForBlock(target));
+            _builder.BuildBr(GetLLVMBasicBlockForBlock(target));
         }
 
         private static bool IsOffsetContained(int offset, int start, int length)
@@ -3548,7 +3545,7 @@ namespace Internal.IL
             StackEntry index = _stack.Pop();
             StackEntry arrayReference = _stack.Pop();
             var nullSafeElementType = elementType ?? GetWellKnownType(WellKnownType.Object);
-            PushLoadExpression(GetStackValueKind(nullSafeElementType), $"{arrayReference.Name()}Element", GetElementAddress(index.ValueAsInt32(_builder, true), arrayReference.ValueAsType(LLVM.PointerType(LLVM.Int8Type(), 0), _builder), nullSafeElementType), nullSafeElementType);
+            PushLoadExpression(GetStackValueKind(nullSafeElementType), $"{arrayReference.Name()}Element", GetElementAddress(index.ValueAsInt32(_builder, true), arrayReference.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), nullSafeElementType), nullSafeElementType);
         }
 
         private void ImportStoreElement(int token)
@@ -3562,17 +3559,17 @@ namespace Internal.IL
             StackEntry index = _stack.Pop();
             StackEntry arrayReference = _stack.Pop();
             var nullSafeElementType = elementType ?? GetWellKnownType(WellKnownType.Object);
-            LLVMValueRef elementAddress = GetElementAddress(index.ValueAsInt32(_builder, true), arrayReference.ValueAsType(LLVM.PointerType(LLVM.Int8Type(), 0), _builder), nullSafeElementType);
+            LLVMValueRef elementAddress = GetElementAddress(index.ValueAsInt32(_builder, true), arrayReference.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), nullSafeElementType);
             CastingStore(elementAddress, value, nullSafeElementType);
         }
 
         private void ImportLoadLength()
         {
             StackEntry arrayReference = _stack.Pop();
-            var arrayReferenceValue = arrayReference.ValueAsType(LLVM.PointerType(LLVM.Int8Type(), 0), _builder);
+            var arrayReferenceValue = arrayReference.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder);
             ThrowIfNull(arrayReferenceValue);
-            LLVMValueRef lengthPtr = LLVM.BuildGEP(_builder, arrayReferenceValue, new LLVMValueRef[] { BuildConstInt32(_compilation.NodeFactory.Target.PointerSize) }, "arrayLength");
-            LLVMValueRef castLengthPtr = LLVM.BuildPointerCast(_builder, lengthPtr, LLVM.PointerType(LLVM.Int32Type(), 0), "castArrayLength");
+            LLVMValueRef lengthPtr = _builder.BuildGEP(arrayReferenceValue, new LLVMValueRef[] { BuildConstInt32(_compilation.NodeFactory.Target.PointerSize) }, "arrayLength");
+            LLVMValueRef castLengthPtr = _builder.BuildPointerCast(lengthPtr, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int32, 0), "castArrayLength");
             PushLoadExpression(StackValueKind.Int32, "arrayLength", castLengthPtr, GetWellKnownType(WellKnownType.Int32));
         }
 
@@ -3583,28 +3580,28 @@ namespace Internal.IL
             StackEntry index = _stack.Pop();
             StackEntry arrayReference = _stack.Pop();
 
-            PushExpression(GetStackValueKind(byRefElement), $"{arrayReference.Name()}ElementAddress", GetElementAddress(index.ValueAsInt32(_builder, true), arrayReference.ValueAsType(LLVM.PointerType(LLVM.Int8Type(), 0), _builder), elementType), byRefElement);
+            PushExpression(GetStackValueKind(byRefElement), $"{arrayReference.Name()}ElementAddress", GetElementAddress(index.ValueAsInt32(_builder, true), arrayReference.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), elementType), byRefElement);
         }
 
         private LLVMValueRef GetElementAddress(LLVMValueRef elementPosition, LLVMValueRef arrayReference, TypeDesc arrayElementType)
         {
             ThrowIfNull(arrayReference);
             var elementSize = arrayElementType.GetElementSize();
-            LLVMValueRef elementOffset = LLVM.BuildMul(_builder, elementPosition, BuildConstInt32(elementSize.AsInt), "elementOffset");
-            LLVMValueRef arrayOffset = LLVM.BuildAdd(_builder, elementOffset, ArrayBaseSize(), "arrayOffset");
-            return LLVM.BuildGEP(_builder, arrayReference, new LLVMValueRef[] { arrayOffset }, "elementPointer");
+            LLVMValueRef elementOffset = _builder.BuildMul(elementPosition, BuildConstInt32(elementSize.AsInt), "elementOffset");
+            LLVMValueRef arrayOffset = _builder.BuildAdd(elementOffset, ArrayBaseSize(), "arrayOffset");
+            return _builder.BuildGEP(arrayReference, new LLVMValueRef[] { arrayOffset }, "elementPointer");
         }
 
         LLVMValueRef EmitRuntimeHelperCall(string name, TypeDesc returnType, LLVMValueRef[] parameters)
         {
-            var runtimeHelperSig = LLVM.FunctionType(GetLLVMTypeForTypeDesc(returnType), parameters.Select(valRef => LLVM.TypeOf(valRef)).ToArray(), false);
+            var runtimeHelperSig = LLVMTypeRef.CreateFunction(GetLLVMTypeForTypeDesc(returnType), parameters.Select(valRef => valRef.TypeOf).ToArray(), false);
             var runtimeHelper = GetOrCreateLLVMFunction(name, runtimeHelperSig);
-            return LLVM.BuildCall(_builder, runtimeHelper, parameters, "call_" + name);
+            return _builder.BuildCall(runtimeHelper, parameters, "call_" + name);
         }
 
         private void ImportEndFinally()
         {
-            LLVM.BuildRetVoid(_builder);
+            _builder.BuildRetVoid();
         }
 
         private void ImportFallthrough(BasicBlock next)
@@ -3769,19 +3766,19 @@ namespace Internal.IL
 
             if (TrapFunction.Pointer == IntPtr.Zero)
             {
-                TrapFunction = LLVM.AddFunction(Module, "llvm.trap", LLVM.FunctionType(LLVM.VoidType(), Array.Empty<LLVMTypeRef>(), false));
+                TrapFunction = Module.AddFunction("llvm.trap", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, Array.Empty<LLVMTypeRef>(), false));
             }
-            LLVM.BuildCall(builder, TrapFunction, Array.Empty<LLVMValueRef>(), string.Empty);
-            LLVM.BuildUnreachable(builder);
+            builder.BuildCall(TrapFunction, Array.Empty<LLVMValueRef>(), string.Empty);
+            builder.BuildUnreachable();
         }
 
         private void EmitDoNothingCall()
         {
             if (DoNothingFunction.Pointer == IntPtr.Zero)
             {
-                DoNothingFunction = LLVM.AddFunction(Module, "llvm.donothing", LLVM.FunctionType(LLVM.VoidType(), Array.Empty<LLVMTypeRef>(), false));
+                DoNothingFunction = Module.AddFunction("llvm.donothing", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, Array.Empty<LLVMTypeRef>(), false));
             }
-            LLVM.BuildCall(_builder, DoNothingFunction, Array.Empty<LLVMValueRef>(), string.Empty);
+            _builder.BuildCall(DoNothingFunction, Array.Empty<LLVMValueRef>(), string.Empty);
         }
 
         public override string ToString()

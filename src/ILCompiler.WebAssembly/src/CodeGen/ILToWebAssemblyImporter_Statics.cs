@@ -10,7 +10,6 @@ using Internal.TypeSystem;
 using Internal.TypeSystem.Ecma;
 
 using ILCompiler;
-using ILCompiler.CodeGen;
 
 using ILCompiler.DependencyAnalysis;
 using LLVMSharp;
