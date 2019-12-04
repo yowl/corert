@@ -12,7 +12,7 @@ using Internal.Text;
 using Internal.TypeSystem;
 using ObjectData = ILCompiler.DependencyAnalysis.ObjectNode.ObjectData;
 
-using LLVMSharp;
+using LLVMSharp.Interop;
 
 namespace ILCompiler.DependencyAnalysis
 {
@@ -205,7 +205,7 @@ namespace ILCompiler.DependencyAnalysis
             });
             Module.AddNamedMetadataOperand("llvm.module.flags", dwarfVersion);
             Module.AddNamedMetadataOperand("llvm.module.flags", dwarfSchemaVersion);
-            LLVMUnsafeDIFunctions.DIBuilderFinalize(DIBuilder);
+            DIBuilder.DIBuilderFinalize();
         }
 
         private void EmitReadyToRunHeaderCallback(LLVMContextRef context)
@@ -232,7 +232,7 @@ namespace ILCompiler.DependencyAnalysis
             var mainEntryBlock = mainFunc.AppendBasicBlock("entry");
             builder.PositionAtEnd(mainEntryBlock);
             LLVMValueRef managedMain = Module.GetNamedFunction("StartupCodeMain");
-            if (managedMain.Pointer == IntPtr.Zero)
+            if (managedMain.Handle == IntPtr.Zero)
             {
                 throw new Exception("Main not found");
             }
@@ -241,7 +241,7 @@ namespace ILCompiler.DependencyAnalysis
             LLVMValueRef reversePinvokeFrame = builder.BuildAlloca(reversePInvokeFrameType, "ReversePInvokeFrame");
             LLVMValueRef RhpReversePInvoke2 = Module.GetNamedFunction("RhpReversePInvoke2");
 
-            if (RhpReversePInvoke2.Pointer == IntPtr.Zero)
+            if (RhpReversePInvoke2.Handle == IntPtr.Zero)
             {
                 RhpReversePInvoke2 = Module.AddFunction("RhpReversePInvoke2", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(reversePInvokeFrameType, 0) }, false));
             }
@@ -295,7 +295,7 @@ namespace ILCompiler.DependencyAnalysis
             {
                 LLVMValueRef valRef = IsFunction ? module.GetNamedFunction(SymbolName) : module.GetNamedGlobal(SymbolName);
 
-                if (Offset != 0 && valRef.Pointer != IntPtr.Zero)
+                if (Offset != 0 && valRef.Handle != IntPtr.Zero)
                 {
                     var pointerType = LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0);
                     var bitCast = LLVMValueRef.CreateConstBitCast(valRef, pointerType);

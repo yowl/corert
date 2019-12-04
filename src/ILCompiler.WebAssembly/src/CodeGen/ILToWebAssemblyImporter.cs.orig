@@ -9,7 +9,7 @@ using System.IO;
 using System.Linq;
 using Internal.TypeSystem;
 using ILCompiler;
-using LLVMSharp.Interop;
+using LLVMSharp;
 using ILCompiler.DependencyAnalysis;
 using ILCompiler.DependencyAnalysisFramework;
 using ILCompiler.WebAssembly;
@@ -156,7 +156,7 @@ namespace Internal.IL
                 // Change the function body to trap
                 foreach (BasicBlock block in _basicBlocks)
                 {
-                    if (block != null && block.Block.Handle != IntPtr.Zero)
+                    if (block != null && block.Block.Pointer != IntPtr.Zero)
                     {
                         block.Block.AsValue().ReplaceAllUsesWith(trapBlock.AsValue());
                         block.Block.RemoveFromParent();
@@ -356,7 +356,7 @@ namespace Internal.IL
         {
             LLVMValueRef llvmFunction = Module.GetNamedFunction(mangledName);
 
-            if(llvmFunction.Handle == IntPtr.Zero)
+            if(llvmFunction.Pointer == IntPtr.Zero)
             {
                 return CreateLLVMFunction(mangledName, signature);
             }
@@ -367,7 +367,7 @@ namespace Internal.IL
         {
             LLVMValueRef llvmFunction = Module.GetNamedFunction(mangledName);
 
-            if (llvmFunction.Handle == IntPtr.Zero)
+            if (llvmFunction.Pointer == IntPtr.Zero)
             {
                 return Module.AddFunction(mangledName, functionType);
             }
@@ -381,7 +381,7 @@ namespace Internal.IL
         {
             string funcletName = _mangledName + "$" + kind.ToString() + handlerOffset.ToString("X");
             LLVMValueRef funclet = Module.GetNamedFunction(funcletName);
-            if (funclet.Handle == IntPtr.Zero)
+            if (funclet.Pointer == IntPtr.Zero)
             {
                 // Funclets only accept a shadow stack pointer
                 LLVMTypeRef universalFuncletSignature = LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }, false);
@@ -457,7 +457,7 @@ namespace Internal.IL
 
         private LLVMBasicBlockRef GetLLVMBasicBlockForBlock(BasicBlock block)
         {
-            if (block.Block.Handle == IntPtr.Zero)
+            if (block.Block.Pointer == IntPtr.Zero)
             {
                 LLVMValueRef blockFunclet = GetFuncletForBlock(block);
 
@@ -530,7 +530,7 @@ namespace Internal.IL
         private void EndImportingBasicBlock(BasicBlock basicBlock)
         {
             var terminator = basicBlock.Block.Terminator;
-            if (terminator.Handle == IntPtr.Zero)
+            if (terminator.Pointer == IntPtr.Zero)
             {
                 if (_basicBlocks.Length > _currentOffset)
                 {
@@ -577,94 +577,29 @@ namespace Internal.IL
                 DebugMetadata debugMetadata;
                 if (!_compilation.DebugMetadataMap.TryGetValue(curSequencePoint.Document, out debugMetadata))
                 {
-//                    string fullPath = curSequencePoint.Document;
-//                    string fileName = Path.GetFileName(fullPath);
-//                    string directory = Path.GetDirectoryName(fullPath) ?? String.Empty;
-                    string fileName = Path.GetFileName("DIBuilder.c");
-                    string directory = Path.GetDirectoryName(".");
-//                    LLVMMetadataRef fileMetadata = _compilation.DIBuilder.CreateFile(fullPath, directory);
-                    LLVMMetadataRef fileMetadata = _compilation.DIBuilder.CreateFile(fileName, directory);
+                    string fullPath = curSequencePoint.Document;
+                    string fileName = Path.GetFileName(fullPath);
+                    string directory = Path.GetDirectoryName(fullPath) ?? String.Empty;
+                    LLVMMetadataRef fileMetadata = LLVMUnsafeDIFunctions.DIBuilderCreateFile(_compilation.DIBuilder, fullPath, directory);
 
                     // todo: get the right value for isOptimized
-                    LLVMMetadataRef compileUnitMetadata = _compilation.DIBuilder.CreateCompileUnit(LLVMDWARFSourceLanguage.LLVMDWARFSourceLanguageC,
-                        fileMetadata, "ILC", 0 /* Optimized */, String.Empty, 1, String.Empty, LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, 0, 0, 0);
-                    Module.AddNamedMetadataOperand("llvm.dbg.cu", compileUnitMetadata);
+                    LLVMMetadataRef compileUnitMetadata = LLVMUnsafeDIFunctions.DIBuilderCreateCompileUnit(_compilation.DIBuilder, LLVMDWARFSourceLanguage.LLVMDWARFSourceLanguageC,
+                        fileMetadata, "ILC",  0 /* Optimized */, String.Empty, 1, String.Empty, LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, 0, 0, 0);
+                    LLVMUnsafeDIFunctions.AddNamedMetadataOperand(Context, Module, "llvm.dbg.cu", compileUnitMetadata);
 
                     debugMetadata = new DebugMetadata(fileMetadata, compileUnitMetadata);
-                    _compilation.DebugMetadataMap[fileName] = debugMetadata;
-//                    _compilation.DebugMetadataMap[fullPath] = debugMetadata;
-CreateDebugLocation();
+                    _compilation.DebugMetadataMap[fullPath] = debugMetadata;
                 }
-                
-                if (_debugFunction.Handle == IntPtr.Zero)
+
+                if (_debugFunction.Pointer == IntPtr.Zero)
                 {
-                    LLVMMetadataRef functionMetaType = _compilation.DIBuilder.CreateSubroutineType(debugMetadata.File, ReadOnlySpan<LLVMMetadataRef>.Empty,  LLVMDIFlags.LLVMDIFlagZero);
-                    
-                    uint lineNumber = (uint)_debugInformation.GetSequencePoints().FirstOrDefault().LineNumber;
-                    var debugFunction = _compilation.DIBuilder.CreateFunction(debugMetadata.File, "CreateDebugLocation", "CreateDebugLocation",
-                        debugMetadata.File,
-                        lineNumber, functionMetaType, 1, 1, lineNumber, 0, 0);
-                    _debugFunction = _compilation.DIBuilder.CreateFunction(debugMetadata.File, _method.Name, _method.Name, debugMetadata.File,
-                        lineNumber, functionMetaType, 1, 1, lineNumber, 0, 0);
+                    _debugFunction = LLVMUnsafeDIFunctions.DIBuilderCreateFunction(_compilation.DIBuilder, debugMetadata.CompileUnit, _method.Name, String.Empty, debugMetadata.File,
+                        (uint)_debugInformation.GetSequencePoints().FirstOrDefault().LineNumber, default(LLVMMetadataRef), 1, 1, 1, 0, 0);
                 }
-                LLVMMetadataRef currentLine = Context.CreateDebugLocation((uint)curSequencePoint.LineNumber, 0, _debugFunction, default(LLVMMetadataRef));
-                _builder.CurrentDebugLocation = Context.MetadataAsValue(currentLine);
+                LLVMMetadataRef currentLine = LLVMUnsafeDIFunctions.CreateDebugLocation(Context, (uint)curSequencePoint.LineNumber, 0, _debugFunction, default(LLVMMetadataRef));
+                _builder.CurrentDebugLocation = LLVMUnsafeDIFunctions.MetadataAsValue(Context, currentLine);
             }
         }
-
-        public void CreateDebugLocation()
-        {
-            string fileName = Path.GetFileName("DIBuilder.c");
-            string directory = Path.GetDirectoryName(".");
-            LLVMModuleRef module = LLVMModuleRef.CreateWithName("netscripten");
-            module.Target = "asmjs-unknown-emscripten";
-            var dIBuilder = module.CreateDIBuilder();
-            var builder = module.Context.CreateBuilder();
-            LLVMMetadataRef fileMetadata = dIBuilder.CreateFile(fileName, directory);
-
-            LLVMMetadataRef compileUnitMetadata = dIBuilder.CreateCompileUnit(
-                LLVMDWARFSourceLanguage.LLVMDWARFSourceLanguageC,
-                fileMetadata, "ILC", 0 /* Optimized */, String.Empty, 1, String.Empty,
-                LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, 0, 0, 0);
-            module.AddNamedMetadataOperand("llvm.dbg.cu", compileUnitMetadata);
-
-            LLVMMetadataRef functionMetaType = dIBuilder.CreateSubroutineType(fileMetadata,
-                ReadOnlySpan<LLVMMetadataRef>.Empty, LLVMDIFlags.LLVMDIFlagZero);
-
-            uint lineNumber = 1;
-            var debugFunction = dIBuilder.CreateFunction(fileMetadata, "CreateDebugLocation", "CreateDebugLocation",
-                fileMetadata,
-                lineNumber, functionMetaType, 1, 1, lineNumber, 0, 0);
-            LLVMMetadataRef currentLine =
-                module.Context.CreateDebugLocation(lineNumber, 0, debugFunction, default(LLVMMetadataRef));
-
-            LLVMTypeRef[] FooParamTys = { LLVMTypeRef.Int64, LLVMTypeRef.Int64, };
-            LLVMTypeRef FooFuncTy = LLVMTypeRef.CreateFunction(LLVMTypeRef.Int64, FooParamTys);
-            LLVMValueRef FooFunction = module.AddFunction("foo", FooFuncTy);
-
-            var funcBlock = module.Context.AppendBasicBlock(FooFunction, "foo");
-            builder.PositionAtEnd(funcBlock);
-            builder.BuildRet(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, 0));
-            builder.CurrentDebugLocation = module.Context.MetadataAsValue(currentLine);
-            var dwarfVersion = LLVMValueRef.CreateMDNode(new[]
-            {
-                LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 2), module.Context.GetMDString("Dwarf Version", 13),
-                LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 4)
-            });
-            var dwarfSchemaVersion = LLVMValueRef.CreateMDNode(new[]
-            {
-                LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 2),
-                module.Context.GetMDString("Debug Info Version", 18),
-                LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 3)
-            });
-            module.AddNamedMetadataOperand("llvm.module.flags", dwarfVersion);
-            module.AddNamedMetadataOperand("llvm.module.flags", dwarfSchemaVersion);
-            dIBuilder.DIBuilderFinalize();
-
-            module.TryVerify(LLVMVerifierFailureAction.LLVMPrintMessageAction, out string message);
-
-        }
-
 
         private void EndImportingInstruction()
         {
@@ -683,7 +618,7 @@ CreateDebugLocation();
 
         private void ImportBreak()
         {
-            if (DebugtrapFunction.Handle == IntPtr.Zero)
+            if (DebugtrapFunction.Pointer == IntPtr.Zero)
             {
                 DebugtrapFunction = Module.AddFunction("llvm.debugtrap", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, Array.Empty<LLVMTypeRef>(), false));
             }
@@ -744,7 +679,7 @@ CreateDebugLocation();
         private static LLVMValueRef CastIntValue(LLVMBuilderRef builder, LLVMValueRef value, LLVMTypeRef type, bool signExtend)
         {
             LLVMTypeKind typeKind = value.TypeOf.Kind;
-            if (value.TypeOf.Handle == type.Handle)
+            if (value.TypeOf.Pointer == type.Pointer)
             {
                 return value;
             }
@@ -780,7 +715,7 @@ CreateDebugLocation();
 
         private static LLVMValueRef CastDoubleValue(LLVMBuilderRef builder, LLVMValueRef value, LLVMTypeRef type)
         {
-            if (value.TypeOf.Handle == type.Handle)
+            if (value.TypeOf.Pointer == type.Pointer)
             {
                 return value;
             }
@@ -835,7 +770,7 @@ CreateDebugLocation();
                 type = _locals[index].Type;
                 if(varOffset == -1)
                 {
-                    Debug.Assert(_localSlots[index].Handle != IntPtr.Zero);
+                    Debug.Assert(_localSlots[index].Pointer != IntPtr.Zero);
                     return _localSlots[index];
                 }
             }
@@ -904,7 +839,7 @@ CreateDebugLocation();
 
         private void ImportStoreHelper(LLVMValueRef toStore, LLVMTypeRef valueType, LLVMValueRef basePtr, uint offset, string name = null, LLVMBuilderRef builder = default(LLVMBuilderRef))
         {
-            if (builder.Handle == IntPtr.Zero)
+            if (builder.Pointer == IntPtr.Zero)
                 builder = _builder;
 
             LLVMValueRef typedToStore = CastIfNecessary(builder, toStore, valueType, name);
@@ -945,7 +880,7 @@ CreateDebugLocation();
         internal static LLVMValueRef CastIfNecessary(LLVMBuilderRef builder, LLVMValueRef source, LLVMTypeRef valueType, string name = null, bool unsigned = false)
         {
             LLVMTypeRef sourceType = source.TypeOf;
-            if (sourceType.Handle == valueType.Handle)
+            if (sourceType.Pointer == valueType.Pointer)
                 return source;
 
             LLVMTypeKind toStoreKind = sourceType.Kind;
@@ -996,10 +931,14 @@ CreateDebugLocation();
             else if (toStoreKind == valueTypeKind && toStoreKind == LLVMTypeKind.LLVMIntegerTypeKind)
             {
                 Debug.Assert(toStoreKind != LLVMTypeKind.LLVMPointerTypeKind && valueTypeKind != LLVMTypeKind.LLVMPointerTypeKind);
+<<<<<<< HEAD
+                typedToStore = builder.BuildIntCast(source, valueType, "CastInt" + (name ?? ""));
+=======
                 // when extending unsigned ints do fill left with 0s, zext
-                typedToStore = unsigned && sourceType.IntWidth < valueType.IntWidth
-                    ? builder.BuildZExt(source, valueType, "CastZInt" + (name ?? ""))
-                    : builder.BuildIntCast( source, valueType, "CastInt" + (name ?? ""));
+                typedToStore = unsigned && sourceType.GetIntTypeWidth() < valueType.GetIntTypeWidth()
+                    ? LLVM.BuildZExt(builder, source, valueType, "CastZInt" + (name ?? ""))
+                    : LLVM.BuildIntCast(builder, source, valueType, "CastInt" + (name ?? ""));
+>>>>>>> 7221f043943db259827022583255ffcb26228e06
             }
             else if (toStoreKind == LLVMTypeKind.LLVMIntegerTypeKind && (valueTypeKind == LLVMTypeKind.LLVMDoubleTypeKind || valueTypeKind == LLVMTypeKind.LLVMFloatTypeKind))
             {
@@ -2290,7 +2229,7 @@ CreateDebugLocation();
             }
 
             // Create an import if we haven't already
-            if (nativeFunc.Handle == IntPtr.Zero)
+            if (nativeFunc.Pointer == IntPtr.Zero)
             {
                 // Set up native parameter types
                 nativeFunc = MakeExternFunction(method, realMethodName);
@@ -2348,7 +2287,7 @@ CreateDebugLocation();
             // Define the full signature
             LLVMTypeRef nativeFuncType = LLVMTypeRef.CreateFunction(GetLLVMTypeForTypeDesc(method.Signature.ReturnType), paramTypes, false);
 
-            if (realFunction.Handle == IntPtr.Zero)
+            if (realFunction.Pointer == IntPtr.Zero)
             {
                 nativeFunc = Module.AddFunction(realMethodName, nativeFuncType);
                 nativeFunc.Linkage = LLVMLinkage.LLVMDLLImportLinkage;
@@ -2365,7 +2304,7 @@ CreateDebugLocation();
         {
             get
             {
-                if (s_shadowStackTop.Handle.Equals(IntPtr.Zero))
+                if (s_shadowStackTop.Pointer.Equals(IntPtr.Zero))
                 {
                     s_shadowStackTop = Module.AddGlobal(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), "t_pShadowStackTop");
                     s_shadowStackTop.Linkage = LLVMLinkage.LLVMInternalLinkage;
@@ -2513,7 +2452,7 @@ CreateDebugLocation();
                 AddMethodReference(method);
             }
 
-            if (targetLLVMFunction.Handle.Equals(IntPtr.Zero))
+            if (targetLLVMFunction.Pointer.Equals(IntPtr.Zero))
             {
                 if (method.IsNativeCallable)
                 {
@@ -3279,7 +3218,7 @@ CreateDebugLocation();
 
         private void ThrowIfNull(LLVMValueRef entry)
         {
-            if (NullRefFunction.Handle == IntPtr.Zero)
+            if (NullRefFunction.Pointer == IntPtr.Zero)
             {
                 NullRefFunction = Module.AddFunction("corert.throwifnull", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }, false));
                 var builder = Context.CreateBuilder();
@@ -3829,10 +3768,10 @@ CreateDebugLocation();
 
         private void EmitTrapCall(LLVMBuilderRef builder = default(LLVMBuilderRef))
         {
-            if (builder.Handle == IntPtr.Zero)
+            if (builder.Pointer == IntPtr.Zero)
                 builder = _builder;
 
-            if (TrapFunction.Handle == IntPtr.Zero)
+            if (TrapFunction.Pointer == IntPtr.Zero)
             {
                 TrapFunction = Module.AddFunction("llvm.trap", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, Array.Empty<LLVMTypeRef>(), false));
             }
@@ -3842,7 +3781,7 @@ CreateDebugLocation();
 
         private void EmitDoNothingCall()
         {
-            if (DoNothingFunction.Handle == IntPtr.Zero)
+            if (DoNothingFunction.Pointer == IntPtr.Zero)
             {
                 DoNothingFunction = Module.AddFunction("llvm.donothing", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, Array.Empty<LLVMTypeRef>(), false));
             }

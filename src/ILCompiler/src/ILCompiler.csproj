@@ -19,6 +19,7 @@
     <ObjWriterLibrary Condition="'$(OSGroup)' == 'OSX'">libobjwriter.dylib</ObjWriterLibrary>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\LLVMSharp\sources\LLVMSharp\LLVMSharp.csproj" />
     <ProjectReference Include="..\..\ILCompiler.DependencyAnalysisFramework\src\ILCompiler.DependencyAnalysisFramework.csproj" />
     <ProjectReference Include="..\..\ILCompiler.MetadataTransform\src\ILCompiler.MetadataTransform.csproj" />
     <ProjectReference Include="..\..\ILCompiler.MetadataWriter\src\ILCompiler.MetadataWriter.csproj" />

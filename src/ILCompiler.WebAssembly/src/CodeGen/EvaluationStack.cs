@@ -5,7 +5,7 @@
 using System;
 using System.Diagnostics;
 using Internal.TypeSystem;
-using LLVMSharp;
+using LLVMSharp.Interop;
 
 namespace Internal.IL
 {
@@ -522,7 +522,7 @@ namespace Internal.IL
 
         protected override LLVMValueRef ValueAsTypeInternal(LLVMTypeRef type, LLVMBuilderRef builder, bool signExtend)
         {
-            if (RawLLVMValue.Pointer == IntPtr.Zero)
+            if (RawLLVMValue.Handle == IntPtr.Zero)
                 throw new NullReferenceException();
 
             return ILImporter.CastIfNecessary(builder, RawLLVMValue, type, Name);

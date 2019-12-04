@@ -12,7 +12,7 @@ using Internal.TypeSystem.Ecma;
 using ILCompiler;
 
 using ILCompiler.DependencyAnalysis;
-using LLVMSharp;
+using LLVMSharp.Interop;
 
 namespace Internal.IL
 {

@@ -9,7 +9,7 @@ using Internal.IL;
 
 using ILCompiler.DependencyAnalysis;
 using ILCompiler.DependencyAnalysisFramework;
-using LLVMSharp;
+using LLVMSharp.Interop;
 using ILCompiler.WebAssembly;
 
 namespace ILCompiler
@@ -37,7 +37,7 @@ namespace ILCompiler
             Module = m; 
 
             Options = options;
-            DIBuilder = LLVMUnsafeDIFunctions.CreateDIBuilder(Module);
+            DIBuilder = Module.CreateDIBuilder();
             DebugMetadataMap = new Dictionary<string, DebugMetadata>();
         }
 
