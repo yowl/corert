@@ -400,8 +400,8 @@ namespace Internal.IL
 
         private void ImportCallMemset (LLVMValueRef targetPointer, byte value, LLVMValueRef length)
         {
-            var memsetSignature = LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), LLVMTypeRef.Int8, LLVMTypeRef.Int32, LLVMTypeRef.Int32, LLVMTypeRef.Int1 }, false);
-            _builder.BuildCall(GetOrCreateLLVMFunction("llvm.memset.p0i8.i32", memsetSignature), new LLVMValueRef[] { targetPointer, BuildConstInt8(value), length, BuildConstInt32(1), BuildConstInt1(0) }, String.Empty);
+            var memsetSignature = LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), LLVMTypeRef.Int8, LLVMTypeRef.Int32, LLVMTypeRef.Int1 }, false);
+            _builder.BuildCall(GetOrCreateLLVMFunction("llvm.memset.p0i8.i32", memsetSignature), new LLVMValueRef[] { targetPointer, BuildConstInt8(value), length, BuildConstInt1(0) }, String.Empty);
         }
 
         private void PushLoadExpression(StackValueKind kind, string name, LLVMValueRef rawLLVMValue, TypeDesc type)
@@ -1926,7 +1926,6 @@ CreateDebugLocation();
                             LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0),
                             LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0),
                             LLVMTypeRef.Int32,
-                            LLVMTypeRef.Int32,
                             LLVMTypeRef.Int1
                             };
                             LLVMValueRef memcpyFunction = GetOrCreateLLVMFunction("llvm.memcpy.p0i8.p0i8.i32", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, argsType, false));
@@ -1936,7 +1935,6 @@ CreateDebugLocation();
                             _builder.BuildGEP(arrayObjPtr, new LLVMValueRef[] { ArrayBaseSize() }, string.Empty),
                             _builder.BuildBitCast(src, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), string.Empty),
                             BuildConstInt32(srcLength), // TODO: Handle destination array length to avoid runtime overflow.
-                            BuildConstInt32(0), // Assume no alignment
                             BuildConstInt1(0)
                             };
                             _builder.BuildCall(memcpyFunction, args, string.Empty);
