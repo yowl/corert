@@ -21,7 +21,12 @@ internal static class Program
     private static unsafe int Main(string[] args)
     {
         Success = true;
-        PrintLine("Starting");
+        PrintLine("Starting " + 1);
+
+        TestBox();
+
+        TestSByteExtend(); 
+        TestMetaData();
 
         TestJsInterop();
 
@@ -267,8 +272,6 @@ internal static class Program
 
         TestArrayItfDispatch();
 
-        TestMetaData();
-
         TestTryFinally();
 
         StartTest("RVA static field test");
@@ -305,6 +308,12 @@ internal static class Program
         }
 
         TestSByteExtend();
+
+        TestSharedDelegate();
+
+        TestUlongUintMultiply();
+
+        TestBoxSingle();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -346,6 +355,18 @@ internal static class Program
         Success = false;
         PrintLine("Failed.");
         if (failMessage != null) PrintLine(failMessage + "-");
+    }
+
+    private static void TestBox()
+    {
+        StartTest("Box int test");
+        object o = (Int32)1;
+        string virtCallRes = o.ToString();
+        PrintLine(virtCallRes);
+        var i = (int)o;
+        PrintLine("i");
+        PrintLine(i.ToString());
+        EndTest(virtCallRes == "1");
     }
 
     private static int StaticDelegateTarget()
@@ -728,7 +749,7 @@ internal static class Program
 
         StartTest("Type GetFields length");
         var x = new ClassForMetaTests();
-        var s = x.StringField;  
+        var s = x.StringField;
         var i = x.IntField;
         var classForMetaTestsType = typeof(ClassForMetaTests);
         FieldInfo[] fields = classForMetaTestsType.GetFields();
@@ -774,10 +795,20 @@ internal static class Program
         instance.ReturnTrueIf1AndThis(0, null); // force method output
         ClassForMetaTests.ReturnsParam(null); // force method output
 
+        NewMethod(classForMetaTestsType, instance);
+
+        StartTest("Class get+invoke static method with ref param via reflection");
+        var staticMtd = classForMetaTestsType.GetMethod("ReturnsParam");
+        var retVal = (ClassForMetaTests)staticMtd.Invoke(null, new object[] { instance });
+        EndTest(Object.ReferenceEquals(retVal, instance));
+    }
+
+    private static void NewMethod(Type classForMetaTestsType, ClassForMetaTests instance)
+    {
         StartTest("Class get+invoke simple method via reflection");
         var mtd = classForMetaTestsType.GetMethod("ReturnTrueIf1");
-        bool shouldBeTrue = (bool)mtd.Invoke(instance, new object[] {1});
-        bool shouldBeFalse = (bool)mtd.Invoke(instance, new object[] {2});
+        bool shouldBeTrue = (bool)mtd.Invoke(instance, new object[] { 1 });
+        bool shouldBeFalse = (bool)mtd.Invoke(instance, new object[] { 2 });
         EndTest(shouldBeTrue && !shouldBeFalse);
 
         StartTest("Class get+invoke method with ref param via reflection");
@@ -786,10 +817,6 @@ internal static class Program
         shouldBeFalse = (bool)mtdWith2Params.Invoke(instance, new object[] { 1, new ClassForMetaTests() });
         EndTest(shouldBeTrue && !shouldBeFalse);
 
-        StartTest("Class get+invoke static method with ref param via reflection");
-        var staticMtd = classForMetaTestsType.GetMethod("ReturnsParam");
-        var retVal = (ClassForMetaTests)staticMtd.Invoke(null, new object[] { instance });
-        EndTest(Object.ReferenceEquals(retVal, instance));
     }
 
     public class ClassForMetaTests
@@ -1016,7 +1043,7 @@ internal static class Program
         EndTest(strt.DoubleField == 0d);
     }
 
-    private static void TestSByteExtend()
+    private static unsafe void TestSByteExtend()
     {
         StartTest("SByte extend");
         sbyte s = -1;
@@ -1055,11 +1082,81 @@ internal static class Program
         }
 
         StartTest("Negative SByte br"); 
-        EndTest(ILHelpers.ILHelpersTest.BneSbyteExtend());
+        if (s == -1) // this only creates the bne opcode, which it is testing, in Release mode.
+        {
+            PassTest();
+        }
+        else
+        {
+            FailTest();
+        }
+    }
+
+    public static void TestSharedDelegate()
+    {
+        StartTest("Shared Delegate");
+        var shouldBeFalse = SampleClassWithGenericDelegate.CallDelegate(new object[0]);
+        var shouldBeTrue = SampleClassWithGenericDelegate.CallDelegate(new object[1]);
+        EndTest(!shouldBeFalse && shouldBeTrue);
+    }
+
+    internal static void TestUlongUintMultiply()
+    {
+        StartTest("Test ulong/int multiplication");
+        uint a = 0x80000000;
+        uint b = 2;
+        ulong f = ((ulong)a * b);
+        EndTest(f == 0x100000000);
+    }
+
+    internal static void TestBoxSingle()
+    {
+        StartTest("Test box single");
+        var fi = typeof(ClassWithFloat).GetField("F");
+        fi.SetValue(null, 1.1f);
+        EndTest(1.1f == ClassWithFloat.F);
     }
 
     [DllImport("*")]
     private static unsafe extern int printf(byte* str, byte* unused);
+}
+
+public class ClassWithFloat
+{
+    public static float F;
+}
+
+public class SampleClassWithGenericDelegate
+{
+    public static bool CallDelegate<T>(T[] items)
+    {
+        return new Stack<T>(items).CallDelegate(DoWork);
+    }
+
+    public static bool DoWork<T>(T[] items)
+    {
+        Program.PrintLine("DoWork");
+        return items.Length > 0;
+    }
+}
+
+public class Stack<T>
+{
+    T[] items;
+
+    public Stack(T[] items)
+    {
+        this.items = items;
+    }
+
+    public bool CallDelegate(StackDelegate d)
+    {
+        Program.PrintLine("CallDelegate");
+        Program.PrintLine(items.Length.ToString());
+        return d(items);
+    }
+
+    public delegate bool StackDelegate(T[] items);
 }
 
 public struct TwoByteStr

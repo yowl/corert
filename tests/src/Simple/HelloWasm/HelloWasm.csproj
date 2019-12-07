@@ -6,6 +6,7 @@
     <IlcArg Include="-r:$(IntermediateOutputPath)\CpObj.dll" Condition="'$(OS)' == 'Windows_NT'" />
     <ProjectReference Include="ILHelpers.ilproj" Condition="'$(OS)' == 'Windows_NT'" />
     <IlcArg Include="-r:$(IntermediateOutputPath)\ILHelpers.dll" Condition="'$(OS)' == 'Windows_NT'" />
+    <IlcArg Include="--usesharedgenerics" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="CoreRT.WebAssembly.Interop">

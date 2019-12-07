@@ -17,7 +17,6 @@ namespace ILCompiler.DependencyAnalysis
         public WebAssemblyVTableSlotNode(MethodDesc targetMethod)
         {
             Debug.Assert(targetMethod.IsVirtual);
-            Debug.Assert(!targetMethod.IsSharedByGenericInstantiations);
             Debug.Assert(!targetMethod.HasInstantiation);
             _targetMethod = targetMethod;
         }
@@ -45,7 +44,7 @@ namespace ILCompiler.DependencyAnalysis
         {
             DependencyList result = new DependencyList();
 
-            if (!factory.VTable(_targetMethod.OwningType).HasFixedSlots)
+            if (!factory.VTable(_targetMethod.OwningType).HasFixedSlots && !_targetMethod.IsRuntimeDeterminedExactMethod)
             {
                 result.Add(factory.VirtualMethodUse(_targetMethod), "VTable method use");
             }
