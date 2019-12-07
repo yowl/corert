@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace CoreRT.WebAssembly.Interop
 {
@@ -8,7 +9,7 @@ namespace CoreRT.WebAssembly.Interop
         // Copied from Mono
         // We're passing asyncHandle by ref not because we want it to be writable, but so it gets
         // passed as a pointer (4 bytes). We can pass 4-byte values, but not 8-byte ones.
-        [MethodImpl(MethodImplOptions.InternalCall)]
+        [DllImport("*", EntryPoint = "mono_wasm_invoke_js_marshalled")] // TODO: might need an underscore in front?  MarshalAs for string?
         public static extern string InvokeJSMarshalled(out string exception, ref long asyncHandle, string functionIdentifier, string argsJson);
 
 //        [MethodImpl(MethodImplOptions.InternalCall)]
