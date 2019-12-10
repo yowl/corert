@@ -590,7 +590,7 @@ namespace ILCompiler
         /// signature. This is so that we can refer to the parameter from IL. References to this method will
         /// be replaced by the actual instance method after codegen is done.
         /// </summary>
-        internal partial class ValueTypeInstanceMethodWithHiddenParameter : MethodDesc, IPrefixMangledMethod
+        internal partial class ValueTypeInstanceMethodWithHiddenParameter : MethodDesc
         {
             private MethodDesc _methodRepresented;
             private MethodSignature _signature;
@@ -642,10 +642,6 @@ namespace ILCompiler
             }
 
             public override bool HasCustomAttribute(string attributeNamespace, string attributeName) => false;
-
-            public MethodDesc BaseMethod => _methodRepresented;
-
-            public string Prefix => "valInst";
         }
     }
 }
