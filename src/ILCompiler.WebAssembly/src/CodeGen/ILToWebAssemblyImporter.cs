@@ -159,6 +159,11 @@ namespace Internal.IL
             _debugInformation = _compilation.GetDebugInfo(_methodIL);
 
             Context = LLVM.GetModuleContext(Module);
+
+            if (_mangledName.Contains("ClassConstructorRunner"))
+            {
+
+            }
         }
 
         public void Import()
@@ -374,6 +379,11 @@ namespace Internal.IL
 
         private LLVMValueRef CreateLLVMFunction(string mangledName, MethodSignature signature, bool hasHiddenParameter)
         {
+                if (mangledName ==
+                    "S_P_CoreLib_System_Array_1_ArrayEnumerator<UInt16>__System_Collections_IEnumerator_get_Current")
+                {
+
+                }
             return LLVM.AddFunction(Module, mangledName, GetLLVMSignatureForMethod(signature, hasHiddenParameter));
         }
 
@@ -575,19 +585,27 @@ namespace Internal.IL
             {
                 bool foundSequencePoint = false;
                 ILSequencePoint curSequencePoint = default;
-                foreach (var sequencePoint in _debugInformation.GetSequencePoints() ?? Enumerable.Empty<ILSequencePoint>())
+                try
                 {
-                    if (sequencePoint.Offset == _currentOffset)
+                    foreach (var sequencePoint in _debugInformation.GetSequencePoints() ?? Enumerable.Empty<ILSequencePoint>())
                     {
-                        curSequencePoint = sequencePoint;
-                        foundSequencePoint = true;
-                        break;
+                        if (sequencePoint.Offset == _currentOffset)
+                        {
+                            curSequencePoint = sequencePoint;
+                            foundSequencePoint = true;
+                            break;
+                        }
+                        else if (sequencePoint.Offset < _currentOffset)
+                        {
+                            curSequencePoint = sequencePoint;
+                            foundSequencePoint = true;
+                        }
                     }
-                    else if (sequencePoint.Offset < _currentOffset)
-                    {
-                        curSequencePoint = sequencePoint;
-                        foundSequencePoint = true;
-                    }
+                }
+                catch (BadImageFormatException)
+                {
+                    _compilation.Logger.Writer.WriteLine($"Warning: ignoring debug info for {_method.ToString()}");
+                    foundSequencePoint = false;
                 }
 
                 if (!foundSequencePoint)
@@ -1576,6 +1594,14 @@ namespace Internal.IL
         {
             MethodDesc runtimeDeterminedMethod = (MethodDesc)_methodIL.GetObject(token);
             MethodDesc callee = (MethodDesc)_canonMethodIL.GetObject(token);
+            if (_method.ToString().Contains("SortedSet")
+                && _method.ToString().Contains("Enumerator")
+                && _method.ToString().Contains("box")
+                && _method.ToString().Contains("ctor")
+            )
+            {
+
+            }
             if (callee.IsIntrinsic)
             {
                 if (ImportIntrinsicCall(callee, runtimeDeterminedMethod))
@@ -1793,6 +1819,13 @@ namespace Internal.IL
             dictPtrPtrStore = default(LLVMValueRef);
             fatFunctionPtr = default(LLVMValueRef);
 
+            if (canonMethod.ToString().Contains("Generic")
+                && canonMethod.ToString().Contains("Dictionary")
+                && canonMethod.ToString().Contains("ctor")
+            )
+            {
+
+            }
             string canonMethodName = _compilation.NameMangler.GetMangledMethodName(canonMethod).ToString();
             TypeDesc owningType = callee.OwningType;
             bool delegateInvoke = owningType.IsDelegate && callee.Name == "Invoke";
@@ -4242,6 +4275,10 @@ namespace Internal.IL
             StackEntry index = _stack.Pop();
             StackEntry arrayReference = _stack.Pop();
             var nullSafeElementType = elementType ?? GetWellKnownType(WellKnownType.Object);
+            if (nullSafeElementType.IsRuntimeDeterminedSubtype)
+            {
+                nullSafeElementType = nullSafeElementType.ConvertToCanonForm(CanonicalFormKind.Specific);
+            }
             LLVMValueRef elementAddress = GetElementAddress(index.ValueAsInt32(_builder, true), arrayReference.ValueAsType(LLVM.PointerType(LLVM.Int8Type(), 0), _builder), nullSafeElementType);
             CastingStore(elementAddress, value, nullSafeElementType);
         }
