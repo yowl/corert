@@ -28,6 +28,8 @@ internal static class Program
         TestSByteExtend(); 
         TestMetaData();
 
+        TestJsInterop();
+
         Add(1, 2);
         PrintLine("Hello from C#!");
         int tempInt = 0;
@@ -321,6 +323,11 @@ internal static class Program
 
         PrintLine("Done");
         return Success ? 100 : -1;
+    }
+
+    private static void TestJsInterop()
+    {
+        new CoreRT.WebAssembly.Interop.CoreRTWebAssemblyJSRuntime().Invoke<object>("alert");
     }
 
     private static void StartTest(string testDescription)
