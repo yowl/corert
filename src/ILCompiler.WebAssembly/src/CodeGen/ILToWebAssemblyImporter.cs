@@ -211,7 +211,7 @@ namespace Internal.IL
                         exportName = ecmaMethod.Name;
                     }
 
-                    EmitNativeToManagedThunk(_compilation, _method, exportName, _llvmFunction);
+                    EmitNativeToManagedThunk(_compilation, _method, exportName, _llvmFunction, _method.IsRuntimeExport);
                 }
             }
         }
@@ -1610,11 +1610,24 @@ namespace Internal.IL
                 }
             }
 
-            if (callee.IsRawPInvoke() || (callee.IsInternalCall && callee.HasCustomAttribute("System.Runtime", "RuntimeImportAttribute")))
+            if (callee.IsRawPInvoke() || IsInternalRuntimeImport(callee))
             {
                 ImportRawPInvoke(callee);
                 return;
             }
+
+//            if (callee.Name.Equals("GetArrayEEType"))
+//            {
+//                if (callee.OwningType is MetadataType metadataType)
+//                {
+//                    if (metadataType.Namespace == "Internal.Runtime" && metadataType.Name == "EEType")
+//                    {
+//                       _stack.Pop(); // not using this
+//                        MetadataType helperType = _compilation.TypeSystemContext.SystemModule.GetKnownType("System", "Array");
+//                        callee = helperType.GetKnownMethod("GetSystemArrayEEType", null);
+//                    }
+//                }
+//            }
 
             TypeDesc localConstrainedType = _constrainedType;
             _constrainedType = null;
@@ -1808,6 +1821,11 @@ namespace Internal.IL
             }
 
             HandleCall(callee, callee.Signature, runtimeDeterminedMethod, opcode, localConstrainedType);
+        }
+
+        static bool IsInternalRuntimeImport(MethodDesc callee)
+        {
+            return (callee.IsInternalCall && callee.HasCustomAttribute("System.Runtime", "RuntimeImportAttribute"));
         }
 
         private LLVMValueRef LLVMFunctionForMethod(MethodDesc callee, MethodDesc canonMethod, StackEntry thisPointer, bool isCallVirt,
@@ -2667,17 +2685,24 @@ namespace Internal.IL
                 nativeFunc = MakeExternFunction(method, realMethodName);
             }
 
-            LLVMValueRef[] llvmArguments = new LLVMValueRef[method.Signature.Length];
-            for (int i = 0; i < arguments.Length; i++)
+            // Save the top of the shadow stack in case the callee reverse P/Invokes
+            EnsureShadowStackTop();
+            LLVMValueRef stackFrameSize = BuildConstInt32(GetTotalParameterOffset() + GetTotalLocalOffset());
+            LLVMValueRef shadowStackRef = LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_currentFunclet), new LLVMValueRef[] { stackFrameSize }, "shadowStackTop");
+            LLVM.BuildStore(_builder, shadowStackRef, LLVM.GetNamedGlobal(Module, "t_pShadowStackTop"));
+
+            var methodArgIx = IsInternalRuntimeImport(method) ? 1 : 0;
+            LLVMValueRef[] llvmArguments = new LLVMValueRef[method.Signature.Length + methodArgIx];
+            if (methodArgIx == 1)
+            {
+                llvmArguments[0] = shadowStackRef;
+            }
+            for (int i = 0; i < method.Signature.Length; i++)
             {
                 TypeDesc signatureType = method.Signature[i];
-                llvmArguments[i] = arguments[i].ValueAsType(GetLLVMTypeForTypeDesc(signatureType), _builder);
+                llvmArguments[i + methodArgIx] = arguments[i].ValueAsType(GetLLVMTypeForTypeDesc(signatureType), _builder);
             }
 
-            // Save the top of the shadow stack in case the callee reverse P/Invokes
-            LLVMValueRef stackFrameSize = BuildConstInt32(GetTotalParameterOffset() + GetTotalLocalOffset());
-            LLVM.BuildStore(_builder, LLVM.BuildGEP(_builder, LLVM.GetFirstParam(_currentFunclet), new LLVMValueRef[] { stackFrameSize }, "shadowStackTop"),
-                LLVM.GetNamedGlobal(Module, "t_pShadowStackTop"));
 
             LLVMValueRef pInvokeTransitionFrame = default;
             LLVMTypeRef pInvokeFunctionType = default;
@@ -2710,10 +2735,15 @@ namespace Internal.IL
         private LLVMValueRef MakeExternFunction(MethodDesc method, string realMethodName, LLVMValueRef realFunction = default(LLVMValueRef))
         {
             LLVMValueRef nativeFunc;
-            LLVMTypeRef[] paramTypes = new LLVMTypeRef[method.Signature.Length];
-            for (int i = 0; i < paramTypes.Length; i++)
+            var methodArgIx = IsInternalRuntimeImport(method) ? 1 : 0;
+            LLVMTypeRef[] paramTypes = new LLVMTypeRef[method.Signature.Length + methodArgIx];
+            if (methodArgIx == 1)
             {
-                paramTypes[i] = GetLLVMTypeForTypeDesc(method.Signature[i]);
+                paramTypes[0] = LLVM.PointerType(LLVM.Int8Type(), 0);
+            }
+            for (int i = 0; i < method.Signature.Length; i++)
+            {
+                paramTypes[i + methodArgIx] = GetLLVMTypeForTypeDesc(method.Signature[i]);
             }
 
             // Define the full signature
@@ -2736,18 +2766,23 @@ namespace Internal.IL
         {
             get
             {
-                if (s_shadowStackTop.Pointer.Equals(IntPtr.Zero))
-                {
-                    s_shadowStackTop = LLVM.AddGlobal(Module, LLVM.PointerType(LLVM.Int8Type(), 0), "t_pShadowStackTop");
-                    LLVM.SetLinkage(s_shadowStackTop, LLVMLinkage.LLVMInternalLinkage);
-                    LLVM.SetInitializer(s_shadowStackTop, LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0)));
-                    LLVM.SetThreadLocal(s_shadowStackTop, LLVMMisc.True);
-                }
+                EnsureShadowStackTop();
                 return s_shadowStackTop;
             }
         }
 
-        private void EmitNativeToManagedThunk(WebAssemblyCodegenCompilation compilation, MethodDesc method, string nativeName, LLVMValueRef managedFunction)
+        void EnsureShadowStackTop()
+        {
+            if (s_shadowStackTop.Pointer.Equals(IntPtr.Zero))
+            {
+                s_shadowStackTop = LLVM.AddGlobal(Module, LLVM.PointerType(LLVM.Int8Type(), 0), "t_pShadowStackTop");
+                LLVM.SetLinkage(s_shadowStackTop, LLVMLinkage.LLVMInternalLinkage);
+                LLVM.SetInitializer(s_shadowStackTop, LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0)));
+                LLVM.SetThreadLocal(s_shadowStackTop, LLVMMisc.True);
+            }
+        }
+
+        private void EmitNativeToManagedThunk(WebAssemblyCodegenCompilation compilation, MethodDesc method, string nativeName, LLVMValueRef managedFunction, bool runtimeExport)
         {
             if (_pinvokeMap.TryGetValue(nativeName, out MethodDesc existing))
             {
@@ -2759,22 +2794,63 @@ namespace Internal.IL
                 _pinvokeMap.Add(nativeName, method);
             }
 
-            LLVMTypeRef[] llvmParams = new LLVMTypeRef[method.Signature.Length];
-            for (int i = 0; i < llvmParams.Length; i++)
+            int methodArgIndex = 0;
+            if (runtimeExport)
             {
-                llvmParams[i] = GetLLVMTypeForTypeDesc(method.Signature[i]);
+                methodArgIndex = 1;
+            }
+            LLVMTypeRef[] llvmParams = new LLVMTypeRef[method.Signature.Length + methodArgIndex];
+            if (runtimeExport)
+            {
+                llvmParams[0] = LLVM.PointerType(LLVM.Int8Type(), 0);
+            }
+
+            for (int i = 0; i < method.Signature.Length; i++)
+            {
+                llvmParams[methodArgIndex + i] = GetLLVMTypeForTypeDesc(method.Signature[i]);
             }
 
             LLVMTypeRef thunkSig = LLVM.FunctionType(GetLLVMTypeForTypeDesc(method.Signature.ReturnType), llvmParams, false);
             LLVMValueRef thunkFunc = GetOrCreateLLVMFunction(nativeName, thunkSig);
 
+
+            LLVMBuilderRef builder = LLVM.CreateBuilder();
+            // maybe optimise for this
+//            LLVMValueRef shadowStackPtr;
+            //            LLVMBasicBlockRef managedCallBlock;
+            //            LLVMValueRef shadowStack;
+            //            if (!runtimeExport)
+            //            {
+            //                LLVMBasicBlockRef shadowStackSetupBlock = LLVM.AppendBasicBlock(thunkFunc, "ShadowStackSetupBlock");
+            //                LLVMBasicBlockRef allocateShadowStackBlock = LLVM.AppendBasicBlock(thunkFunc, "allocateShadowStackBlock");
+            //                managedCallBlock = LLVM.AppendBasicBlock(thunkFunc, "ManagedCallBlock");
+            //
+            //                LLVM.PositionBuilderAtEnd(builder, shadowStackSetupBlock);
+            //
+            //                // Allocate shadow stack if it's null
+            //                shadowStackPtr = LLVM.BuildAlloca(builder, LLVM.PointerType(LLVM.Int8Type(), 0), "ShadowStackPtr");
+            //                LLVMValueRef savedShadowStack = LLVM.BuildLoad(builder, ShadowStackTop, "SavedShadowStack");
+            //                LLVM.BuildStore(builder, savedShadowStack, shadowStackPtr);
+            //                LLVMValueRef shadowStackNull = LLVM.BuildICmp(builder, LLVMIntPredicate.LLVMIntEQ, savedShadowStack, LLVM.ConstPointerNull(LLVM.PointerType(LLVM.Int8Type(), 0)), "ShadowStackNull");
+            //                LLVM.BuildCondBr(builder, shadowStackNull, allocateShadowStackBlock, managedCallBlock);
+            //
+            //                LLVM.PositionBuilderAtEnd(builder, allocateShadowStackBlock);
+            //
+            //                LLVMValueRef newShadowStack = LLVM.BuildArrayMalloc(builder, LLVM.Int8Type(), BuildConstInt32(1000000), "NewShadowStack");
+            //                LLVM.BuildStore(builder, newShadowStack, shadowStackPtr);
+            //                shadowStack = LLVM.BuildLoad(builder, shadowStackPtr, "ShadowStack");
+            //                LLVM.BuildBr(builder, managedCallBlock);
+            //            }
+            //            else
+            //            {
+            //                managedCallBlock = LLVM.AppendBasicBlock(thunkFunc, "ManagedCallBlock");
+            //                shadowStack = LLVM.GetParam(thunkFunc, 0);
+            //            }
+
             LLVMBasicBlockRef shadowStackSetupBlock = LLVM.AppendBasicBlock(thunkFunc, "ShadowStackSetupBlock");
             LLVMBasicBlockRef allocateShadowStackBlock = LLVM.AppendBasicBlock(thunkFunc, "allocateShadowStackBlock");
             LLVMBasicBlockRef managedCallBlock = LLVM.AppendBasicBlock(thunkFunc, "ManagedCallBlock");
-
-            LLVMBuilderRef builder = LLVM.CreateBuilder();
             LLVM.PositionBuilderAtEnd(builder, shadowStackSetupBlock);
-
             // Allocate shadow stack if it's null
             LLVMValueRef shadowStackPtr = LLVM.BuildAlloca(builder, LLVM.PointerType(LLVM.Int8Type(), 0), "ShadowStackPtr");
             LLVMValueRef savedShadowStack = LLVM.BuildLoad(builder, ShadowStackTop, "SavedShadowStack");
@@ -2787,7 +2863,6 @@ namespace Internal.IL
             LLVMValueRef newShadowStack = LLVM.BuildArrayMalloc(builder, LLVM.Int8Type(), BuildConstInt32(1000000), "NewShadowStack");
             LLVM.BuildStore(builder, newShadowStack, shadowStackPtr);
             LLVM.BuildBr(builder, managedCallBlock);
-
             LLVM.PositionBuilderAtEnd(builder, managedCallBlock);
             LLVMTypeRef reversePInvokeFrameType = LLVM.StructType(new LLVMTypeRef[] { LLVM.PointerType(LLVM.Int8Type(), 0), LLVM.PointerType(LLVM.Int8Type(), 0) }, false);
             LLVMValueRef reversePInvokeFrame = default(LLVMValueRef);
@@ -2800,6 +2875,7 @@ namespace Internal.IL
             }
 
             LLVMValueRef shadowStack = LLVM.BuildLoad(builder, shadowStackPtr, "ShadowStack");
+
             int curOffset = 0;
             curOffset = PadNextOffset(method.Signature.ReturnType, curOffset);
             LLVMValueRef calleeFrame = LLVM.BuildGEP(builder, shadowStack, new LLVMValueRef[] { BuildConstInt32(curOffset) }, "calleeFrame");
@@ -2815,9 +2891,9 @@ namespace Internal.IL
                 llvmArgs.Add(shadowStack);
             }
 
-            for (int i = 0; i < llvmParams.Length; i++)
+            for (int i = 0; i < method.Signature.Length; i++)
             {
-                LLVMValueRef argValue = LLVM.GetParam(thunkFunc, (uint)i);
+                LLVMValueRef argValue = LLVM.GetParam(thunkFunc, (uint)(i + methodArgIndex));
 
                 if (CanStoreTypeOnStack(method.Signature[i]))
                 {
@@ -2827,7 +2903,7 @@ namespace Internal.IL
                 {
                     curOffset = PadOffset(method.Signature[i], curOffset);
                     LLVMValueRef argAddr = LLVM.BuildGEP(builder, shadowStack, new LLVMValueRef[] { LLVM.ConstInt(LLVM.Int32Type(), (ulong)curOffset, LLVMMisc.False) }, "arg" + i);
-                    LLVM.BuildStore(builder, argValue, CastIfNecessary(builder, argAddr, LLVM.PointerType(llvmParams[i], 0), $"parameter{i}_"));
+                    LLVM.BuildStore(builder, argValue, CastIfNecessary(builder, argAddr, LLVM.PointerType(llvmParams[i + methodArgIndex], 0), $"parameter{i}_"));
                     curOffset = PadNextOffset(method.Signature[i], curOffset);
                 }
             }
