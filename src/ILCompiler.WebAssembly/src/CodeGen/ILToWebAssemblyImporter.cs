@@ -675,6 +675,10 @@ namespace Internal.IL
         private void ImportLoadVar(int index, bool argument)
         {
             LLVMValueRef typedLoadLocation = LoadVarAddress(index, argument ? LocalVarKind.Argument : LocalVarKind.Local, out TypeDesc type);
+            if (argument && _method.ToString().Contains("get_BaseType") && _method.ToString().Contains("EEType"))
+            {
+
+            }
             PushLoadExpression(GetStackValueKind(type), (argument ? "arg" : "loc") + index + "_", typedLoadLocation, type);
         }
 
@@ -1614,6 +1618,19 @@ namespace Internal.IL
             {
                 ImportRawPInvoke(callee);
                 return;
+            }
+
+            if (callee.Name.Equals("GetArrayEEType"))
+            {
+                if (callee.OwningType is EcmaType ecmaType)
+                {
+                    if (ecmaType.Namespace == "Internal.Runtime" && ecmaType.Name == "EEType")
+                    {
+                        if(!callee.Signature.IsStatic) _stack.Pop(); // not using this
+                        MetadataType helperType = _compilation.TypeSystemContext.SystemModule.GetKnownType("System", "Array");
+                        callee = helperType.GetKnownMethod("GetSystemArrayEEType", null);
+                    }
+                }
             }
 
             TypeDesc localConstrainedType = _constrainedType;

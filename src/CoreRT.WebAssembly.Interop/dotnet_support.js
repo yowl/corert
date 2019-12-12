@@ -50,13 +50,15 @@ var DotNetSupportLib = {
 			// Even though JS numbers can't represent the full range of a .NET long, it's OK
 			// because we'll never exceed Number.MAX_SAFE_INTEGER (2^53 - 1) in this case.
 			//var u32Index = $1 >> 2;
+			//
+			var jsFuncName = UTF8ToString(functionName, 5);
+
 			var u32Index = asyncHandleLongPtr >> 2;
 			var asyncHandleJsNumber = Module.HEAPU32[u32Index + 1]*4294967296 + Module.HEAPU32[u32Index];
 
 			// var funcNameJsString = UTF8ToString (functionName);
 			// var argsJsonJsString = argsJson && UTF8ToString (argsJson);
-			var funcNameJsString = DOTNET.conv_string(functionName);
-			var argsJsonJsString = argsJson && DOTNET.conv_string (argsJson);
+			var argsJsonJsString = argsJson && UTF8ToString (argsJson, 100);
 
 			var dotNetExports = DOTNET._dotnet_get_global().DotNet;
 			if (!dotNetExports) {
@@ -64,10 +66,10 @@ var DotNetSupportLib = {
 			}
 
 			if (asyncHandleJsNumber) {
-				dotNetExports.jsCallDispatcher.beginInvokeJSFromDotNet(asyncHandleJsNumber, funcNameJsString, argsJsonJsString);
+				dotNetExports.jsCallDispatcher.beginInvokeJSFromDotNet(asyncHandleJsNumber, jsFuncName, argsJsonJsString);
 				return 0;
 			} else {
-				var resultJson = dotNetExports.jsCallDispatcher.invokeJSFromDotNet(funcNameJsString, argsJsonJsString);
+                var resultJson = dotNetExports.jsCallDispatcher.invokeJSFromDotNet(jsFuncName, argsJsonJsString);
 				return resultJson === null ? 0 : mono_string(resultJson);
 			}
 		} catch (ex) {
