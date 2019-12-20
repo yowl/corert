@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System.Text.Json;
+using CoreRT.WebAssembly.Interop;
 using Microsoft.JSInterop;
 using Microsoft.JSInterop.Infrastructure;
 
@@ -153,3 +154,20 @@ namespace CoreRT.WebAssembly.Interop
 //        #endregion
     }
 }
+
+//namespace WebAssembly
+//{
+//    public static class Runtime
+//    {
+//        public static void InvokeJS(string identifier, ref int exceptionNo)
+//        {
+//            var noAsyncHandle = default(long);
+//            var result = InternalCalls.InvokeJSMarshalled(out var exception, ref noAsyncHandle, identifier, null);
+//            if (exception != null)
+//            {
+//                exceptionNo = 1;
+//            }
+//            else exceptionNo = 0;
+//        }
+//    }
+//}

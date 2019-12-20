@@ -62,6 +62,13 @@ namespace ILCompiler.DependencyAnalysis
         public WebAssemblyMethodBodyNode(MethodDesc method)
             : base(method)
         {
+            if (method.Name.EndsWith("InvokeJS")
+                && method.ToString().Contains("Runtime")
+                && method.Signature.Length == 2
+            )
+            {
+
+            }
         }
 
         protected override string GetName(NodeFactory factory) => this.GetMangledName(factory.NameMangler);
