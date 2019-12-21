@@ -17,7 +17,6 @@
     <ProjectReference Include="..\..\ILCompiler.MetadataWriter\src\ILCompiler.MetadataWriter.csproj" />
     <ProjectReference Include="..\..\ILCompiler.TypeSystem\src\ILCompiler.TypeSystem.csproj" />
     <ProjectReference Include="..\..\ILCompiler.Compiler\src\ILCompiler.Compiler.csproj" />
-    <ProjectReference Include="..\..\LLVMSharp\LLVMSharp.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\..\Common\src\TypeSystem\IL\ILImporter.cs">
@@ -53,9 +52,8 @@
     <Compile Include="CodeGen\NodeDataSection.cs" />
     <Compile Include="CodeGen\ILToWebAssemblyImporter.cs" />
   </ItemGroup>
-
   <ItemGroup>
-    <PackageReference Include="libLLVM" Version="9.0.0" />
+    <PackageReference Include="LLVMSharp" Version="9.0.0-beta" />
   </ItemGroup>
   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
 </Project>

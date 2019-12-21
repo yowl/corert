@@ -95,7 +95,7 @@ namespace Internal.IL
 
             public LLVMBasicBlockRef Block;
             public LLVMBasicBlockRef LastInternalIf;
-            public LLVMBasicBlockRef LastBlock => LastInternalIf.Pointer == IntPtr.Zero ? Block : LastInternalIf;
+            public LLVMBasicBlockRef LastBlock => LastInternalIf.Handle == IntPtr.Zero ? Block : LastInternalIf;
         }
 
         private class ExceptionRegion
@@ -203,14 +203,28 @@ namespace Internal.IL
                 // Generate thunk for runtime exports
                 if (_method.IsRuntimeExport || _method.IsNativeCallable)
                 {
-                    EcmaMethod ecmaMethod = ((EcmaMethod)_method);
-                    string exportName = ecmaMethod.IsRuntimeExport ? ecmaMethod.GetRuntimeExportName() : ecmaMethod.GetNativeCallableExportName();
-                    if (exportName == null)
+                    string exportName;
+                    if (_method is EcmaMethod)
                     {
-                        exportName = ecmaMethod.Name;
+                        EcmaMethod ecmaMethod = ((EcmaMethod)_method);
+                        exportName = ecmaMethod.IsRuntimeExport ? ecmaMethod.GetRuntimeExportName() : ecmaMethod.GetNativeCallableExportName();
+                        if (exportName == null)
+                        {
+                            exportName = ecmaMethod.Name;
+                        }
+                        EmitNativeToManagedThunk(_compilation, _method, exportName, _llvmFunction);
                     }
+                    else if (_method is DelegateMarshallingMethodThunk)
+                    {
+                        // TODO: do we need a native to managed thunk for this?
+//                        DelegateMarshallingMethodThunk thunk = ((DelegateMarshallingMethodThunk)_method);
+//                        exportName = thunk.IsRuntimeExport ? thunk.GetRuntimeExportName() : thunk.GetNativeCallableExportName();
+//                        if (exportName == null)
+//                        {
+//                            exportName = ecmaMethod.Name;
+//                        }
 
-                    EmitNativeToManagedThunk(_compilation, _method, exportName, _llvmFunction);
+                    }
                 }
             }
         }
@@ -558,7 +572,7 @@ namespace Internal.IL
 
         private void EndImportingBasicBlock(BasicBlock basicBlock)
         {
-            var terminator = basicBlock.LastBlock.GetBasicBlockTerminator();
+            var terminator = basicBlock.LastBlock.Terminator;
             if (terminator.Handle == IntPtr.Zero)
             {
                 if (_basicBlocks.Length > _currentOffset)
@@ -2241,7 +2255,8 @@ CreateDebugLocation();
 
                         LLVMValueRef src = LoadAddressOfSymbolNode(fieldNode);
                         _dependencies.Add(fieldNode);
-                        int srcLength = fieldNode.GetData(_compilation.NodeFactory, false).Data.Length;
+                        var fieldData = fieldNode.GetData(_compilation.NodeFactory, false).Data;
+                        int srcLength = fieldData.Length;
 
                         if (arraySlot.Type.IsSzArray)
                         {
@@ -2684,9 +2699,9 @@ CreateDebugLocation();
 
         private ExpressionEntry ImportRawPInvoke(MethodDesc method, StackEntry[] arguments, TypeDesc forcedReturnType = null)
         {
-            //emscripten dies if this is output because its expected to have i32, i32, i64. But the runtime has defined it as i8*, i8*, i64
-            if (method.Name == "memmove")
-                throw new NotImplementedException();
+//            //emscripten dies if this is output because its expected to have i32, i32, i64. But the runtime has defined it as i8*, i8*, i64
+//            if (method.Name == "memmove")
+//                throw new NotImplementedException();
 
             string realMethodName = method.Name;
 
@@ -2703,15 +2718,16 @@ CreateDebugLocation();
                 realMethodName = ((TypeSystem.Ecma.EcmaMethod)method).GetRuntimeImportName() ?? method.Name;
                 if (realMethodName == "InvokeJS")
                 {
-                    realMethodName = "CoreRT.WebAssembly.Interop.InternalCalls.InvokeJS";
                     MetadataType helperType = method.Context.ResolveAssembly(new AssemblyName("CoreRT.WebAssembly.Interop"), true)
-                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
-                    MethodDesc helperMethod = helperType.GetKnownMethod(realMethodName, null);
+                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls"); MethodDesc helperMethod = helperType.GetKnownMethod(realMethodName, null);
                     _dependencies.Add(_compilation.NodeFactory.MethodEntrypoint(helperMethod, false));
                 }
                 else if (realMethodName == "InvokeJSUnmarshalled")
                 {
-                    realMethodName = "CoreRT.WebAssembly.Interop.InternalCalls.InvokeJSUnmarshalled";
+                    MetadataType helperType = method.Context.ResolveAssembly(new AssemblyName("CoreRT.WebAssembly.Interop"), true)
+                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
+                    MethodDesc helperMethod = helperType.GetKnownMethod(realMethodName, null);
+                    _dependencies.Add(_compilation.NodeFactory.MethodEntrypoint(helperMethod, false));
                 }
             }
             MethodDesc existantDesc;
