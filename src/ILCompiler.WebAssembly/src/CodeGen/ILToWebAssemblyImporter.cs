@@ -3638,7 +3638,7 @@ CreateDebugLocation();
 
             // Load the value and then convert it instead of using ValueAsType to avoid loading the incorrect size
             LLVMValueRef loadedValue = value.ValueAsType(value.Type, _builder);
-            LLVMValueRef converted = CastIfNecessary(loadedValue, GetLLVMTypeForTypeDesc(destType), value.Name(), unsigned);
+            LLVMValueRef converted = CastIfNecessary(loadedValue, GetLLVMTypeForTypeDesc(destType), value.Name(), wellKnownType == WellKnownType.UInt64 /* unsigned is always false, so check for the type explicitly */);
             PushExpression(GetStackValueKind(destType), "conv", converted, destType);
         }
 
@@ -3765,7 +3765,7 @@ CreateDebugLocation();
             WellKnownType ldtokenKind;
             if (ldtokenValue is TypeDesc)
             {
-                ldtokenKind = WellKnownType.RuntimeTypeHandle;
+                var typeDesc = (TypeDesc)ldtokenValue;
                 var typeDesc = (TypeDesc)ldtokenValue;
                 MethodDesc helper = _compilation.TypeSystemContext.GetHelperEntryPoint("LdTokenHelpers", "GetRuntimeTypeHandle");
                 AddMethodReference(helper);

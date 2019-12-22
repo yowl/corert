@@ -1115,12 +1115,12 @@ internal static class Program
         EndTest(f == 0x100000000);
     }
 
-    public static void TestSharedDelegate()
+    internal static void TestBoxSingle()
     {
-        StartTest("Shared Delegate");
-        var shouldBeFalse = SampleClassWithGenericDelegate.CallDelegate(new object[0]);
-        var shouldBeTrue = SampleClassWithGenericDelegate.CallDelegate(new object[1]);
-        EndTest(!shouldBeFalse && shouldBeTrue);
+        StartTest("Test box single");
+        var fi = typeof(ClassWithFloat).GetField("F");
+        fi.SetValue(null, 1.1f);
+        EndTest(1.1f == ClassWithFloat.F);
     }
 
     internal static void TestUlongUintMultiply()
@@ -1140,7 +1140,7 @@ internal static class Program
         EndTest(1.1f == ClassWithFloat.F);
     }
 
-    [DllImport("*")]
+  [DllImport("*")]
     private static unsafe extern int printf(byte* str, byte* unused);
 }
 
