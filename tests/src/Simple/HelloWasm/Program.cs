@@ -309,8 +309,6 @@ internal static class Program
 
         TestSByteExtend();
 
-        TestSharedDelegate();
-
         TestUlongUintMultiply();
 
         TestBoxSingle();
@@ -1104,23 +1102,6 @@ internal static class Program
 
         StartTest("Negative SByte br"); 
         EndTest(ILHelpers.ILHelpersTest.BneSbyteExtend());
-    }
-
-    internal static void TestUlongUintMultiply()
-    {
-        StartTest("Test ulong/int multiplication");
-        uint a = 0x80000000;
-        uint b = 2;
-        ulong f = ((ulong)a * b);
-        EndTest(f == 0x100000000);
-    }
-
-    internal static void TestBoxSingle()
-    {
-        StartTest("Test box single");
-        var fi = typeof(ClassWithFloat).GetField("F");
-        fi.SetValue(null, 1.1f);
-        EndTest(1.1f == ClassWithFloat.F);
     }
 
     internal static void TestUlongUintMultiply()

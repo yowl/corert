@@ -9,13 +9,18 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <RuntimeIdentifiers>$(NuPkgRid)</RuntimeIdentifiers>
     <RidSpecificAssets>true</RidSpecificAssets>
+<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="LLVMSharp">
+      <Version>9.0.0-beta</Version>
+    </PackageReference>
     <PackageReference Include="libLLVM">
       <Version>9.0.0</Version>
     </PackageReference>
   </ItemGroup>
+
 
   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
 </Project>

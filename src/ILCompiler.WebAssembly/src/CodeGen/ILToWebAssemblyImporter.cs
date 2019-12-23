@@ -3765,7 +3765,7 @@ CreateDebugLocation();
             WellKnownType ldtokenKind;
             if (ldtokenValue is TypeDesc)
             {
-                var typeDesc = (TypeDesc)ldtokenValue;
+                ldtokenKind = WellKnownType.RuntimeTypeHandle;
                 var typeDesc = (TypeDesc)ldtokenValue;
                 MethodDesc helper = _compilation.TypeSystemContext.GetHelperEntryPoint("LdTokenHelpers", "GetRuntimeTypeHandle");
                 AddMethodReference(helper);
