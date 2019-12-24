@@ -134,7 +134,6 @@ namespace Internal.IL
             {
                 _methodIL = methodIL;
             }
-
             _mangledName = mangledName;
             _ilBytes = methodIL.GetILBytes();
             _locals = methodIL.GetLocals();
@@ -1618,7 +1617,7 @@ CreateDebugLocation();
                                 };
             }
 
-            _stack.Push(CallRuntime(_compilation.TypeSystemContext, TypeCast, function, arguments, type));
+            _stack.Push(CallRuntime(_compilation.TypeSystemContext, TypeCast, function, arguments, GetWellKnownType(WellKnownType.Object)));
         }
 
         LLVMValueRef CallGenericHelper(ReadyToRunHelperId helperId, object helperArg)
@@ -2258,9 +2257,9 @@ CreateDebugLocation();
                         var fieldData = fieldNode.GetData(_compilation.NodeFactory, false).Data;
                         int srcLength = fieldData.Length;
 
-                        if (arraySlot.Type.IsSzArray)
+                        if (arraySlot.Type.IsArray)
                         {
-                            // Handle single dimensional arrays (vectors).
+                            // Handle single dimensional arrays (vectors) and multidimensional.
                             LLVMValueRef arrayObjPtr = arraySlot.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder);
 
                             var argsType = new LLVMTypeRef[]
@@ -2272,20 +2271,25 @@ CreateDebugLocation();
                             };
                             LLVMValueRef memcpyFunction = GetOrCreateLLVMFunction("llvm.memcpy.p0i8.p0i8.i32", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, argsType, false));
 
+                            LLVMValueRef offset;
+                            if (arraySlot.Type.IsSzArray)
+                            {
+                                offset = ArrayBaseSizeRef();
+                            }
+                            else
+                            {
+                                ArrayType arrayType = (ArrayType)arraySlot.Type;
+                                offset = BuildConstInt32(ArrayBaseSize() +
+                                                         2 * sizeof(int) * arrayType.Rank);
+                            }
                             var args = new LLVMValueRef[]
                             {
-                            _builder.BuildGEP(arrayObjPtr, new LLVMValueRef[] { ArrayBaseSize() }, string.Empty),
-                            _builder.BuildBitCast(src, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), string.Empty),
-                            BuildConstInt32(srcLength), // TODO: Handle destination array length to avoid runtime overflow.
-                            BuildConstInt1(0)
+                                _builder.BuildGEP(arrayObjPtr, new LLVMValueRef[] { offset }, string.Empty),
+                                _builder.BuildBitCast(src, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), string.Empty),
+                                BuildConstInt32(srcLength), // TODO: Handle destination array length to avoid runtime overflow.
+                                BuildConstInt1(0)
                             };
                             _builder.BuildCall(memcpyFunction, args, string.Empty);
-                        }
-                        else if (arraySlot.Type.IsMdArray)
-                        {
-                            // Handle multidimensional arrays.
-                            // TODO: Add support for multidimensional array.
-                            throw new NotImplementedException();
                         }
                         else
                         {
@@ -2412,7 +2416,7 @@ CreateDebugLocation();
             PushNonNull(HandleCall(callee, signature, canonMethod, argumentValues, runtimeDeterminedMethod, opcode, constrainedType, calliTarget, hiddenRef, resolvedConstraint));
         }
 
-        private ExpressionEntry HandleCall(MethodDesc callee, MethodSignature signature, MethodDesc canonMethod, StackEntry[] argumentValues, MethodDesc runtimeDeterminedMethod, ILOpcode opcode = ILOpcode.call, TypeDesc constrainedType = null, LLVMValueRef calliTarget = default(LLVMValueRef), LLVMValueRef hiddenParamRef = default(LLVMValueRef), bool resolvedConstraint = false)
+        private ExpressionEntry HandleCall(MethodDesc callee, MethodSignature signature, MethodDesc canonMethod, StackEntry[] argumentValues, MethodDesc runtimeDeterminedMethod, ILOpcode opcode = ILOpcode.call, TypeDesc constrainedType = null, LLVMValueRef calliTarget = default(LLVMValueRef), LLVMValueRef hiddenParamRef = default(LLVMValueRef), bool resolvedConstraint = false, TypeDesc forcedReturnType = null)
         {
             LLVMValueRef fn;
             bool hasHiddenParam = false;
@@ -2443,10 +2447,11 @@ CreateDebugLocation();
 
             bool needsReturnSlot = NeedsReturnStackSlot(signature);
             SpilledExpressionEntry returnSlot = null;
+            var actualReturnType = forcedReturnType ?? returnType;
             if (needsReturnSlot)
             {
                 int returnIndex = _spilledExpressions.Count;
-                returnSlot = new SpilledExpressionEntry(GetStackValueKind(returnType), callee?.Name + "_return", returnType, returnIndex, this);
+                returnSlot = new SpilledExpressionEntry(GetStackValueKind(actualReturnType), callee?.Name + "_return", actualReturnType, returnIndex, this);
                 _spilledExpressions.Add(returnSlot);
                 LLVMValueRef returnAddress = LoadVarAddress(returnIndex, LocalVarKind.Temp, out TypeDesc unused);
                 LLVMValueRef castReturnAddress = _builder.BuildPointerCast(returnAddress, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), callee?.Name + "_castreturn");
@@ -2603,7 +2608,7 @@ CreateDebugLocation();
 
             if (!returnType.IsVoid)
             {
-                return needsReturnSlot ? returnSlot : new ExpressionEntry(GetStackValueKind(returnType), callee?.Name + "_return", llvmReturn, returnType);
+                return needsReturnSlot ? returnSlot : new ExpressionEntry(GetStackValueKind(actualReturnType), callee?.Name + "_return", llvmReturn, returnType);
             }
             else
             {
@@ -4337,9 +4342,14 @@ CreateDebugLocation();
             return CastIfNecessary(_builder, _llvmFunction.GetParam(1 + (NeedsReturnStackSlot(_method.Signature) ? (uint)1 : 0) /* hidden param after shadow stack and return slot if present */), LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), "HiddenArg");
         }
 
-        private LLVMValueRef ArrayBaseSize()
+        private LLVMValueRef ArrayBaseSizeRef()
         {
-            return BuildConstInt32(2 * _compilation.NodeFactory.Target.PointerSize);
+            return BuildConstInt32(ArrayBaseSize());
+        }
+
+        private int ArrayBaseSize()
+        {
+            return 2 * _compilation.NodeFactory.Target.PointerSize;
         }
 
         private void ImportLoadElement(int token)
@@ -4399,7 +4409,7 @@ CreateDebugLocation();
             ThrowIfNull(arrayReference);
             var elementSize = arrayElementType.GetElementSize();
             LLVMValueRef elementOffset = _builder.BuildMul(elementPosition, BuildConstInt32(elementSize.AsInt), "elementOffset");
-            LLVMValueRef arrayOffset = _builder.BuildAdd(elementOffset, ArrayBaseSize(), "arrayOffset");
+            LLVMValueRef arrayOffset = _builder.BuildAdd(elementOffset, ArrayBaseSizeRef(), "arrayOffset");
             return _builder.BuildGEP(arrayReference, new LLVMValueRef[] { arrayOffset }, "elementPointer");
         }
 
