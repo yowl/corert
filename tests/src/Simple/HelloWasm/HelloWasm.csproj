@@ -2,16 +2,11 @@
   <ItemGroup>
     <Compile Include="*.cs" />
     <ProjectReference Include="CpObj.ilproj" Condition="'$(OS)' == 'Windows_NT'" />
-    <IlcArg Include="-r:e:\github\corert\src\bin\Debug\CoreRT.WebAssembly.Interop.dll" Condition="'$(OS)' == 'Windows_NT'" />
+    <!--A<IlcArg Include="-r:e:\github\corert\src\CoreRT.WebAssembly.Interop\bin\Debug\netstandard2.0\CoreRT.WebAssembly.Interop.dll" Condition="'$(OS)' == 'Windows_NT'" />-->
+    <IlcArg Include="-r:e:\github\corert\src\CoreRT.WebAssembly.Interop\bin\Debug\netstandard2.0\CoreRT.WebAssembly.Interop.dll" />
     <IlcArg Include="-r:$(IntermediateOutputPath)\CpObj.dll" Condition="'$(OS)' == 'Windows_NT'" />
     <ProjectReference Include="ILHelpers.ilproj" Condition="'$(OS)' == 'Windows_NT'" />
     <IlcArg Include="-r:$(IntermediateOutputPath)\ILHelpers.dll" Condition="'$(OS)' == 'Windows_NT'" />
-    <IlcArg Include="--usesharedgenerics" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="CoreRT.WebAssembly.Interop">
-      <HintPath>..\..\..\..\src\CoreRT.WebAssembly.Interop\bin\Debug\netstandard2.0\CoreRT.WebAssembly.Interop.dll</HintPath>
-    </Reference>
   </ItemGroup>
   <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
     <DefineConstants>PLATFORM_WINDOWS;$(DefineConstants)</DefineConstants>
@@ -25,11 +20,13 @@
     <ProjectGuid>{65F5AAD7-6D06-46FE-BE35-1E9C617B1CB9}</ProjectGuid>
   </PropertyGroup>
   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), SimpleTest.targets))\SimpleTest.targets" />
-
-  
   <ItemGroup>
     <PackageReference Include="Microsoft.JSInterop">
     </PackageReference>
   </ItemGroup>
-
+  <ItemGroup>
+    <Reference Include="CoreRT.WebAssembly.Interop">
+      <HintPath>..\..\..\..\src\CoreRT.WebAssembly.Interop\bin\Debug\netstandard2.0\CoreRT.WebAssembly.Interop.dll</HintPath>
+    </Reference>
+  </ItemGroup>
 </Project>

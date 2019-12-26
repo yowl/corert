@@ -327,7 +327,7 @@ internal static class Program
 
     private static void TestJsInterop()
     {
-        new CoreRT.WebAssembly.Interop.CoreRTWebAssemblyJSRuntime().Invoke<object>("alert");
+//        new CoreRT.WebAssembly.Interop.CoreRTWebAssemblyJSRuntime().Invoke<object>("alert");
     }
 
     private static void StartTest(string testDescription)
