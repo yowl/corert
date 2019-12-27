@@ -62,9 +62,9 @@ namespace ILCompiler.DependencyAnalysis
         public WebAssemblyMethodBodyNode(MethodDesc method)
             : base(method)
         {
-            if (method.Name.EndsWith("InvokeJS")
-                && method.ToString().Contains("Runtime")
-                && method.Signature.Length == 2
+            if (method.Name.Contains("Dictionary")
+                && method.Name.Contains("TKey")
+                && method.Name.Contains("FindValue")
             )
             {
 

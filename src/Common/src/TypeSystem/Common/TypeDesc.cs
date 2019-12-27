@@ -453,6 +453,7 @@ namespace Internal.TypeSystem
                         return field.FieldType;
                 }
 
+                
                 ThrowHelper.ThrowTypeLoadException(ExceptionStringID.ClassLoadGeneral, this);
                 return null; // Unreachable
             }

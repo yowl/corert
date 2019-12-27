@@ -136,4 +136,18 @@
     ldc.i4.0
     ret
   }
+
+
+  .method public static int32 TestLdTokenMethod(int32)
+  {
+    ldarg.0
+    ret
+  }
+
+  .method public static object LdMethodToken () cil managed
+  {
+    ldtoken method int32 ILHelpers.ILHelpersTest::TestLdTokenMethod(int32)
+    call class [System.Private.CoreLib]System.Reflection.MethodBase [System.Private.CoreLib]System.Reflection.MethodBase::GetMethodFromHandle(valuetype [System.Private.CoreLib]System.RuntimeMethodHandle)
+    ret
+  }
 }

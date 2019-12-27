@@ -3,6 +3,8 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.Linq;
+using System.Linq.Expressions;
 using System.Threading;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
@@ -316,6 +318,7 @@ internal static class Program
         TestInitializeArray();
 
         TestGvmCallInIf(new GenDerived<string>(), "hello");
+        TestLdTokenMethod();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -1146,6 +1149,17 @@ internal static class Program
         PassTest();
     }
 
+    static void TestLdTokenMethod()
+    {
+        StartTest("Test ldtoken method");
+        var methodBase = (MethodBase)ILHelpers.ILHelpersTest.LdMethodToken();
+
+        var r1 = (int)methodBase.Invoke(null, new object[] { 1 });
+        var r2 = (int)methodBase.Invoke(null, new object[] { 2 });
+
+        EndTest(r1 == 1 && r2 == 2);
+    }
+
     internal static void TestBoxSingle()
     {
         StartTest("Test box single");
@@ -1154,7 +1168,7 @@ internal static class Program
         EndTest(1.1f == ClassWithFloat.F);
     }
 
-  [DllImport("*")]
+    [DllImport("*")]
     private static unsafe extern int printf(byte* str, byte* unused);
 }
 

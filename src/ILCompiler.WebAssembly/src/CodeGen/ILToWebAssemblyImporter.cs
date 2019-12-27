@@ -1584,25 +1584,25 @@ CreateDebugLocation();
 
         private void ImportCasting(ILOpcode opcode, int token)
         {
-            TypeDesc type = ResolveTypeToken(token);
-
+            TypeDesc runtimeDeterminedType = (TypeDesc)_methodIL.GetObject(token);
+            
             //TODO: call GetCastingHelperNameForType from JitHelper.cs (needs refactoring)
             string function;
             bool throwing = opcode == ILOpcode.castclass;
-            if (type.IsArray)
+            if (runtimeDeterminedType.IsArray)
                 function = throwing ? "CheckCastArray" : "IsInstanceOfArray";
-            else if (type.IsInterface)
+            else if (runtimeDeterminedType.IsInterface)
                 function = throwing ? "CheckCastInterface" : "IsInstanceOfInterface";
             else
                 function = throwing ? "CheckCastClass" : "IsInstanceOfClass";
 
             StackEntry[] arguments;
-            if (type.IsRuntimeDeterminedSubtype)
+            if (runtimeDeterminedType.IsRuntimeDeterminedSubtype)
             {
                 //TODO refactor argument creation with else below
                 arguments = new StackEntry[]
                             {
-                                new ExpressionEntry(StackValueKind.ValueType, "eeType", CallGenericHelper(ReadyToRunHelperId.TypeHandle, type),
+                                new ExpressionEntry(StackValueKind.ValueType, "eeType", CallGenericHelper(ReadyToRunHelperId.TypeHandle, runtimeDeterminedType),
                                     GetEETypePtrTypeDesc()),
                                 _stack.Pop()
                             };
@@ -1611,7 +1611,7 @@ CreateDebugLocation();
             {
                 arguments = new StackEntry[]
                                 {
-                                    new LoadExpressionEntry(StackValueKind.ValueType, "eeType", GetEETypePointerForTypeDesc(type, true),
+                                    new LoadExpressionEntry(StackValueKind.ValueType, "eeType", GetEETypePointerForTypeDesc(runtimeDeterminedType, true),
                                         GetEETypePtrTypeDesc()),
                                     _stack.Pop()
                                 };
@@ -2226,6 +2226,16 @@ CreateDebugLocation();
             return eeTypePointer;
         }
 
+        private LLVMValueRef GetMethodPointerForMethodDesc(MethodDesc target, bool constructed)
+        {
+            ISymbolNode node;
+            node = _compilation.NodeFactory.RuntimeMethodHandle(target);
+            LLVMValueRef eeTypePointer = WebAssemblyObjectWriter.GetSymbolValuePointer(Module, node, _compilation.NameMangler, false);
+            _dependencies.Add(node);
+
+            return eeTypePointer;
+        }
+
         /// <summary>
         /// Implements intrinsic methods instread of calling them
         /// </summary>
@@ -2396,6 +2406,10 @@ CreateDebugLocation();
 
                     if (directMethod == null)
                     {
+                        if (constrainedType is RuntimeDeterminedType)
+                        {
+                            var methodIl = _methodIL;
+                        }
                         argumentValues[0] = CallRuntime(_compilation.TypeSystemContext, RuntimeExport, "RhBox",
                             new StackEntry[]
                             {
@@ -3308,7 +3322,6 @@ CreateDebugLocation();
         {
             var pointer = _stack.Pop();
             Debug.Assert(pointer is ExpressionEntry || pointer is ConstantEntry);
-            var expressionPointer = pointer as ExpressionEntry;
             if (type == null)
             {
                 type = GetWellKnownType(WellKnownType.Object);
@@ -3808,7 +3821,12 @@ CreateDebugLocation();
             }
             else if (ldtokenValue is MethodDesc)
             {
-                throw new NotImplementedException();
+//                var handle = LLVM.BuildLoad(_builder, GetMethodPointerForMethodDesc((MethodDesc)ldtokenValue, false), "handle");
+                //var ptrCast = LLVM.BuildPointerCast(_builder, handle, LLVMTypeRef.PointerType(LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0), 0), "ptrSig");
+                PushLoadExpression(StackValueKind.ByRef, "ldtoken", GetMethodPointerForMethodDesc((MethodDesc)ldtokenValue, false), GetWellKnownType(WellKnownType.IntPtr));
+                MethodDesc helper = _compilation.TypeSystemContext.GetHelperEntryPoint("LdTokenHelpers", "GetRuntimeMethodHandle");
+                AddMethodReference(helper);
+                HandleCall(helper, helper.Signature, helper);
             }
             else
             {
@@ -3876,7 +3894,8 @@ CreateDebugLocation();
 
         private void ImportConstrainedPrefix(int token)
         {
-            _constrainedType = (TypeDesc)_methodIL.GetObject(token);
+//            _constrainedType = (TypeDesc)_methodIL.GetObject(token);
+            _constrainedType = (TypeDesc)_canonMethodIL.GetObject(token);
         }
 
         private void ImportNoPrefix(byte mask)
@@ -4549,7 +4568,7 @@ CreateDebugLocation();
 
         private TypeDesc ResolveTypeToken(int token)
         {
-            return (TypeDesc)_methodIL.GetObject(token);
+            return (TypeDesc)_canonMethodIL.GetObject(token);
         }
 
         private TypeDesc GetWellKnownType(WellKnownType wellKnownType)
