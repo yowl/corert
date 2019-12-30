@@ -314,11 +314,19 @@ internal static class Program
         TestUlongUintMultiply();
 
         TestBoxSingle();
-        
+
         TestInitializeArray();
 
+        TestStoreFromGenericMethod();
+
         TestGvmCallInIf(new GenDerived<string>(), "hello");
+
         TestLdTokenMethod();
+        TestConstrainedValueTypeCallVirt();
+
+        TestBoxToGenericTypeFromDirectMethod();
+
+        TestInitializeArray();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -913,6 +921,14 @@ internal static class Program
         }
     }
 
+    private static void TestStoreFromGenericMethod()
+    {
+        StartTest("TestStoreFromGenericMethod");
+        var values = new string[1];
+        // testing that the generic return value type from the function can be stored in a concrete type
+        values = values.AsSpan(0, 1).ToArray();
+        PassTest();
+    }
 
     private static void TestCallToGenericInterfaceMethod()
     {
@@ -921,6 +937,43 @@ internal static class Program
         TestGenItf implInt = new TestGenItf();
         implInt.Log<object>(new object());
         EndTest(true);
+    }
+
+    private static void TestConstrainedValueTypeCallVirt()
+    {
+        StartTest("Call constrained callvirt");
+        //TODO: create simpler test that doesn't need Dictionary<>/KVP<>/Span
+        var dict = new Dictionary<KeyValuePair<string, string>, string>();
+        var notContainsKey = dict.ContainsKey(new KeyValuePair<string, string>());
+
+        EndTest(!notContainsKey);
+    }
+
+    private static void TestBoxToGenericTypeFromDirectMethod()
+    {
+        StartTest("Callvirt on generic struct boxing to looked up generic type");
+
+        new GetHashCodeCaller<GenStruct<string>, string>().CallValueTypeGetHashCodeFromGeneric(new GenStruct<string>(""));
+
+        PassTest();
+    }
+
+    public struct GenStruct<TKey>
+    {
+        private TKey key; 
+
+        public GenStruct(TKey key)
+        {
+            this.key = key;
+        }
+    }
+
+    public class GetHashCodeCaller<TKey, TValue>
+    {
+        public void CallValueTypeGetHashCodeFromGeneric(TKey k)
+        {
+            k.GetHashCode();
+        }
     }
 
     public interface ITestGenItf
@@ -1149,6 +1202,15 @@ internal static class Program
         PassTest();
     }
 
+    internal static void TestBoxSingle()
+    {
+        StartTest("Test box single");
+        var fi = typeof(ClassWithFloat).GetField("F");
+        fi.SetValue(null, 1.1f);
+        EndTest(1.1f == ClassWithFloat.F);
+    }
+    
+    
     static void TestLdTokenMethod()
     {
         StartTest("Test ldtoken method");
@@ -1158,14 +1220,6 @@ internal static class Program
         var r2 = (int)methodBase.Invoke(null, new object[] { 2 });
 
         EndTest(r1 == 1 && r2 == 2);
-    }
-
-    internal static void TestBoxSingle()
-    {
-        StartTest("Test box single");
-        var fi = typeof(ClassWithFloat).GetField("F");
-        fi.SetValue(null, 1.1f);
-        EndTest(1.1f == ClassWithFloat.F);
     }
 
     [DllImport("*")]
