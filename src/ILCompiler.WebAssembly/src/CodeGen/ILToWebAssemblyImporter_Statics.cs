@@ -115,17 +115,10 @@ namespace Internal.IL
         static LLVMValueRef DoNothingFunction = default(LLVMValueRef);
         static LLVMValueRef NullRefFunction = default(LLVMValueRef);
 
-        internal static LLVMValueRef MakeFatPointer(LLVMBuilderRef builder, LLVMValueRef targetLlvmFunction)
+        internal static LLVMValueRef MakeFatPointer(LLVMBuilderRef builder, LLVMValueRef targetLlvmFunction, WebAssemblyCodegenCompilation compilation)
         {
             var asInt = builder.BuildPtrToInt(targetLlvmFunction, LLVMTypeRef.Int32, "toInt");
-            return builder.BuildBinOp(LLVMOpcode.LLVMOr, asInt, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, FatFunctionPointerOffset, false), "makeFat");
-        }
-
-        private static LLVMValueRef RemoveFatOffset(LLVMBuilderRef builder, LLVMValueRef fatFunctionRef)
-        {
-            return builder.BuildAnd(
-                CastIfNecessary(builder, fatFunctionRef, LLVMTypeRef.Int32),
-                BuildConstUInt32(~FatFunctionPointerOffset), "minusFatOffset");
+            return builder.BuildBinOp(LLVMOpcode.LLVMOr, asInt, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (ulong)compilation.TypeSystemContext.Target.FatFunctionPointerOffset), "makeFat");
         }
 
         private static IList<string> GetParameterNamesForMethod(MethodDesc method)
