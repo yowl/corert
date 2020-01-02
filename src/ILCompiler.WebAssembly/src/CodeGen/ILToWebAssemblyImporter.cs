@@ -986,11 +986,6 @@ CreateDebugLocation();
 
         private void CastingStore(LLVMValueRef address, StackEntry value, TypeDesc targetType, string targetName = null)
         {
-            if (value is GenericReturnExpressionEntry)
-            {
-                targetType = ((GenericReturnExpressionEntry)value).GenericReturnTypeDesc;
-            }
-
             var typedStoreLocation = CastToPointerToTypeDesc(address, targetType, targetName);
             _builder.BuildStore(value.ValueAsType(targetType, _builder), typedStoreLocation);
         }
@@ -2643,13 +2638,23 @@ CreateDebugLocation();
                 return needsReturnSlot ? returnSlot : 
                     (
                         canonMethod != null && canonMethod.Signature.ReturnType != actualReturnType
-                        ? new GenericReturnExpressionEntry(canonMethod.Signature.ReturnType, GetStackValueKind(actualReturnType), callee?.Name + "_return", llvmReturn, actualReturnType)
+                        ? CreateGenericReturnExpression(canonMethod.Signature.ReturnType, GetStackValueKind(actualReturnType), callee?.Name + "_return", llvmReturn, actualReturnType)
                         : new ExpressionEntry(GetStackValueKind(actualReturnType), callee?.Name + "_return", llvmReturn, actualReturnType));
             }
             else
             {
                 return null;
             }
+        }
+
+        // generic structs need to be cast to the actualReturnType
+        private ExpressionEntry CreateGenericReturnExpression(TypeDesc signatureReturnType, StackValueKind stackValueKind, string calleeName, LLVMValueRef llvmReturn, TypeDesc actualReturnType)
+        {
+            Debug.Assert(llvmReturn.TypeOf.IsPackedStruct);
+            var memStructPtr = _builder.BuildAlloca(llvmReturn.TypeOf, "memStruct");
+            _builder.BuildStore(llvmReturn, memStructPtr);
+            var castPtr = _builder.BuildPointerCast(memStructPtr, LLVMTypeRef.CreatePointer(GetLLVMTypeForTypeDesc(actualReturnType), 0), "castPtr");
+            return new LoadExpressionEntry(stackValueKind, calleeName, castPtr, actualReturnType);
         }
 
 
