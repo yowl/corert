@@ -2575,6 +2575,10 @@ CreateDebugLocation();
                 else
                 {
                     argType = signature[index - instanceAdjustment];
+                    if (canonMethod != null && CanStoreTypeOnStack(argType))
+                    {
+                        argType = canonMethod.Signature[index - instanceAdjustment];
+                    }
                 }
 
                 LLVMTypeRef valueType = GetLLVMTypeForTypeDesc(argType);
@@ -4213,8 +4217,13 @@ CreateDebugLocation();
         {
             FieldDesc field = (FieldDesc)_methodIL.GetObject(token);
             LLVMValueRef fieldAddress = GetFieldAddress(field, (FieldDesc)_canonMethodIL.GetObject(token), isStatic);
+            TypeDesc fieldType = field.FieldType;
+            if (fieldType is RuntimeDeterminedType runtimeDeterminedType)
+            {
+                fieldType = runtimeDeterminedType.CanonicalType;
+            }
 
-            PushLoadExpression(GetStackValueKind(field.FieldType), $"Field_{field.Name}", fieldAddress, field.FieldType);
+            PushLoadExpression(GetStackValueKind(field.FieldType), $"Field_{field.Name}", fieldAddress, fieldType);
         }
 
         private void ImportAddressOfField(int token, bool isStatic)

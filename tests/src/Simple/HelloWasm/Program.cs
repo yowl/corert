@@ -988,17 +988,68 @@ internal static class Program
 
     private static void TestPassGenericReturnToActualCallParam()
     {
+        StartTest("Casting of generic structs on return and in call params");
+
+        // test return  type is cast
         ActualStructCallParam(new string[0]);
+
+        // test call param is cast
+        GenStructCallParam(new GenStructWithImplicitOp<string>());
+
+        // replicate compilation error with https://github.com/dotnet/corefx/blob/e99ec129cfd594d53f4390bf97d1d736cff6f860/src/System.Collections.Immutable/src/System/Collections/Immutable/SortedInt32KeyNode.cs#L561
+        new GenClassUsingFieldOfInnerStruct<GenClassWithInnerStruct<string>.GenInterfaceOverGenStructStruct>(
+            new GenClassWithInnerStruct<string>.GenInterfaceOverGenStructStruct(), null).Create();
+
+        PassTest();
     }
 
+    public class GenClassWithInnerStruct<TKey>
+    {
+        internal readonly struct GenInterfaceOverGenStructStruct 
+        {
+            // 2 fields to avoid struct collapsing to an i32
+            private readonly TKey _firstValue;
+            private readonly TKey _otherValue;
+
+            private GenInterfaceOverGenStructStruct(TKey firstElement)
+            {
+                _firstValue = firstElement;
+                _otherValue = firstElement;
+            }
+        }
+    }
+
+    public class GenClassUsingFieldOfInnerStruct<T>
+    {
+        private readonly T _value;
+        private GenClassUsingFieldOfInnerStruct<T> _left;
+
+        public GenClassUsingFieldOfInnerStruct(T v, GenClassUsingFieldOfInnerStruct<T> left)
+        {
+            _value = v;
+            _left = left;
+        }
+
+        public GenClassUsingFieldOfInnerStruct<T> Create(GenClassUsingFieldOfInnerStruct<T> left = null)
+        {
+            // some logic to get _value in a temp 
+            return new GenClassUsingFieldOfInnerStruct<T>(_value, left ?? _left);
+        }
+    }
+
+
     private static void ActualStructCallParam(GenStructWithImplicitOp<string> gs)
+    {
+    }
+
+    private static void GenStructCallParam<T>(GenStructWithImplicitOp<T> gs)
     {
     }
 
     public ref struct GenStructWithImplicitOp<TKey>
     {
         private int length;
-        private int length2;
+        private int length2; // just one int field will not create an LLVM struct type, so put another field
 
         public GenStructWithImplicitOp(TKey[] key)
         {
