@@ -326,13 +326,17 @@ internal static class Program
 
         TestBoxToGenericTypeFromDirectMethod();
 
+<<<<<<< HEAD
         TestGenericCallInFinally();
-        
+
+        TestPassGenericReturnToActualCallParam();
+=======
         TestGenericStructHandling();
 
-        TestInitializeArray();
+        TestGenericCallInFinally();
+>>>>>>> genstruct-return-2
 
-        TestImplicitUShortToUInt();
+        TestInitializeArray();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -1002,6 +1006,46 @@ internal static class Program
         new GenClassUsingFieldOfInnerStruct<GenClassWithInnerStruct<string>.GenInterfaceOverGenStructStruct>(
             new GenClassWithInnerStruct<string>.GenInterfaceOverGenStructStruct(), null).Create();
 
+<<<<<<< HEAD
+        PassTest();
+    }
+
+    public class GenClassWithInnerStruct<TKey>
+    {
+        internal readonly struct GenInterfaceOverGenStructStruct 
+        {
+            // 2 fields to avoid struct collapsing to an i32
+            private readonly TKey _firstValue;
+            private readonly TKey _otherValue;
+
+            private GenInterfaceOverGenStructStruct(TKey firstElement)
+            {
+                _firstValue = firstElement;
+                _otherValue = firstElement;
+            }
+        }
+    }
+
+    public class GenClassUsingFieldOfInnerStruct<T>
+    {
+        private readonly T _value;
+        private GenClassUsingFieldOfInnerStruct<T> _left;
+
+        public GenClassUsingFieldOfInnerStruct(T v, GenClassUsingFieldOfInnerStruct<T> left)
+        {
+            _value = v;
+            _left = left;
+        }
+
+        public GenClassUsingFieldOfInnerStruct<T> Create(GenClassUsingFieldOfInnerStruct<T> left = null)
+        {
+            // some logic to get _value in a temp 
+            return new GenClassUsingFieldOfInnerStruct<T>(_value, left ?? _left);
+        }
+    }
+
+
+=======
         PassTest();
     }
 
@@ -1056,6 +1100,7 @@ internal static class Program
         }
     }
 
+>>>>>>> genstruct-return-2
     private static void ActualStructCallParam(GenStructWithImplicitOp<string> gs)
     {
     }
@@ -1083,6 +1128,23 @@ internal static class Program
         public void CallValueTypeGetHashCodeFromGeneric(TKey k)
         {
             k.GetHashCode();
+        }
+    }
+
+    private static void TestGenericCallInFinally()
+    {
+        StartTest("calling generic method requiring context from finally block");
+
+        CallGenericInFinally<string>();
+
+        PassTest();
+    }
+
+    private static void CallGenericInFinally<T>()
+    {
+        List<T> list = new List<T>();
+        foreach (var s in list)
+        {
         }
     }
 
@@ -1310,19 +1372,6 @@ internal static class Program
         }
 
         PassTest();
-    }
-
-    static void TestImplicitUShortToUInt()
-    {
-        StartTest("test extend of shorts with MSB set");
-        uint start;
-        start = ReadUInt16();
-        EndTest(start == 0x0000828f);
-    }
-
-    static ushort ReadUInt16()
-    {
-        return 0x828f;
     }
 
     internal static void TestBoxSingle()

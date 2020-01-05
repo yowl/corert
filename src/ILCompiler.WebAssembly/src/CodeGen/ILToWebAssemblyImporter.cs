@@ -1616,7 +1616,7 @@ CreateDebugLocation();
                                 {
                                     new LoadExpressionEntry(StackValueKind.ValueType, "eeType", GetEETypePointerForTypeDesc(type, true),
                                         GetEETypePtrTypeDesc()),
-                                    _stack.Pop()
+                                        _stack.Pop()
                                 };
             }
 
@@ -1804,10 +1804,10 @@ CreateDebugLocation();
                     {
                         MethodDesc thunkMethod = delegateInfo.Thunk.Method;
                         AddMethodReference(thunkMethod);
-                        PushExpression(StackValueKind.NativeInt, "invokeThunk", 
+                        PushExpression(StackValueKind.NativeInt, "invokeThunk",
                             GetOrCreateLLVMFunction(
                                 _compilation.NameMangler.GetMangledMethodName(thunkMethod).ToString(),
-                                thunkMethod.Signature, 
+                                thunkMethod.Signature,
                                 false));
                     }
                     var sigLength = callee.Signature.Length;
@@ -1816,7 +1816,7 @@ CreateDebugLocation();
                     {
                         stackCopy[i] = _stack.Pop();
                     }
-                    var thisEntry = _stack.Pop();  // the extra newObjResult which we dont want as we are not going through HandleCall
+                    var thisEntry = _stack.Pop(); // the extra newObjResult which we dont want as we are not going through HandleCall
                     // by convention(?) the delegate initialize methods take this as the first parameter which is not in the ctor
                     // method sig, so add that here
                     int curOffset = 0;
@@ -1831,7 +1831,7 @@ CreateDebugLocation();
 
                     List<LLVMValueRef> helperParams = new List<LLVMValueRef>
                     {
-                        shadowStack,
+                        shadowStack, 
                         GetGenericContext()
                     };
 
@@ -1856,7 +1856,7 @@ CreateDebugLocation();
                         }
                     }
 
-                    var node = GetGenericLookupHelperAndAddReference(ReadyToRunHelperId.DelegateCtor, delegateInfo, out helper,
+                    GetGenericLookupHelperAndAddReference(ReadyToRunHelperId.DelegateCtor, delegateInfo, out helper,
                         additionalTypes);
                     _builder.BuildCall(helper, helperParams.ToArray(), string.Empty);
                     return;
@@ -2642,7 +2642,7 @@ CreateDebugLocation();
                 return needsReturnSlot ? returnSlot : 
                     (
                         canonMethod != null && canonMethod.Signature.ReturnType != actualReturnType
-                        ? CreateGenericReturnExpression(canonMethod.Signature.ReturnType, GetStackValueKind(actualReturnType), callee?.Name + "_return", llvmReturn, actualReturnType)
+                        ? CreateGenericReturnExpression(GetStackValueKind(actualReturnType), callee?.Name + "_return", llvmReturn, actualReturnType)
                         : new ExpressionEntry(GetStackValueKind(actualReturnType), callee?.Name + "_return", llvmReturn, actualReturnType));
             }
             else
@@ -2652,7 +2652,7 @@ CreateDebugLocation();
         }
 
         // generic structs need to be cast to the actualReturnType
-        private ExpressionEntry CreateGenericReturnExpression(TypeDesc signatureReturnType, StackValueKind stackValueKind, string calleeName, LLVMValueRef llvmReturn, TypeDesc actualReturnType)
+        private ExpressionEntry CreateGenericReturnExpression(StackValueKind stackValueKind, string calleeName, LLVMValueRef llvmReturn, TypeDesc actualReturnType)
         {
             Debug.Assert(llvmReturn.TypeOf.IsPackedStruct);
             var memStructPtr = _builder.BuildAlloca(llvmReturn.TypeOf, "memStruct");
@@ -2660,7 +2660,6 @@ CreateDebugLocation();
             var castPtr = _builder.BuildPointerCast(memStructPtr, LLVMTypeRef.CreatePointer(GetLLVMTypeForTypeDesc(actualReturnType), 0), "castPtr");
             return new LoadExpressionEntry(stackValueKind, calleeName, castPtr, actualReturnType);
         }
-
 
         // simple calling cases, not virtual, not calli
         private LLVMValueRef HandleDirectCall(MethodDesc callee, MethodSignature signature,
