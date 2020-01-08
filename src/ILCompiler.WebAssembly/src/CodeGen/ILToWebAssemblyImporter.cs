@@ -1666,11 +1666,6 @@ CreateDebugLocation();
         {
             MethodDesc runtimeDeterminedMethod = (MethodDesc)_methodIL.GetObject(token);
             MethodDesc callee = (MethodDesc)_canonMethodIL.GetObject(token);
-            if (_mangledName.Contains("<Boxed>S_P_TypeLoader_System_Collections_Generic_ArrayBuilder_1<System___Canon>__<unbox>S_P_TypeLoader_System_Collections_Generic_ArrayBuilder_1__Append_0")
-            )
-            {
-
-            }
             if (callee.IsIntrinsic)
             {
                 if (ImportIntrinsicCall(callee, runtimeDeterminedMethod))
@@ -1684,18 +1679,10 @@ CreateDebugLocation();
                 ImportRawPInvoke(callee);
                 return;
             }
-            if (callee.IsInternalCall && callee.OwningType is EcmaType type)
+            if (callee.IsInternalCall)
             {
-                if (callee.Name == "InvokeJS" && type.Namespace == "WebAssembly" && type.Name == "Runtime")
-                {
-                    ImportRawPInvoke(callee);
-                    return;
-                }
-                if (callee.Name == "InvokeJSUnmarshalled" && type.Namespace == "WebAssembly.JSInterop" && type.Name == "InternalCalls")
-                {
-                    ImportRawPInvoke(callee);
-                    return;
-                }
+                // replace calls made to methods that are implemented in the mono runtime with managed calls to CoreRT methods
+                ReplaceInternalCall(ref callee);
             }
 
             TypeDesc localConstrainedType = _constrainedType;
@@ -2244,6 +2231,34 @@ CreateDebugLocation();
         }
 
         /// <summary>
+        /// Implements  MethodImplOptions.InternalCall calls that are implemented in the mono runtime to get the same surface in CoreRT
+        /// </summary>
+        private void ReplaceInternalCall(ref MethodDesc callee)
+        {
+            if (callee.OwningType is EcmaType type)
+            {
+                if (callee.Name == "InvokeJS" && type.Namespace == "WebAssembly" && type.Name == "Runtime")
+                {
+                    MetadataType helperType = callee.Context.ResolveAssembly(new AssemblyName("CoreRT.WebAssembly.Interop"), true)
+                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
+                    callee = helperType.GetKnownMethod(callee.Name, null); // use the same method name 
+                    _dependencies.Add(_compilation.NodeFactory.MethodEntrypoint(callee, false)); // TODO: probably dont need this
+                }
+                else if (callee.Name == "InvokeJSUnmarshalled" && type.Namespace == "WebAssembly.JSInterop" && type.Name == "InternalCalls")
+                {
+                    MetadataType helperType = callee.Context.ResolveAssembly(new AssemblyName("CoreRT.WebAssembly.Interop"), true)
+                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
+                    callee = helperType.GetKnownMethod(callee.Name, null);
+                    _dependencies.Add(_compilation.NodeFactory.MethodEntrypoint(callee, false)); // TODO: probably dont need this
+                }
+
+//                if (callee.Name == "InvokeJSUnmarshalled" && type.Namespace == "WebAssembly.JSInterop" && type.Name == "InternalCalls")
+//                {
+//                }
+            }
+        }
+
+        /// <summary>
         /// Implements intrinsic methods instread of calling them
         /// </summary>
         /// <returns>True if the method was implemented</returns>
@@ -2765,20 +2780,8 @@ CreateDebugLocation();
             else if (!method.IsPInvoke && method is TypeSystem.Ecma.EcmaMethod)
             {
                 realMethodName = ((TypeSystem.Ecma.EcmaMethod)method).GetRuntimeImportName() ?? method.Name;
-                if (realMethodName == "InvokeJS")
-                {
-                    MetadataType helperType = method.Context.ResolveAssembly(new AssemblyName("CoreRT.WebAssembly.Interop"), true)
-                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls"); MethodDesc helperMethod = helperType.GetKnownMethod(realMethodName, null);
-                    _dependencies.Add(_compilation.NodeFactory.MethodEntrypoint(helperMethod, false));
-                }
-                else if (realMethodName == "InvokeJSUnmarshalled")
-                {
-                    MetadataType helperType = method.Context.ResolveAssembly(new AssemblyName("CoreRT.WebAssembly.Interop"), true)
-                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
-                    MethodDesc helperMethod = helperType.GetKnownMethod(realMethodName, null);
-                    _dependencies.Add(_compilation.NodeFactory.MethodEntrypoint(helperMethod, false));
-                }
             }
+
             MethodDesc existantDesc;
             LLVMValueRef nativeFunc;
             LLVMValueRef realNativeFunc = Module.GetNamedFunction(realMethodName);

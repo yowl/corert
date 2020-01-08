@@ -95,11 +95,23 @@ var DotNetSupportLib = {
 			setValue (exceptionMessage, exceptionSystemString, 'i32'); // *exceptionMessage = exceptionSystemString;
 			return 0;
 		}
-	}
-	
+	},
+    corert_wasm_invoke_js : function (js, length, exception) {
+        var mono_string = DOTNET._dotnet_get_global()._mono_string_cached
+            || (DOTNET._dotnet_get_global()._mono_string_cached = Module.cwrap('mono_wasm_string_from_js', 'number', ['string']));
+
+        alert("wasm invoke");
+        var jsFuncName = UTF8ToString(js, length);
+//        var funcNameJsString = DOTNET.conv_string(js); // this relies on mono_wasm_string_get_utf8 which we dont have.  Its in driver.c
+//        alert(funcNameJsString);
+        alert(jsFuncName);
+        eval(jsFuncName);
+        exception = 0;
+        return "";
+    },
 
 };
 
-autoAddDeps(DotNetSupportLib, '$DOTNET')
-mergeInto(LibraryManager.library, DotNetSupportLib)
+autoAddDeps(DotNetSupportLib, '$DOTNET');
+mergeInto(LibraryManager.library, DotNetSupportLib);
 

@@ -254,55 +254,6 @@ namespace Internal.NativeFormat
             return new IntPtr(_base + offset);
         }
 
-        internal class X2
-        {
-            [DllImport("*")]
-            internal static unsafe extern int printf(byte* str, byte* unused);
-            private static unsafe void PrintString(string s)
-            {
-                int length = s.Length;
-                fixed (char* curChar = s)
-                {
-                    for (int i = 0; i < length; i++)
-                    {
-                        TwoByteStr curCharStr = new TwoByteStr();
-                        curCharStr.first = (byte)(*(curChar + i));
-                        printf((byte*)&curCharStr, null);
-                    }
-                }
-            }
-
-            internal static void PrintLine(string s)
-            {
-                PrintString(s);
-                PrintString("\n");
-            }
-
-            public unsafe static void PrintUint(int s)
-            {
-                byte[] intBytes = BitConverter.GetBytes(s);
-                for (var i = 0; i < 4; i++)
-                {
-                    TwoByteStr curCharStr = new TwoByteStr();
-                    var nib = (intBytes[3 - i] & 0xf0) >> 4;
-                    curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
-                    printf((byte*)&curCharStr, null);
-                    nib = (intBytes[3 - i] & 0xf);
-                    curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
-                    printf((byte*)&curCharStr, null);
-                }
-                PrintString("\n");
-            }
-
-            public struct TwoByteStr
-            {
-                public byte first;
-                public byte second;
-            }
-
-        }
-
-
         public void ThrowBadImageFormatException()
         {
             Debug.Assert(false);
@@ -312,13 +263,7 @@ namespace Internal.NativeFormat
         private uint EnsureOffsetInRange(uint offset, uint lookAhead)
         {
             if ((int)offset < 0 || offset + lookAhead >= _size)
-            {
-                X2.PrintLine("ensure in range");
-                X2.PrintUint((int)offset);
-                X2.PrintUint((int)lookAhead);
-                X2.PrintUint((int)_size);
                 ThrowBadImageFormatException();
-            }
             return offset;
         }
 
@@ -557,18 +502,7 @@ namespace Internal.NativeFormat
             {
                 while (_parser.Offset < _endOffset)
                 {
-                    if ((int)_parser.Offset < 0)
-                    {
-                        NativeReader.X2.PrintLine("GetNext");
-                        NativeReader.X2.PrintUint((int)_parser.Offset);
-                    }
                     byte lowHashcode = _parser.GetUInt8();
-                    if ((int)_parser.Offset < 0)
-                    {
-                        NativeReader.X2.PrintLine("GetNext2");
-                        NativeReader.X2.PrintUint((int)_parser.Offset);
-                    }
-
                     if (lowHashcode == _lowHashcode)
                     {
                         return _parser.GetParserFromRelativeOffset();
@@ -630,40 +564,18 @@ namespace Internal.NativeFormat
                 uint bucketOffset = _baseOffset + bucket;
                 start = _reader.ReadUInt8(bucketOffset);
                 end = _reader.ReadUInt8(bucketOffset + 1);
-                if ((int)(_baseOffset + start) < 0)
-                {
-                    NativeReader.X2.PrintLine("GetParserForBucket 1");
-                    NativeReader.X2.PrintUint((int)(_baseOffset + start));
-
-                }
             }
             else if (_entryIndexSize == 1)
             {
                 uint bucketOffset = _baseOffset + 2 * bucket;
                 start = _reader.ReadUInt16(bucketOffset);
                 end = _reader.ReadUInt16(bucketOffset + 2);
-                if ((int)(_baseOffset + start) < 0)
-                {
-                    NativeReader.X2.PrintLine("GetParserForBucket 2");
-                    NativeReader.X2.PrintUint((int)(_baseOffset));
-                    NativeReader.X2.PrintUint((int)(bucketOffset));
-                    NativeReader.X2.PrintUint((int)(start));
-                    NativeReader.X2.PrintUint((int)(bucket));
-                    NativeReader.X2.PrintUint((int)(_baseOffset + start));
-
-                }
             }
             else
             {
                 uint bucketOffset = _baseOffset + 4 * bucket;
                 start = _reader.ReadUInt32(bucketOffset);
                 end = _reader.ReadUInt32(bucketOffset + 4);
-                if ((int)(_baseOffset + start) < 0)
-                {
-                    NativeReader.X2.PrintLine("GetParserForBucket 3");
-                    NativeReader.X2.PrintUint((int)(_baseOffset + start));
-
-                }
             }
 
             endOffset = end + _baseOffset;

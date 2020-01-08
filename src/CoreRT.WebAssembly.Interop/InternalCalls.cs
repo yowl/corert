@@ -1,10 +1,9 @@
-﻿using System;
-using System.Runtime.CompilerServices;
+﻿using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace CoreRT.WebAssembly.Interop
 {
-    internal static class InternalCalls
+    public static class InternalCalls
     {
         // Copied from Mono
         // We're passing asyncHandle by ref not because we want it to be writable, but so it gets
@@ -18,11 +17,22 @@ namespace CoreRT.WebAssembly.Interop
 
 
         //Uno compatibility
-        [DllImport("*", EntryPoint = "mono_wasm_invoke_js_marshalled")] 
-        public static extern string InvokeJS(out int exception, string js);
+        [DllImport("*", EntryPoint = "corert_wasm_invoke_js")]
+        private static extern string InvokeJSInternal(string js, int length, out int exception);
+        
+        public static string InvokeJS(string js, out int exception)
+        {
+            return InvokeJSInternal(js, js.Length, out exception);
+        }
 
-        [DllImport("*", EntryPoint = "mono_wasm_invoke_js_marshalled")]
-        public static extern string InvokeJSUnmarshalled(out int exception, string js, int p1, int p2, int p3);
+//        [DllImport("*", EntryPoint = "mono_wasm_invoke_js_marshalled")]
+//        private static extern string InvokeJSUnmarshalledInternal(out int exception, string js, int p1, int p2, int p3);
+
+        public static string InvokeJSUnmarshalled(out int exception, string js, int p1, int p2, int p3)
+        {
+            exception = 1;
+            return ""; //InvokeJSInternal(js, out exception);
+        }
 
     }
 }
