@@ -115,6 +115,10 @@ namespace Internal.IL
                 // just return false 
                 methodIL = new ILStubMethodIL(method, new byte[] { (byte)ILOpcode.ldc_i4_0, (byte)ILOpcode.ret }, Array.Empty<LocalVariableDefinition>(), null);
             }
+            else if (method.Name == "GetSystemTimeAsTicks")
+            {
+
+            }
 
             _canonMethodIL = methodIL;
             // Get the runtime determined method IL so that this works right in shared code

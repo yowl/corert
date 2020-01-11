@@ -323,6 +323,8 @@ internal static class Program
 
         TestInitializeArray();
 
+        TestSystemNative_GetSystemTimeAsTicks();
+
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
         System.Diagnostics.Debugger.Break();
@@ -1213,6 +1215,15 @@ internal static class Program
         }
 
         PassTest();
+    }
+
+    static void TestSystemNative_GetSystemTimeAsTicks()
+    {
+        StartTest("TestSystemNative_GetSystemTimeAsTicks");
+
+        DateTime d = DateTime.UtcNow;
+
+        EndTest(d.Year >= 2020);
     }
 
     [DllImport("*")]
