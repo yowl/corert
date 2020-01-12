@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 namespace CoreRT.WebAssembly.Interop
 {
@@ -25,14 +24,16 @@ namespace CoreRT.WebAssembly.Interop
             return InvokeJSInternal(js, js.Length, out exception);
         }
 
-//        [DllImport("*", EntryPoint = "mono_wasm_invoke_js_marshalled")]
-//        private static extern string InvokeJSUnmarshalledInternal(out int exception, string js, int p1, int p2, int p3);
+        //        [DllImport("*", EntryPoint = "mono_wasm_invoke_js_marshalled")]
+        //        private static extern string InvokeJSUnmarshalledInternal(out int exception, string js, int p1, int p2, int p3);
+
+        //Uno compatibility
+        [DllImport("*", EntryPoint = "corert_wasm_invoke_js_unmarshalled")]
+        private static extern string InvokeJSUnmarshalledInternal(string js, int length, int p1, int p2, int p3, out int exception);
 
         public static string InvokeJSUnmarshalled(out int exception, string js, int p1, int p2, int p3)
         {
-            exception = 1;
-            return ""; //InvokeJSInternal(js, out exception);
+            return InvokeJSUnmarshalledInternal(js, js.Length, p1, p2 ,p3, out exception);
         }
-
     }
 }

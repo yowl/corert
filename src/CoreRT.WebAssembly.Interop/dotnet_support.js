@@ -105,13 +105,34 @@ var DotNetSupportLib = {
 //        var funcNameJsString = DOTNET.conv_string(js); // this relies on mono_wasm_string_get_utf8 which we dont have.  Its in driver.c
 //        alert(funcNameJsString);
         alert(jsFuncName);
-        eval(jsFuncName);
+        var res = eval(jsFuncName);
         exception = 0;
-        return "";
+        return "" + res;
+    },
+
+    corert_wasm_invoke_js_unmarshalled: function (js, length, arg0, arg1, arg2, exception) {
+
+        alert("wasm invoke unmarshalled");
+        var jsFuncName = UTF8ToString(js, length);
+        alert(jsFuncName);
+        var dotNetExports = DOTNET._dotnet_get_global().DotNet;
+        if (!dotNetExports) {
+            throw new Error('The Microsoft.JSInterop.js library is not loaded.');
+        }
+        var funcInstance = dotNetExports.jsCallDispatcher.findJSFunction(jsFuncName);
+
+        return funcInstance.call(null, arg0, arg1, arg2);
+        //var res  = mono_wasm_invoke_js_unmarshalled(exception, js, p1, p2, p3);
+//        eval(jsFuncName + '(' + p1 + ',' + p2 + ',' + p3 + ');');
+//        var res = func.apply(p1, p2, p3);
+//        exception = 0;
+        return "" + res;
     },
 
 };
 
 autoAddDeps(DotNetSupportLib, '$DOTNET');
 mergeInto(LibraryManager.library, DotNetSupportLib);
+
+
 
