@@ -145,7 +145,10 @@ namespace Internal.IL
             {
                 _exceptionRegions[curRegion++] = new ExceptionRegion() { ILRegion = region };
             }
+            if (_mangledName.Contains("HelloWasm_Program_NonBlittableToMarshal"))
+            {
 
+            }
             _llvmFunction = GetOrCreateLLVMFunction(mangledName, method.Signature, method.RequiresInstArg());
             _currentFunclet = _llvmFunction;
             _builder = LLVM.CreateBuilder();

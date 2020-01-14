@@ -323,6 +323,8 @@ internal static class Program
 
         TestInitializeArray();
 
+        TestMarshalStructToPtr();
+
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
         System.Diagnostics.Debugger.Break();
@@ -1213,6 +1215,24 @@ internal static class Program
         }
 
         PassTest();
+    }
+
+    // something to exercise CalliIntrinsics.Call<T>
+    struct NonBlittableToMarshal
+    {
+        internal int a;
+        internal string b;
+    }
+
+    static void TestMarshalStructToPtr()
+    {
+        StartTest("Test marshal struct to ptr");
+        NonBlittableToMarshal s = new NonBlittableToMarshal();
+        s.a = 1;
+        s.b = null;
+        var pParms = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(NonBlittableToMarshal)));
+        Marshal.StructureToPtr(s, pParms, false);
+        EndTest(true);
     }
 
     [DllImport("*")]
