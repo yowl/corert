@@ -324,6 +324,7 @@ internal static class Program
         TestInitializeArray();
 
         TestMarshalStructToPtr();
+        TestImplicitUShortToUInt();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -1217,22 +1218,39 @@ internal static class Program
         PassTest();
     }
 
+    static void TestImplicitUShortToUInt()
+    {
+        StartTest("test extend of shorts with MSB set");
+        uint start;
+        start = ReadUInt16();
+        EndTest(start == 0x0000828f);
+    }
+
+    static ushort ReadUInt16()
+    {
+        // something with MSB set
+        return 0x828f;
+    }
+
     // something to exercise CalliIntrinsics.Call<T>
     struct NonBlittableToMarshal
     {
-        internal int a;
-        internal string b;
+        internal int SomeInt;
+        internal string SomeString;
     }
 
     static void TestMarshalStructToPtr()
     {
         StartTest("Test marshal struct to ptr");
         NonBlittableToMarshal s = new NonBlittableToMarshal();
-        s.a = 1;
-        s.b = null;
+        s.SomeInt = 1;
+        s.SomeString = "test marshal";
+        
         var pParms = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(NonBlittableToMarshal)));
         Marshal.StructureToPtr(s, pParms, false);
-        EndTest(true);
+        var s2 = (NonBlittableToMarshal)Marshal.PtrToStructure(pParms, typeof(NonBlittableToMarshal));
+        
+        EndTest(s2.SomeInt == 1 && s2.SomeString == "test marshal");
     }
 
     [DllImport("*")]
