@@ -323,8 +323,9 @@ internal static class Program
 
         TestInitializeArray();
 
-        TestMarshalStructToPtr();
         TestImplicitUShortToUInt();
+
+        TestMarshalStructToPtr();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
