@@ -332,11 +332,11 @@ internal static class Program
 
         TestInitializeArray();
 
-<<<<<<< ours
-        TestImplicitUShortToUInt();
-=======
+<<<<<<< HEAD
         TestSystemNative_GetSystemTimeAsTicks();
->>>>>>> theirs
+=======
+        TestImplicitUShortToUInt();
+>>>>>>> corert/master
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -1316,15 +1316,16 @@ internal static class Program
         PassTest();
     }
 
-<<<<<<< ours
-    static void TestImplicitUShortToUInt()
+<<<<<<< HEAD
+    static void TestSystemNative_GetSystemTimeAsTicks()
     {
-        StartTest("test extend of shorts with MSB set");
-        uint start;
-        start = ReadUInt16();
-        EndTest(start == 0x0000828f);
-    }
+        StartTest("TestSystemNative_GetSystemTimeAsTicks");
 
+        DateTime d = DateTime.UtcNow;
+        PrintLine(d.ToString("dd/MM/yy HH:mm:ss"));
+
+        EndTest(d.Year >= 2020);
+}
     static ushort ReadUInt16()
     {
         return 0x828f;
@@ -1348,17 +1349,24 @@ internal static class Program
         var r2 = (int)methodBase.Invoke(null, new object[] { 2 });
 
         EndTest(r1 == 1 && r2 == 2);
-=======
-    static void TestSystemNative_GetSystemTimeAsTicks()
-    {
-        StartTest("TestSystemNative_GetSystemTimeAsTicks");
-
-        DateTime d = DateTime.UtcNow;
-
-        EndTest(d.Year >= 2020);
->>>>>>> theirs
     }
 
+=======
+    static void TestImplicitUShortToUInt()
+    {
+        StartTest("test extend of shorts with MSB set");
+        uint start;
+        start = ReadUInt16();
+        EndTest(start == 0x0000828f);
+    }
+
+    static ushort ReadUInt16()
+    {
+        // something with MSB set
+        return 0x828f;
+    }
+
+>>>>>>> corert/master
     [DllImport("*")]
     private static unsafe extern int printf(byte* str, byte* unused);
 }

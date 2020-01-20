@@ -334,6 +334,8 @@ internal static class Program
 
         TestSystemNative_GetSystemTimeAsTicks();
 
+        TestImplicitUShortToUInt();
+
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
         System.Diagnostics.Debugger.Break();
@@ -1321,8 +1323,18 @@ internal static class Program
 
         EndTest(d.Year >= 2020);
 }
+
+    static void TestImplicitUShortToUInt()
+    {
+        StartTest("test extend of shorts with MSB set");
+        uint start;
+        start = ReadUInt16();
+        EndTest(start == 0x0000828f);
+    }
+
     static ushort ReadUInt16()
     {
+        // something with MSB set
         return 0x828f;
     }
 

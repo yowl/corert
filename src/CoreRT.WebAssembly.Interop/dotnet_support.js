@@ -126,7 +126,7 @@ var DotNetSupportLib = {
 //        eval(jsFuncName + '(' + p1 + ',' + p2 + ',' + p3 + ');');
 //        var res = func.apply(p1, p2, p3);
 //        exception = 0;
-        return "" + res;
+//        return "" + res;
     },
 
 };

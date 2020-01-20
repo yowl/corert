@@ -1,3 +1,4 @@
+
 // This is a single-file self-contained module to avoid the need for a Webpack build
 var DotNet;
 (function (DotNet) {
@@ -229,7 +230,4 @@ var DotNet;
 //# sourceMappingURL=Microsoft.JSInterop.js.map
 //
 //
-
-Module.mono_bind_static_method=(function() {
-});
 
