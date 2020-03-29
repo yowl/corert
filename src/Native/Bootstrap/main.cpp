@@ -303,22 +303,22 @@ extern "C" void* PalGetModuleHandleFromPointer(void* pointer);
 
 #endif // !CPPCODEGEN
 
-extern "C" void GetRuntimeException();
-extern "C" void FailFast();
-extern "C" void AppendExceptionStackFrame();
-extern "C" void GetSystemArrayEEType();
-extern "C" void OnFirstChanceException();
+extern "C" void * GetRuntimeException(void * p1);
+extern "C" void FailFast(void * p1, void * p2, void * p3, void * p4);
+extern "C" void AppendExceptionStackFrame(void * p1, void * p2, void * p3);
+extern "C" void * GetSystemArrayEEType();
+extern "C" void OnFirstChanceException(void * p);
 
 typedef void(*pfn)();
 
 static const pfn c_classlibFunctions[] = {
-    &GetRuntimeException,
-    &FailFast,
+    (void (*)(void))&GetRuntimeException,
+    (void (*)(void))&FailFast,
     nullptr, // &UnhandledExceptionHandler,
-    &AppendExceptionStackFrame,
+    (void (*)(void))&AppendExceptionStackFrame,
     nullptr, // &CheckStaticClassConstruction,
-    &GetSystemArrayEEType,
-    &OnFirstChanceException,
+    (void (*)(void))&GetSystemArrayEEType,
+    (void (*)(void))&OnFirstChanceException,
     nullptr, // &DebugFuncEvalHelper,
     nullptr, // &DebugFuncEvalAbortHelper,
 };

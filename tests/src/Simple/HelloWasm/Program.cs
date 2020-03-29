@@ -28,7 +28,7 @@ internal static class Program
         TestSByteExtend(); 
         TestMetaData();
 
-        TestGC();
+//        TestGC();
 
         Add(1, 2);
         PrintLine("Hello from C#!");
@@ -330,6 +330,8 @@ internal static class Program
         TestInitializeArray();
 
         TestImplicitUShortToUInt();
+
+        TestThreads();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -1395,6 +1397,18 @@ internal static class Program
         uint start;
         start = ReadUInt16();
         EndTest(start == 0x0000828f);
+    }
+
+    static void TestThreads()
+    {
+        var t = new Thread(DoSomeWork);
+        t.Start();
+        t.Join();
+    }
+
+    static void DoSomeWork()
+    {
+        Thread.Sleep(100);
     }
 
     static ushort ReadUInt16()

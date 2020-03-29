@@ -282,6 +282,9 @@ convert_to_absolute_path(SERVER_GC_SOURCES ${SERVER_GC_SOURCES})
 
 convert_to_absolute_path(RUNTIME_SOURCES_ARCH_ASM ${RUNTIME_SOURCES_ARCH_ASM})
 
+if(CLR_CMAKE_PLATFORM_ARCH_WASM)
+  add_compile_options(-s USE_PTHREADS=1)
+endif()
 if(NOT CLR_CMAKE_PLATFORM_ARCH_WASM)
   add_subdirectory(Full)
 endif()
