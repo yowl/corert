@@ -275,13 +275,46 @@ See the LICENSE file in the project root for more information.
 
   </Target>
 
-  <Target Name="LinkNative"
+  <Target Name="WasmObject"
       Inputs="$(NativeObject);@(NativeLibrary)"
-      Outputs="$(NativeBinary)"
+      Outputs="$(WasmObject)"
       DependsOnTargets="$(LinkNativeDependsOn);GenerateResFile">
 
     <ItemGroup>
-      <CustomLinkerArg Include="&quot;$(NativeObject)&quot;" />
+      <CustomLinkerArg Include="&quot;$(WasmObject)&quot;" />
+      <CustomLinkerArg Include="-o &quot;$(WasmObject)&quot;" Condition="'$(OS)' != 'Windows_NT'" />
+      <CustomLinkerArg Condition="Exists('$(_Win32ResFile)')" Include="&quot;$(_Win32ResFile)&quot;" />
+    </ItemGroup>    
+
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName($(NativeBinary)))" />
+
+    <Exec Command="$(CppLinker) @(CustomLinkerArg, ' ')" Condition="'$(OS)' != 'Windows_NT' and '$(NativeLib)' != 'Static' and '$(NativeCodeGen)' != 'wasm'" />
+    <Exec Command="$(CppLibCreator) @(CustomLibArg, ' ')" Condition="'$(OS)' != 'Windows_NT' and '$(NativeLib)' == 'Static' and '$(NativeCodeGen)' != 'wasm'" />
+
+    <WriteLinesToFile File="$(NativeIntermediateOutputPath)link.rsp" Lines="@(CustomLinkerArg)" Overwrite="true" Condition="'$(OS)' == 'Windows_NT' and '$(NativeLib)' != 'Static'" />
+    <Exec Command="$(CppLinker)  @&quot;$(NativeIntermediateOutputPath)link.rsp&quot;" Condition="'$(OS)' == 'Windows_NT' and '$(NativeLib)' != 'Static' and '$(NativeCodeGen)' != 'wasm'" />
+    <WriteLinesToFile File="$(NativeIntermediateOutputPath)lib.rsp" Lines="@(CustomLibArg)" Overwrite="true" Condition="'$(OS)' == 'Windows_NT' and '$(NativeLib)' == 'Static'" />
+    <Exec Command="$(CppLibCreator)  @&quot;$(NativeIntermediateOutputPath)lib.rsp&quot;" Condition="'$(OS)' == 'Windows_NT' and '$(NativeLib)' == 'Static' and '$(NativeCodeGen)' != 'wasm'" />
+    
+    <PropertyGroup>
+      <EmccArgs>&quot;$(NativeObject)&quot; -c -o &quot;$(WasmObject)&quot; -s WASM=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s USE_PTHREADS=1</EmccArgs>
+      <EmccArgs Condition="'$(Configuration)'=='Release'">$(EmccArgs) -O2</EmccArgs>
+      <EmccArgs Condition="'$(Configuration)'=='Debug'">$(EmccArgs) -g3</EmccArgs>
+    </PropertyGroup>
+    
+    <Exec Command="&quot;$(EMSDK)/upstream/emscripten/emcc.bat&quot; $(EmccArgs)" Condition="'$(NativeCodeGen)' == 'wasm' and '$(EMSDK)' != '' and '$(OS)' == 'Windows_NT'" />
+    <Exec Command="&quot;$(EMSDK)/upstream/emscripten/emcc&quot; $(EmccArgs)" Condition="'$(NativeCodeGen)' == 'wasm' and '$(EMSDK)' != '' and '$(OS)' != 'Windows_NT'" />
+    <Message Text="Emscripten not found, not linking WebAssembly. To enable WebAssembly linking, install Emscripten and ensure the EMSDK environment variable points to the directory containing upstream/emscripten/emcc.bat"
+             Condition="'$(NativeCodeGen)' == 'wasm' and '$(EMSDK)' == ''" />
+  </Target>
+
+  <Target Name="LinkNative"
+      Inputs="$(WasmObject);@(NativeLibrary)"
+      Outputs="$(NativeBinary)"
+      DependsOnTargets="WasmObject;$(LinkNativeDependsOn);GenerateResFile">
+
+    <ItemGroup>
+      <CustomLinkerArg Include="&quot;$(WasmObject)&quot;" />
       <CustomLinkerArg Include="-o &quot;$(NativeBinary)&quot;" Condition="'$(OS)' != 'Windows_NT'" />
       <CustomLinkerArg Include="/OUT:&quot;$(NativeBinary)&quot;" Condition="'$(OS)' == 'Windows_NT'" />
       <CustomLinkerArg Include="/DEF:&quot;$(ExportsFile)&quot;" Condition="'$(OS)' == 'Windows_NT' and $(ExportsFile) != ''" />
@@ -312,7 +345,7 @@ See the LICENSE file in the project root for more information.
     <Exec Command="$(CppLibCreator)  @&quot;$(NativeIntermediateOutputPath)lib.rsp&quot;" Condition="'$(OS)' == 'Windows_NT' and '$(NativeLib)' == 'Static' and '$(NativeCodeGen)' != 'wasm'" />
     
     <PropertyGroup>
-      <EmccArgs>&quot;$(NativeObject)&quot; -o &quot;$(NativeBinary)&quot; -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 --emrun -s USE_PTHREADS=1 -s PROXY_TO_PTHREAD=1 -s WASM_MEM_MAX=100Mb</EmccArgs>
+      <EmccArgs>&quot;$(NativeObject)&quot; -o &quot;$(NativeBinary)&quot; -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 --emrun -s USE_PTHREADS=1 -s PROXY_TO_PTHREAD=1 -s WASM_MEM_MAX=200Mb -s INITIAL_MEMORY=167772160</EmccArgs>
       <EmccArgs Condition="'$(Platform)'=='wasm'">$(EmccArgs) &quot;$(IlcPath)/sdk/libPortableRuntime.a&quot; &quot;$(IlcPath)/sdk/libbootstrappercpp.a&quot; &quot;$(IlcPath)/sdk/libSystem.Private.CoreLib.Native.a&quot; </EmccArgs>
       <EmccArgs Condition="'$(Configuration)'=='Release'">$(EmccArgs) -O2 --llvm-lto 2</EmccArgs>
       <EmccArgs Condition="'$(Configuration)'=='Debug'">$(EmccArgs) -g3</EmccArgs>

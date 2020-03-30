@@ -1401,14 +1401,22 @@ internal static class Program
 
     static void TestThreads()
     {
+        StartTest("Test thread join ");
+        PrintLine("Create thread");
         var t = new Thread(DoSomeWork);
+        PrintLine("Start thread");
         t.Start();
+        PrintLine("Join thread");
         t.Join();
+        PrintLine("Joined");
+        PassTest();
     }
 
     static void DoSomeWork()
     {
+        PrintLine("Thread do work");
         Thread.Sleep(100);
+        PrintLine("Thread ending");
     }
 
     static ushort ReadUInt16()
