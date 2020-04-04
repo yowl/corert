@@ -452,17 +452,20 @@ REDHAWK_PALEXPORT bool REDHAWK_PALAPI PalHasCapability(PalCapability capability)
 
 #if HAVE_THREAD_LOCAL
 
+extern void printf(void * s);
 struct TlsDestructionMonitor
 {
     void* m_thread = nullptr;
 
     void SetThread(void* thread)
     {
+    printf("set thread\n");
         m_thread = thread;
     }
 
     ~TlsDestructionMonitor()
     {
+        printf("dest\n");
         if (m_thread != nullptr)
         {
             RuntimeThreadShutdown(m_thread);
@@ -486,6 +489,7 @@ DECLSPEC_THREAD intptr_t tls_thunkData;
 //  thread        - thread to attach
 extern "C" void PalAttachThread(void* thread)
 {
+    printf("attach\n");
 #if HAVE_THREAD_LOCAL
     tls_destructionMonitor.SetThread(thread);
 #else

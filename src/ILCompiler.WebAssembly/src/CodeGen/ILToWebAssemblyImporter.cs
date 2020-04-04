@@ -2750,6 +2750,53 @@ namespace Internal.IL
             }
         }
 
+        void PrintInt32(LLVMValueRef ptr)
+        {
+            int offset = GetTotalParameterOffset() + GetTotalLocalOffset();
+            LLVMValueRef shadowStack = _builder.BuildGEP(_currentFunclet.GetParam(0),
+                new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)offset, false), },
+                String.Empty);
+            PrintInt32(ptr, shadowStack, _builder);
+        }
+
+        void PrintInt32(LLVMValueRef ptr, LLVMValueRef shadowStack, LLVMBuilderRef builder)
+        {
+            builder.BuildCall(
+                GetOrCreateLLVMFunction("S_P_TypeLoader_System_Collections_Generic_X__PrintUByte",
+                    LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new[]
+                        {
+                            LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0),
+                            LLVMTypeRef.Int32
+                        },
+                        false)),
+                new LLVMValueRef[]
+                {
+                    CastIfNecessary(_builder, shadowStack, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)),
+                    ptr
+                }, string.Empty);
+        }
+
+        void PrintUByte(LLVMValueRef ptr, LLVMBuilderRef builder)
+        {
+            var t = LLVMTypeRef.CreateStruct(new[] {LLVMTypeRef.Int8, LLVMTypeRef.Int8}, true);
+            var str = builder.BuildAlloca(t);
+            var ix0 = builder.BuildStructGEP(str, 0);
+            builder.BuildStore(ptr, ix0);
+            builder.BuildCall(
+                GetOrCreateLLVMFunction("printf",
+                    LLVMTypeRef.CreateFunction(LLVMTypeRef.Int32, new[]
+                        {
+                            LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0),
+                            LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)
+                        },
+                        false)),
+                new LLVMValueRef[]
+                {
+                    CastIfNecessary(builder, str, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)),
+                    LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0))
+                }, string.Empty);
+        }
+
         private void EmitNativeToManagedThunk(WebAssemblyCodegenCompilation compilation, MethodDesc method, string nativeName, LLVMValueRef managedFunction)
         {
             if (_pinvokeMap.TryGetValue(nativeName, out MethodDesc existing))
@@ -2786,9 +2833,9 @@ namespace Internal.IL
             builder.BuildCondBr(shadowStackNull, allocateShadowStackBlock, managedCallBlock);
 
             builder.PositionAtEnd(allocateShadowStackBlock);
-
             LLVMValueRef newShadowStack = builder.BuildArrayMalloc(LLVMTypeRef.Int8, BuildConstInt32(1000000), "NewShadowStack");
             builder.BuildStore(newShadowStack, shadowStackPtr);
+            PrintUByte(BuildConstInt8(11), builder);
             builder.BuildBr(managedCallBlock);
 
             builder.PositionAtEnd(managedCallBlock);
