@@ -10,7 +10,9 @@ using System.Runtime.CompilerServices;
 using Internal.Runtime;
 using Internal.Runtime.CompilerServices;
 
-#if BIT64
+using CorElementType = System.Reflection.CorElementType;
+
+#if TARGET_64BIT
 using nuint = System.UInt64;
 #else
 using nuint = System.UInt32;
@@ -408,7 +410,7 @@ namespace System.Runtime
         [DllImport(RuntimeLibrary, EntryPoint = "RhFlushProcessWriteBuffers", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void RhFlushProcessWriteBuffers();
 
-#if !PLATFORM_UNIX
+#if !TARGET_UNIX
         // Wait for any object to be signalled, in a way that's compatible with the CLR's behavior in an STA.
         // ExactSpelling = 'true' to force MCG to resolve it to default
         [DllImport(RuntimeLibrary, ExactSpelling = true)]
@@ -432,11 +434,6 @@ namespace System.Runtime
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
         [RuntimeImport(RuntimeLibrary, "RhGetGCDescSize")]
         internal static extern int RhGetGCDescSize(EETypePtr eeType);
-
-        [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "RhCreateGenericInstanceDescForType2")]
-        internal static extern unsafe bool RhCreateGenericInstanceDescForType2(EETypePtr pEEType, int arity, int nonGcStaticDataSize,
-            int nonGCStaticDataOffset, int gcStaticDataSize, int threadStaticsOffset, void* pGcStaticsDesc, void* pThreadStaticsDesc, int* pGenericVarianceFlags);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
         [RuntimeImport(RuntimeLibrary, "RhNewInterfaceDispatchCell")]
@@ -495,10 +492,6 @@ namespace System.Runtime
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
         [RuntimeImport(RuntimeLibrary, "RhGetRuntimeHelperForType")]
         internal static extern unsafe IntPtr RhGetRuntimeHelperForType(EETypePtr pEEType, RuntimeHelperKind kind);
-
-        [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "RhGetDispatchMapForType")]
-        internal static extern unsafe IntPtr RhGetDispatchMapForType(EETypePtr pEEType);
 
         //
         // Support for GC and HandleTable callouts.
@@ -582,10 +575,6 @@ namespace System.Runtime
         internal static extern IntPtr RhGetOSModuleForMrt();
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "RhGetThreadStaticFieldAddress")]
-        internal static extern unsafe byte* RhGetThreadStaticFieldAddress(EETypePtr pEEType, int threadStaticsBlockOffset, int fieldOffset);
-
-        [MethodImplAttribute(MethodImplOptions.InternalCall)]
         [RuntimeImport(RuntimeLibrary, "RhGetThreadStaticStorageForModule")]
         internal static unsafe extern object[] RhGetThreadStaticStorageForModule(int moduleIndex);
 
@@ -614,10 +603,6 @@ namespace System.Runtime
         public static extern IntPtr RhGetCodeTarget(IntPtr pCode);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-        [RuntimeImport(RuntimeLibrary, "RhGetJmpStubCodeTarget")]
-        internal static extern IntPtr RhGetJmpStubCodeTarget(IntPtr pCode);
-
-        [MethodImplAttribute(MethodImplOptions.InternalCall)]
         [RuntimeImport(RuntimeLibrary, "RhGetTargetOfUnboxingAndInstantiatingStub")]
         public static extern IntPtr RhGetTargetOfUnboxingAndInstantiatingStub(IntPtr pCode);
 
@@ -626,7 +611,7 @@ namespace System.Runtime
         //
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
         [RuntimeImport(RuntimeLibrary, "RhGetModuleFileName")]
-#if PLATFORM_UNIX
+#if TARGET_UNIX
         internal static extern unsafe int RhGetModuleFileName(IntPtr moduleHandle, out byte* moduleName);
 #else
         internal static extern unsafe int RhGetModuleFileName(IntPtr moduleHandle, out char* moduleName);
@@ -661,10 +646,10 @@ namespace System.Runtime
         [RuntimeImport(RuntimeLibrary, "RhGetCurrentThreadStackBounds")]
         internal static extern void RhGetCurrentThreadStackBounds(out IntPtr pStackLow, out IntPtr pStackHigh);
 
-#if PLATFORM_UNIX
+#if TARGET_UNIX
         [MethodImpl(MethodImplOptions.InternalCall)]
         [RuntimeImport(RuntimeLibrary, "RhSetThreadExitCallback")]
-        internal static extern bool RhSetThreadExitCallback(IntPtr pCallback);
+        internal static extern void RhSetThreadExitCallback(IntPtr pCallback);
 #endif
 
         // Functions involved in thunks from managed to managed functions (Universal transition transitions 
@@ -768,7 +753,7 @@ namespace System.Runtime
         internal extern static long InterlockedCompareExchange(ref long location1, long value, long comparand);
 
         [MethodImplAttribute(MethodImplOptions.InternalCall)]
-#if BIT64
+#if TARGET_64BIT
         [RuntimeImport(RuntimeLibrary, "RhpLockCmpXchg64")]
 #else
         [RuntimeImport(RuntimeLibrary, "RhpLockCmpXchg32")]
@@ -1070,10 +1055,10 @@ namespace System.Runtime
         internal static extern unsafe float modff(float x, float* intptr);
 
         [DllImport(RuntimeImports.RuntimeLibrary, ExactSpelling = true)]
-        internal static extern unsafe byte* memmove(byte* dmem, byte* smem, nuint size);
+        internal static extern unsafe void* memmove(byte* dmem, byte* smem, nuint size);
 
         [DllImport(RuntimeImports.RuntimeLibrary, ExactSpelling = true)]
-        internal static extern unsafe byte* memset(byte* mem, int value, nuint size);
+        internal static extern unsafe void* memset(byte* mem, int value, nuint size);
 
         [MethodImpl(MethodImplOptions.InternalCall)]
         [RuntimeImport(RuntimeLibrary, "RhpArrayCopy")]
@@ -1083,28 +1068,7 @@ namespace System.Runtime
         [RuntimeImport(RuntimeLibrary, "RhpArrayClear")]
         internal static extern bool TryArrayClear(Array array, int index, int length);
 
-        // Only the values defined below are valid. Any other value returned from RhGetCorElementType
-        // indicates only that the type is not one of the primitives defined below and is otherwise undefined
-        // and subject to change.
-        internal enum RhCorElementType : byte
-        {
-            ELEMENT_TYPE_BOOLEAN = 0x2,
-            ELEMENT_TYPE_CHAR = 0x3,
-            ELEMENT_TYPE_I1 = 0x4,
-            ELEMENT_TYPE_U1 = 0x5,
-            ELEMENT_TYPE_I2 = 0x6,
-            ELEMENT_TYPE_U2 = 0x7,
-            ELEMENT_TYPE_I4 = 0x8,
-            ELEMENT_TYPE_U4 = 0x9,
-            ELEMENT_TYPE_I8 = 0xa,
-            ELEMENT_TYPE_U8 = 0xb,
-            ELEMENT_TYPE_R4 = 0xc,
-            ELEMENT_TYPE_R8 = 0xd,
-            ELEMENT_TYPE_I = 0x18,
-            ELEMENT_TYPE_U = 0x19,
-        }
-
-        internal static RhCorElementTypeInfo GetRhCorElementTypeInfo(RuntimeImports.RhCorElementType elementType)
+        internal static RhCorElementTypeInfo GetRhCorElementTypeInfo(CorElementType elementType)
         {
             return RhCorElementTypeInfo.GetRhCorElementTypeInfo(elementType);
         }
@@ -1149,14 +1113,14 @@ namespace System.Runtime
             // This is a port of InvokeUtil::CanPrimitiveWiden() in the desktop runtime. This is used by various apis such as Array.SetValue()
             // and Delegate.DynamicInvoke() which allow value-preserving widenings from one primitive type to another.
             //
-            public bool CanWidenTo(RuntimeImports.RhCorElementType targetElementType)
+            public bool CanWidenTo(CorElementType targetElementType)
             {
                 // Caller expected to ensure that both sides are primitive before calling us.
                 Debug.Assert(this.IsPrimitive);
                 Debug.Assert(GetRhCorElementTypeInfo(targetElementType).IsPrimitive);
 
                 // Once we've asserted that the target is a primitive, we can also assert that it is >= ET_BOOLEAN.
-                Debug.Assert(targetElementType >= RuntimeImports.RhCorElementType.ELEMENT_TYPE_BOOLEAN);
+                Debug.Assert(targetElementType >= CorElementType.ELEMENT_TYPE_BOOLEAN);
                 byte targetElementTypeAsByte = (byte)targetElementType;
                 ushort mask = (ushort)(1 << targetElementTypeAsByte);  // This is expected to overflow on larger ET_I and ET_U - this is ok and anticipated.
                 if (0 != (_widenMask & mask))
@@ -1164,7 +1128,7 @@ namespace System.Runtime
                 return false;
             }
 
-            internal static RhCorElementTypeInfo GetRhCorElementTypeInfo(RuntimeImports.RhCorElementType elementType)
+            internal static RhCorElementTypeInfo GetRhCorElementTypeInfo(CorElementType elementType)
             {
                 // The _lookupTable array only covers a subset of RhCorElementTypes, so we return a default 
                 // info when someone asks for an elementType which does not have an entry in the table.
@@ -1189,7 +1153,7 @@ namespace System.Runtime
             private ushort _widenMask;
 
 
-#if BIT64
+#if TARGET_64BIT
             const byte log2PointerSize = 3;
 #else
             private const byte log2PointerSize = 2;

@@ -62,14 +62,19 @@ namespace Internal.Runtime.TypeLoader
             rtth.ToEETypePtr()->GenericDefinition = genericDefinitionHandle.ToEETypePtr();
         }
 
+        public static unsafe void SetGenericVariance(this RuntimeTypeHandle rtth, int argumentIndex, GenericVariance variance)
+        {
+            rtth.ToEETypePtr()->GenericVariance[argumentIndex] = variance;
+        }
+
+        public static unsafe void SetGenericArity(this RuntimeTypeHandle rtth, uint arity)
+        {
+            rtth.ToEETypePtr()->GenericArity = arity;
+        }
+
         public static unsafe void SetGenericArgument(this RuntimeTypeHandle rtth, int argumentIndex, RuntimeTypeHandle argumentType)
         {
             rtth.ToEETypePtr()->GenericArguments[argumentIndex].Value = argumentType.ToEETypePtr();
-        }
-
-        public static unsafe void SetNullableType(this RuntimeTypeHandle rtth, RuntimeTypeHandle T_typeHandle)
-        {
-            rtth.ToEETypePtr()->NullableType = T_typeHandle.ToEETypePtr();
         }
 
         public static unsafe void SetRelatedParameterType(this RuntimeTypeHandle rtth, RuntimeTypeHandle relatedTypeHandle)
@@ -139,9 +144,12 @@ namespace Internal.Runtime.TypeLoader
             bool successful = false;
             IntPtr eeTypePtrPlusGCDesc = IntPtr.Zero;
             IntPtr dynamicDispatchMapPtr = IntPtr.Zero;
+            IntPtr writableDataPtr = IntPtr.Zero;
             DynamicModule* dynamicModulePtr = null;
             IntPtr gcStaticData = IntPtr.Zero;
             IntPtr gcStaticsIndirection = IntPtr.Zero;
+            IntPtr nonGcStaticData = IntPtr.Zero;
+            IntPtr genericComposition = IntPtr.Zero;
 
             try
             {
@@ -175,9 +183,7 @@ namespace Internal.Runtime.TypeLoader
                 bool isGenericEETypeDef = false;
                 bool isAbstractClass;
                 bool isByRefLike;
-#if EETYPE_TYPE_MANAGER
                 IntPtr typeManager = IntPtr.Zero;
-#endif
 
                 if (state.RuntimeInterfaces != null)
                 {
@@ -200,20 +206,14 @@ namespace Internal.Runtime.TypeLoader
                     isGeneric = pTemplateEEType->IsGeneric;
                     isAbstractClass = pTemplateEEType->IsAbstract && !pTemplateEEType->IsInterface;
                     isByRefLike = pTemplateEEType->IsByRefLike;
-#if EETYPE_TYPE_MANAGER
                     typeManager = pTemplateEEType->PointerToTypeManager;
-#endif
                     Debug.Assert(pTemplateEEType->NumInterfaces == runtimeInterfacesLength);
                 }
                 else if (state.TypeBeingBuilt.IsGenericDefinition)
                 {
                     flags = (ushort)EETypeKind.GenericTypeDefEEType;
                     isValueType = state.TypeBeingBuilt.IsValueType;
-                    if (isValueType)
-                        flags |= (ushort)EETypeFlags.ValueTypeFlag;
-
-                    if (state.TypeBeingBuilt.IsInterface)
-                        flags |= (ushort)EETypeFlags.IsInterfaceFlag;
+                    flags = EETypeBuilderHelpers.ComputeFlags(state.TypeBeingBuilt);
                     hasFinalizer = false;
                     isArray = false;
                     isNullable = false;
@@ -241,17 +241,21 @@ namespace Internal.Runtime.TypeLoader
 
                     if (state.TypeBeingBuilt.HasVariance)
                     {
-                        state.GenericVarianceFlags = new int[state.TypeBeingBuilt.Instantiation.Length];
+                        state.GenericVarianceFlags = new GenericVariance[state.TypeBeingBuilt.Instantiation.Length];
                         int i = 0;
 
                         foreach (GenericParameterDesc gpd in state.TypeBeingBuilt.GetTypeDefinition().Instantiation)
                         {
-                            state.GenericVarianceFlags[i] = (int)gpd.Variance;
+                            Debug.Assert((int)Internal.Runtime.GenericVariance.Covariant == (int)Internal.TypeSystem.GenericVariance.Covariant);
+                            Debug.Assert((int)Internal.Runtime.GenericVariance.Contravariant == (int)Internal.TypeSystem.GenericVariance.Contravariant);
+                            state.GenericVarianceFlags[i] = (GenericVariance)gpd.Variance;
                             i++;
                         }
                         Debug.Assert(i == state.GenericVarianceFlags.Length);
                     }
                 }
+
+                flags |= (ushort)EETypeFlags.IsDynamicTypeFlag;
 
                 // TODO! Change to if template is Universal or non-Existent
                 if (state.TypeSize.HasValue)
@@ -295,8 +299,6 @@ namespace Internal.Runtime.TypeLoader
                     optionalFields = new OptionalFieldsRuntimeBuilder(pTemplateEEType != null ? pTemplateEEType->OptionalFieldsPtr : null);
 
                     UInt32 rareFlags = optionalFields.GetFieldValue(EETypeOptionalFieldTag.RareFlags, 0);
-                    rareFlags |= (uint)EETypeRareFlags.IsDynamicTypeFlag;          // Set the IsDynamicTypeFlag
-                    rareFlags &= ~(uint)EETypeRareFlags.NullableTypeViaIATFlag;    // Remove the NullableTypeViaIATFlag flag
 
                     if (state.NumSealedVTableEntries > 0)
                         rareFlags |= (uint)EETypeRareFlags.HasSealedVTableEntriesFlag;
@@ -313,14 +315,14 @@ namespace Internal.Runtime.TypeLoader
                     if (state.ThreadDataSize != 0)
                         rareFlags |= (uint)EETypeRareFlags.IsDynamicTypeWithThreadStatics;
 
-#if ARM
+#if TARGET_ARM
                     if (state.FieldAlignment == 8)
                         rareFlags |= (uint)EETypeRareFlags.RequiresAlign8Flag;
                     else
                         rareFlags &= ~(uint)EETypeRareFlags.RequiresAlign8Flag;
 #endif
 
-#if ARM || ARM64
+#if TARGET_ARM || TARGET_ARM64
                     if (state.IsHFA)
                         rareFlags |= (uint)EETypeRareFlags.IsHFAFlag;
                     else
@@ -343,7 +345,6 @@ namespace Internal.Runtime.TypeLoader
 
                     if (isNullable)
                     {
-                        rareFlags |= (uint)EETypeRareFlags.IsNullableFlag;
                         uint nullableValueOffset = state.NullableValueOffset;
 
                         // The stored offset is never zero (Nullable has a boolean there indicating whether the value is valid). 
@@ -355,7 +356,6 @@ namespace Internal.Runtime.TypeLoader
                     }
                     else
                     {
-                        rareFlags &= ~(uint)EETypeRareFlags.IsNullableFlag;
                         optionalFields.ClearField(EETypeOptionalFieldTag.NullableValueOffset);
                     }
 
@@ -388,14 +388,12 @@ namespace Internal.Runtime.TypeLoader
                     // 2) The number of Interfaces (from the template)
                     // 3) Whether or not there is a finalizer (from the template)
                     // 4) Optional fields size
-                    // 5) Whether or not the type is nullable (from the template)
-                    // 6) Whether or not the type has sealed virtuals (from the TypeBuilderState)
+                    // 5) Whether or not the type has sealed virtuals (from the TypeBuilderState)
                     int cbEEType = (int)EEType.GetSizeofEEType(
                         numVtableSlots,
                         runtimeInterfacesLength,
                         hasFinalizer,
                         true,
-                        isNullable,
                         state.NumSealedVTableEntries > 0,
                         isGeneric,
                         state.NonGcDataSize != 0,
@@ -428,9 +426,7 @@ namespace Internal.Runtime.TypeLoader
                     pEEType->NumVtableSlots = numVtableSlots;
                     pEEType->NumInterfaces = runtimeInterfacesLength;
                     pEEType->HashCode = hashCodeOfNewType;
-#if EETYPE_TYPE_MANAGER
                     pEEType->PointerToTypeManager = typeManager;
-#endif
 
                     // Write the GCDesc
                     bool isSzArray = isArray ? state.ArrayRank < 1 : false;
@@ -571,6 +567,13 @@ namespace Internal.Runtime.TypeLoader
                     }
                 }
 
+                if (EEType.SupportsWritableData)
+                {
+                    writableDataPtr = MemoryHelpers.AllocateMemory(WritableData.GetSize(IntPtr.Size));
+                    MemoryHelpers.Memset(writableDataPtr, WritableData.GetSize(IntPtr.Size), 0);
+                    pEEType->WritableData = writableDataPtr;
+                }
+
                 // Create a new DispatchMap for the type
                 if (requiresDynamicDispatchMap)
                 {
@@ -616,19 +619,7 @@ namespace Internal.Runtime.TypeLoader
                 {
                     // Use object as the template type for non-template based EETypes. This will
                     // allow correct Module identification for types.
-
-                    if (state.TypeBeingBuilt.HasVariance)
-                    {
-                        // TODO! We need to have a variant EEType here if the type has variance, as the 
-                        // CreateGenericInstanceDescForType requires it. However, this is a ridiculous api surface
-                        // When we remove GenericInstanceDescs from the product, get rid of this weird special
-                        // case
-                        pEEType->DynamicTemplateType = typeof(IEnumerable<int>).TypeHandle.ToEETypePtr();
-                    }
-                    else
-                    {
-                        pEEType->DynamicTemplateType = typeof(object).TypeHandle.ToEETypePtr();
-                    }
+                    pEEType->DynamicTemplateType = typeof(object).TypeHandle.ToEETypePtr();
                 }
 
                 int nonGCStaticDataOffset = 0;
@@ -677,27 +668,22 @@ namespace Internal.Runtime.TypeLoader
 
                 if (isGeneric)
                 {
-                    if (!RuntimeAugments.CreateGenericInstanceDescForType(*(RuntimeTypeHandle*)&pEEType, arity, state.NonGcDataSize, nonGCStaticDataOffset,
-                        state.GcDataSize, (int)state.ThreadStaticOffset, state.GcStaticDesc, state.ThreadStaticDesc, state.GenericVarianceFlags))
+                    genericComposition = MemoryHelpers.AllocateMemory(EEType.GetGenericCompositionSize(arity, pEEType->HasGenericVariance));
+                    pEEType->SetGenericComposition(genericComposition);
+
+                    if (state.NonGcDataSize > 0)
                     {
-                        throw new OutOfMemoryException();
+                        nonGcStaticData = MemoryHelpers.AllocateMemory(state.NonGcDataSize);
+                        MemoryHelpers.Memset(nonGcStaticData, state.NonGcDataSize, 0);
+                        Debug.Assert(nonGCStaticDataOffset <= state.NonGcDataSize);
+                        pEEType->DynamicNonGcStaticsData = (IntPtr)((byte*)nonGcStaticData + nonGCStaticDataOffset);
                     }
                 }
-                else
+
+                if (!isGenericEETypeDef && state.ThreadDataSize != 0)
                 {
-                    Debug.Assert(arity == 0 || isGenericEETypeDef);
-                    // We don't need to report the non-gc and gc static data regions and allocate them for non-generics, 
-                    // as we currently place these fields directly into the image
-                    if (!isGenericEETypeDef && state.ThreadDataSize != 0)
-                    {
-                        // Types with thread static fields ALWAYS get a GID. The GID is used to perform GC 
-                        // and lifetime management of the thread static data. However, these GIDs are only used for that
-                        // so the specified GcDataSize, etc are 0
-                        if (!RuntimeAugments.CreateGenericInstanceDescForType(*(RuntimeTypeHandle*)&pEEType, 0, 0, 0, 0, (int)state.ThreadStaticOffset, IntPtr.Zero, state.ThreadStaticDesc, null))
-                        {
-                            throw new OutOfMemoryException();
-                        }
-                    }
+                    // TODO: thread statics
+                    throw new NotSupportedException();
                 }
 
                 if (state.Dictionary != null)
@@ -729,6 +715,12 @@ namespace Internal.Runtime.TypeLoader
                         RuntimeAugments.RhHandleFree(gcStaticData);
                     if (gcStaticsIndirection != IntPtr.Zero)
                         MemoryHelpers.FreeMemory(gcStaticsIndirection);
+                    if (genericComposition != IntPtr.Zero)
+                        MemoryHelpers.FreeMemory(genericComposition);
+                    if (nonGcStaticData != IntPtr.Zero)
+                        MemoryHelpers.FreeMemory(nonGcStaticData);
+                    if (writableDataPtr != IntPtr.Zero)
+                        MemoryHelpers.FreeMemory(writableDataPtr);
                 }
             }
         }
@@ -854,7 +846,7 @@ namespace Internal.Runtime.TypeLoader
 
             void** baseOffsetPtr = (void**)gcdesc - 1;
 
-#if BIT64
+#if TARGET_64BIT
             int* ptr = (int*)baseOffsetPtr - 1;
 #else
             short* ptr = (short*)baseOffsetPtr - 1;
@@ -1047,6 +1039,9 @@ namespace Internal.Runtime.TypeLoader
             state.HalfBakedRuntimeTypeHandle.ToEETypePtr()->RelatedParameterType = pointeeTypeHandle.ToEETypePtr();
 
             // We used a pointer as a template. We need to make this a byref.
+            Debug.Assert(state.HalfBakedRuntimeTypeHandle.ToEETypePtr()->ElementType == EETypeElementType.Pointer);
+            state.HalfBakedRuntimeTypeHandle.ToEETypePtr()->Flags = EETypeBuilderHelpers.ComputeFlags(byRefType);
+            Debug.Assert(state.HalfBakedRuntimeTypeHandle.ToEETypePtr()->ElementType == EETypeElementType.ByRef);
             Debug.Assert(state.HalfBakedRuntimeTypeHandle.ToEETypePtr()->ParameterizedTypeShape == ParameterizedTypeShapeConstants.Pointer);
             state.HalfBakedRuntimeTypeHandle.ToEETypePtr()->ParameterizedTypeShape = ParameterizedTypeShapeConstants.ByRef;
 
@@ -1070,7 +1065,7 @@ namespace Internal.Runtime.TypeLoader
                 Debug.Assert(IntPtr.Zero == state.GcStaticDesc);
                 Debug.Assert(IntPtr.Zero == state.ThreadStaticDesc);
 
-                // Pointers and ByRefs only differ by the ParameterizedTypeShape value.
+                // Pointers and ByRefs only differ by the ParameterizedTypeShape and ElementType value.
                 RuntimeTypeHandle templateTypeHandle = typeof(void*).TypeHandle;
 
                 pTemplateEEType = templateTypeHandle.ToEETypePtr();

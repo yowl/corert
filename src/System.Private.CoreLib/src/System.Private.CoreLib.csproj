@@ -9,8 +9,7 @@
     <IsCoreAssembly>true</IsCoreAssembly>
     <!-- CoreLib has to be marked as CLSCompliant to allow building CLSCompliant assemblies against it -->
     <CLSCompliant>true</CLSCompliant>
-    <!-- Use MSFT assembly key for compatibility with uapaot targeting pack -->
-    <AssemblyKey>MSFT</AssemblyKey>
+    <AssemblyKey>SilverlightPlatform</AssemblyKey>
     <IsDotNetFrameworkProductAssembly>true</IsDotNetFrameworkProductAssembly>
     <!-- Disable nullability-related warnings -->
     <NoWarn>$(NoWarn);CS8600;CS8601;CS8602;CS8603;CS8604;CS8605;CS8606;CS8608;CS8609;CS8610;CS8611;CS8612;CS8614;CS8615;CS8617;CS8618;CS8620;CS8622;CS8625;CS8626;CS8631;CS8632;CS8634;CS8653</NoWarn>
@@ -29,7 +28,7 @@
     <ExcludeAssemblyInfoPartialFile>true</ExcludeAssemblyInfoPartialFile>
     <TargetsCoreRT>true</TargetsCoreRT>
     <UseSyncTable>true</UseSyncTable>
-    <DefineConstants>netcoreapp;EETYPE_TYPE_MANAGER;ES_BUILD_PN;ES_SESSION_INFO;$(DefineConstants)</DefineConstants>
+    <DefineConstants>SYSTEM_PRIVATE_CORELIB;NETCOREAPP;ES_BUILD_PN;ES_SESSION_INFO;$(DefineConstants)</DefineConstants>
   </PropertyGroup>
   <PropertyGroup>
     <DefineConstants Condition="'$(UseSyncTable)' == 'true'">FEATURE_SYNCTABLE;$(DefineConstants)</DefineConstants>
@@ -84,8 +83,8 @@
     <Compile Include="..\..\Common\src\Internal\Runtime\TypeManagerHandle.cs">
       <Link>Internal\Runtime\TypeManagerHandle.cs</Link>
     </Compile>
-    <Compile Include="..\..\Common\src\Internal\Runtime\TypeManagerHandle.RVA.cs">
-      <Link>Internal\Runtime\TypeManagerHandle.RVA.cs</Link>
+    <Compile Include="..\..\Common\src\Internal\Runtime\TypeManagerHandle.Equality.cs">
+      <Link>Internal\Runtime\TypeManagerHandle.Equality.cs</Link>
     </Compile>
     <Compile Include="..\..\Common\src\Internal\Runtime\CompilerHelpers\StartupDebug.cs">
       <Link>Internal\Runtime\CompilerHelpers\StartupCode\StartupDebug.cs</Link>
@@ -145,7 +144,6 @@
   <ItemGroup>
     <Compile Condition="'$(EnableWinRT)'=='true'" Include="Internal\Runtime\Augments\WinRTInterop.cs" />
     <Compile Include="Interop\Interop.WinRT.cs" Condition="'$(EnableWinRT)' == 'true'" />
-    <Compile Include="System\Runtime\CompilerServices\CastableObject.cs" />
     <Compile Include="System\Runtime\CompilerServices\FeatureRemovedException.cs" />
     <Compile Include="System\Reflection\AssemblyNameHelpers.StrongName.cs" />
     <Compile Include="System\Reflection\AssemblyNameHelpers.cs" />
@@ -234,8 +232,9 @@
     <Compile Include="System\Runtime\InteropServices\NativeFunctionPointerWrapper.cs" />
     <Compile Include="System\Runtime\InteropServices\NativeLibrary.CoreRT.cs" />
     <Compile Include="System\Runtime\InteropServices\PInvokeMarshal.cs" />
-    <Compile Include="System\Runtime\InteropServices\Marshal.CoreRT.cs"  />
+    <Compile Include="System\Runtime\InteropServices\Marshal.CoreRT.cs" />
     <Compile Include="System\Runtime\InteropServices\Marshal.Com.cs" Condition="'$(FeatureCominterop)' == 'true'" />
+    <Compile Include="System\Runtime\InteropServices\MemoryMarshal.CoreRT.cs" />
     <Compile Include="System\Runtime\InteropServices\SafeHandle.CoreRT.cs" />
     <Compile Include="System\Runtime\InteropServices\UnsafeGCHandle.cs" />
     <Compile Include="System\Runtime\Loader\AssemblyLoadContext.CoreRT.cs" />
@@ -308,13 +307,10 @@
     <Compile Include="..\..\Common\src\Interop\Windows\Kernel32\Interop.ConditionVariable.cs">
       <Link>Interop\Windows\Kernel32\Interop.ConditionVariable.cs</Link>
     </Compile>
-    <Compile Include="..\..\Common\src\Interop\Windows\Kernel32\Interop.GetSystemTimes.cs">
-      <Link>Interop\Windows\Kernel32\Interop.GetSystemTimes.cs</Link>
-    </Compile>
     <Compile Include="..\..\Common\src\Interop\Windows\Kernel32\Interop.GetModuleFileName.cs">
       <Link>Interop\Windows\Kernel32\Interop.GetModuleFileName.cs</Link>
     </Compile>
-    <Compile Include="..\shared\Interop\Windows\Kernel32\Interop.GetCurrentThreadId.cs">
+    <Compile Include="..\..\Common\src\Interop\Windows\Kernel32\Interop.GetCurrentThreadId.cs">
       <Link>Interop\Windows\Kernel32\Interop.GetCurrentThreadId.cs</Link>
     </Compile>
     <Compile Include="..\..\Common\src\Interop\Windows\Mincore\Interop.SetLastError.cs">
@@ -383,9 +379,7 @@
     <Compile Condition="'$(EnableWinRT)' == 'true'" Include="..\..\Common\src\Interop\Windows\Mincore\Interop.TimeZone.cs">
       <Link>Interop\Windows\Mincore\Interop.TimeZone.cs</Link>
     </Compile>
-    <Compile Include="..\..\Common\src\Interop\Windows\Interop.Libraries.cs">
-      <Link>Interop\Windows\Interop.Libraries.cs</Link>
-    </Compile>
+    <Compile Include="Interop\Windows\Interop.Libraries.cs" />
     <Compile Include="..\..\Common\src\Interop\Windows\Mincore\Interop.GetLastError.cs">
       <Link>Interop\Windows\Mincore\Interop.GetLastError.cs</Link>
     </Compile>
@@ -410,9 +404,7 @@
     <Compile Include="System\Threading\WaitSubsystem.ThreadWaitInfo.Unix.cs" />
     <Compile Include="System\Threading\WaitSubsystem.Unix.cs" />
     <Compile Include="System\Threading\WaitSubsystem.WaitableObject.Unix.cs" />
-    <Compile Include="..\..\Common\src\Interop\Unix\Interop.Libraries.cs">
-      <Link>Interop\Unix\Interop.Libraries.cs</Link>
-    </Compile>
+    <Compile Include="Interop\Unix\Interop.Libraries.cs" />
     <Compile Include="..\..\Common\src\Interop\Unix\System.Private.CoreLib.Native\Interop.Abort.cs">
       <Link>Interop\Unix\System.Private.CoreLib.Native\Interop.Abort.cs</Link>
     </Compile>
@@ -546,9 +538,6 @@
     <Compile Include="..\..\Runtime.Base\src\System\Runtime\InternalCalls.cs">
       <Link>Runtime.Base\src\System\Runtime\InternalCalls.cs</Link>
     </Compile>
-    <Compile Include="..\..\Runtime.Base\src\System\Runtime\CastableObjectSupport.cs">
-      <Link>Runtime.Base\src\System\Runtime\CastableObjectSupport.cs</Link>
-    </Compile>
     <Compile Include="..\..\Runtime.Base\src\System\Runtime\RuntimeExports.cs">
       <Link>Runtime.Base\src\System\Runtime\RuntimeExports.cs</Link>
     </Compile>
@@ -569,6 +558,12 @@
     </Compile>
     <Compile Include="..\..\Common\src\Internal\Runtime\TransitionBlock.cs">
       <Link>Common\TransitionBlock.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Runtime.Base\src\System\Runtime\ExceptionHandling.wasm.cs" Condition="'$(Platform)'=='wasm'">
+      <Link>Runtime.Base\src\System\Runtime\ExceptionHandling.wasm.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Runtime.Base\src\System\Runtime\StackFrameIterator.wasm.cs" Condition="'$(Platform)'=='wasm'">
+      <Link>Runtime.Base\src\System\Runtime\StackFrameIterator.wasm.cs</Link>
     </Compile>
   </ItemGroup>
   <ItemGroup Condition="'$(InPlaceRuntime)' == 'true'">

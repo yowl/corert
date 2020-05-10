@@ -14,19 +14,19 @@ class Thread;
 // runtime build.
 #define KEEP_THREAD_LAYOUT_CONSTANT
 
-#ifndef BIT64
+#ifndef HOST_64BIT
 # if defined(FEATURE_SVR_GC) || defined(KEEP_THREAD_LAYOUT_CONSTANT)
 #  define SIZEOF_ALLOC_CONTEXT 40
 # else
 #  define SIZEOF_ALLOC_CONTEXT 28
 # endif
-#else // BIT64
+#else // HOST_64BIT
 # if defined(FEATURE_SVR_GC) || defined(KEEP_THREAD_LAYOUT_CONSTANT)
 #  define SIZEOF_ALLOC_CONTEXT 56
 # else
 #  define SIZEOF_ALLOC_CONTEXT 40
 # endif
-#endif // BIT64
+#endif // HOST_64BIT
 
 #define TOP_OF_STACK_MARKER ((PTR_VOID)(UIntNative)(IntNative)-1)
 
@@ -77,9 +77,9 @@ struct ThreadBuffer
     HANDLE                  m_hPalThread;                           // WARNING: this may legitimately be INVALID_HANDLE_VALUE
     void **                 m_ppvHijackedReturnAddressLocation;
     void *                  m_pvHijackedReturnAddress;
-#ifdef BIT64
+#ifdef HOST_64BIT
     UIntNative              m_uHijackedReturnValueFlags;            // used on ARM64 only; however, ARM64 and AMD64 share field offsets
-#endif // BIT64
+#endif // HOST_64BIT
     PTR_ExInfo              m_pExInfoStackHead;
     Object*                 m_threadAbortException;                 // ThreadAbortException instance -set only during thread abort
     PTR_VOID                m_pStackLow;
@@ -96,10 +96,8 @@ struct ThreadBuffer
     UInt32          m_numDynamicTypesTlsCells;
     PTR_PTR_UInt8   m_pDynamicTypesTlsCells;
 
-#ifndef PROJECTN
     PTR_PTR_VOID    m_pThreadLocalModuleStatics;
     UInt32          m_numThreadLocalModuleStatics;
-#endif // PROJECTN
 };
 
 struct ReversePInvokeFrame
@@ -265,10 +263,8 @@ public:
     Object * GetThreadAbortException();
     void SetThreadAbortException(Object *exception);
 
-#ifndef PROJECTN
     Object* GetThreadStaticStorageForModule(UInt32 moduleIndex);
     Boolean SetThreadStaticStorageForModule(Object * pStorage, UInt32 moduleIndex);
-#endif // PROJECTN
 };
 
 #ifndef __GCENV_BASE_INCLUDED__

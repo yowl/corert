@@ -21,7 +21,7 @@ namespace System.Runtime
         UnhandledException_ExceptionDispatchNotAllowed = 2,  // "Unhandled exception: no handler found before escaping a finally clause or other fail-fast scope."
         UnhandledException_CallerDidNotHandle = 3,           // "Unhandled exception: no handler found in calling method."
         ClassLibDidNotTranslateExceptionID = 4,              // "Unable to translate failure into a classlib-specific exception object."
-        IllegalNativeCallableEntry = 5,                      // "Invalid Program: attempted to call a NativeCallable method from runtime-typesafe code."
+        IllegalUnmanagedCallersOnlyEntry = 5,                      // "Invalid Program: attempted to call a UnmanagedCallersOnly method from runtime-typesafe code."
 
         PN_UnhandledException = 6,                           // ProjectN: "unhandled exception"
         PN_UnhandledExceptionFromPInvoke = 7,                // ProjectN: "Unhandled exception: an unmanaged exception was thrown out of a managed-to-native transition."
@@ -92,7 +92,7 @@ namespace System.Runtime
         }
     }
 
-    internal static unsafe class EH
+    internal static unsafe partial class EH
     {
         internal static UIntPtr MaxSP
         {
@@ -178,13 +178,13 @@ namespace System.Runtime
             FallbackFailFast(reason, unhandledException);
         }
 
-#if AMD64
+#if TARGET_AMD64
         [StructLayout(LayoutKind.Explicit, Size = 0x4d0)]
-#elif ARM
+#elif TARGET_ARM
         [StructLayout(LayoutKind.Explicit, Size = 0x1a0)]
-#elif X86
+#elif TARGET_X86
         [StructLayout(LayoutKind.Explicit, Size = 0x2cc)]
-#elif ARM64
+#elif TARGET_ARM64
         [StructLayout(LayoutKind.Explicit, Size = 0x390)]
 #else
         [StructLayout(LayoutKind.Explicit, Size = 0x10)] // this is small enough that it should trip an assert in RhpCopyContextFromExInfo
@@ -196,7 +196,7 @@ namespace System.Runtime
         internal static unsafe void* PointerAlign(void* ptr, int alignmentInBytes)
         {
             int alignMask = alignmentInBytes - 1;
-#if BIT64
+#if TARGET_64BIT
             return (void*)((((long)ptr) + alignMask) & ~alignMask);
 #else
             return (void*)((((int)ptr) + alignMask) & ~alignMask);
@@ -731,7 +731,7 @@ namespace System.Runtime
                 DebugScanCallFrame(exInfo._passNumber, frameIter.ControlPC, frameIter.SP);
 
                 if ((frameIter.SP == handlingFrameSP)
-#if ARM64
+#if TARGET_ARM64
                     && (frameIter.ControlPC == prevControlPC)
 #endif
                     )
@@ -974,7 +974,7 @@ namespace System.Runtime
             }
         }
 
-        [NativeCallable(EntryPoint = "RhpFailFastForPInvokeExceptionPreemp", CallingConvention = CallingConvention.Cdecl)]
+        [UnmanagedCallersOnly(EntryPoint = "RhpFailFastForPInvokeExceptionPreemp", CallingConvention = CallingConvention.Cdecl)]
         public static void RhpFailFastForPInvokeExceptionPreemp(IntPtr PInvokeCallsiteReturnAddr, void* pExceptionRecord, void* pContextRecord)
         {
             FailFastViaClasslib(RhFailFastReason.PN_UnhandledExceptionFromPInvoke, null, PInvokeCallsiteReturnAddr);

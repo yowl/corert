@@ -230,6 +230,16 @@ namespace ILCompiler.DependencyAnalysis
                 return new BlobNode(key.Name, ObjectNodeSection.ReadOnlyDataSection, key.Data, key.Alignment);
             });
 
+            _uninitializedWritableDataBlobs = new NodeCache<UninitializedWritableDataBlobKey, BlobNode>(key =>
+            {
+                return new BlobNode(key.Name, ObjectNodeSection.BssSection, new byte[key.Size], key.Alignment);
+            });
+
+            _settableReadOnlyDataBlobs = new NodeCache<Utf8String, SettableReadOnlyDataBlob>(key =>
+            {
+                return new SettableReadOnlyDataBlob(key, ObjectNodeSection.ReadOnlyDataSection);
+            });
+            
             _externSymbols = new NodeCache<string, ExternSymbolNode>((string name) =>
             {
                 return new ExternSymbolNode(name);
@@ -650,11 +660,25 @@ namespace ILCompiler.DependencyAnalysis
             return _GCStaticEETypes.GetOrAdd(gcMap);
         }
 
+        private NodeCache<UninitializedWritableDataBlobKey, BlobNode> _uninitializedWritableDataBlobs;
+
+        public BlobNode UninitializedWritableDataBlob(Utf8String name, int size, int alignment)
+        {
+            return _uninitializedWritableDataBlobs.GetOrAdd(new UninitializedWritableDataBlobKey(name, size, alignment));
+        }
+
         private NodeCache<ReadOnlyDataBlobKey, BlobNode> _readOnlyDataBlobs;
 
         public BlobNode ReadOnlyDataBlob(Utf8String name, byte[] blobData, int alignment)
         {
             return _readOnlyDataBlobs.GetOrAdd(new ReadOnlyDataBlobKey(name, blobData, alignment));
+        }
+
+        private NodeCache<Utf8String, SettableReadOnlyDataBlob> _settableReadOnlyDataBlobs;
+
+        public SettableReadOnlyDataBlob SettableReadOnlyDataBlob(Utf8String name)
+        {
+            return _settableReadOnlyDataBlobs.GetOrAdd(name);
         }
 
         private NodeCache<TypeDesc, SealedVTableNode> _sealedVtableNodes;
@@ -865,20 +889,6 @@ namespace ILCompiler.DependencyAnalysis
                     _systemArrayOfTEnumeratorType = ArrayOfTClass.GetNestedType("ArrayEnumerator");
                 }
                 return _systemArrayOfTEnumeratorType;
-            }
-        }
-
-        private TypeDesc _systemICastableType;
-
-        public TypeDesc ICastableInterface
-        {
-            get
-            {
-                if (_systemICastableType == null)
-                {
-                    _systemICastableType = _context.SystemModule.GetKnownType("System.Runtime.CompilerServices", "ICastable");
-                }
-                return _systemICastableType;
             }
         }
 
@@ -1191,6 +1201,27 @@ namespace ILCompiler.DependencyAnalysis
             // The name is part of the symbolic name and we don't do any mangling on it.
             public bool Equals(ReadOnlyDataBlobKey other) => Name.Equals(other.Name);
             public override bool Equals(object obj) => obj is ReadOnlyDataBlobKey && Equals((ReadOnlyDataBlobKey)obj);
+            public override int GetHashCode() => Name.GetHashCode();
+        }
+
+        protected struct UninitializedWritableDataBlobKey : IEquatable<UninitializedWritableDataBlobKey>
+        {
+            public readonly Utf8String Name;
+            public readonly int Size;
+            public readonly int Alignment;
+
+            public UninitializedWritableDataBlobKey(Utf8String name, int size, int alignment)
+            {
+                Name = name;
+                Size = size;
+                Alignment = alignment;
+            }
+
+            // The assumption here is that the name of the blob is unique.
+            // We can't emit two blobs with the same name and different contents.
+            // The name is part of the symbolic name and we don't do any mangling on it.
+            public bool Equals(UninitializedWritableDataBlobKey other) => Name.Equals(other.Name);
+            public override bool Equals(object obj) => obj is UninitializedWritableDataBlobKey && Equals((UninitializedWritableDataBlobKey)obj);
             public override int GetHashCode() => Name.GetHashCode();
         }
     }

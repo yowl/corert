@@ -35,7 +35,7 @@
 #include "gcenv.ee.h"
 #include "volatile.h"
 
-#ifdef PLATFORM_UNIX
+#ifdef TARGET_UNIX
 #include "gcenv.unix.inl"
 #else
 #include "gcenv.windows.inl"
@@ -92,7 +92,7 @@ struct alloc_context;
 
 class Thread
 {
-    uint32_t m_fPreemptiveGCDisabled;
+    bool m_fPreemptiveGCDisabled;
     uintptr_t m_alloc_context[16]; // Reserve enough space to fix allocation context
 
     friend class ThreadStore;
@@ -105,7 +105,7 @@ public:
 
     bool PreemptiveGCDisabled()
     {
-        return !!m_fPreemptiveGCDisabled;
+        return m_fPreemptiveGCDisabled;
     }
 
     void EnablePreemptiveGC()

@@ -7,9 +7,10 @@ using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Reflection;
-using System.Runtime;
 using System.Threading;
+
 using Internal.Metadata.NativeFormat;
+using Internal.Runtime;
 using Internal.Runtime.CompilerServices;
 
 using Internal.TypeSystem;
@@ -33,7 +34,7 @@ namespace Internal.TypeSystem.NativeFormat
 
             public const int AttributeMetadataCache = 0x1000;
             public const int Intrinsic = 0x2000;
-            public const int NativeCallable = 0x4000;
+            public const int UnmanagedCallersOnly = 0x4000;
             public const int RuntimeExport = 0x8000;
         };
 
@@ -205,9 +206,9 @@ namespace Internal.TypeSystem.NativeFormat
                     else
                     if (namespaceName.Equals("System.Runtime.InteropServices"))
                     {
-                        if (nameHandle.StringEquals("NativeCallableAttribute", metadataReader))
+                        if (nameHandle.StringEquals("UnmanagedCallersOnlyAttribute", metadataReader))
                         {
-                            flags |= MethodFlags.NativeCallable;
+                            flags |= MethodFlags.UnmanagedCallersOnly;
                         }
                     }
                     else
@@ -318,11 +319,11 @@ namespace Internal.TypeSystem.NativeFormat
             }
         }
 
-        public override bool IsNativeCallable
+        public override bool IsUnmanagedCallersOnly
         {
             get
             {
-                return (GetMethodFlags(MethodFlags.AttributeMetadataCache | MethodFlags.NativeCallable) & MethodFlags.NativeCallable) != 0;
+                return (GetMethodFlags(MethodFlags.AttributeMetadataCache | MethodFlags.UnmanagedCallersOnly) & MethodFlags.UnmanagedCallersOnly) != 0;
             }
         }
 

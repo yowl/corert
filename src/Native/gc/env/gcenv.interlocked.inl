@@ -14,10 +14,10 @@
 #ifndef _MSC_VER
 __forceinline void Interlocked::ArmInterlockedOperationBarrier()
 {
-#ifdef _ARM64_
+#ifdef HOST_ARM64
     // See PAL_ArmInterlockedOperationBarrier() in the PAL
     __sync_synchronize();
-#endif // _ARM64_
+#endif // HOST_ARM64
 }
 #endif // !_MSC_VER
 
@@ -57,7 +57,7 @@ __forceinline T Interlocked::Decrement(T volatile *addend)
 #endif
 }
 
-// Set a 32-bit variable to the specified value as an atomic operation. 
+// Set a 32-bit variable to the specified value as an atomic operation.
 // Parameters:
 //  destination - value to be exchanged
 //  value       - value to set the destination to
@@ -76,7 +76,7 @@ __forceinline T Interlocked::Exchange(T volatile *destination, T value)
 #endif
 }
 
-// Performs an atomic compare-and-exchange operation on the specified values. 
+// Performs an atomic compare-and-exchange operation on the specified values.
 // Parameters:
 //  destination - value to be exchanged
 //  exchange    - value to set the destinaton to
@@ -133,7 +133,7 @@ template <typename T>
 __forceinline T Interlocked::ExchangeAddPtr(T volatile* addend, T value)
 {
 #ifdef _MSC_VER
-#ifdef BIT64
+#ifdef HOST_64BIT
     static_assert(sizeof(int64_t) == sizeof(T), "Size of LONGLONG must be the same as size of T");
     return _InterlockedExchangeAdd64((int64_t*)addend, value);
 #else
@@ -189,7 +189,7 @@ template <typename T>
 __forceinline T Interlocked::ExchangePointer(T volatile * destination, T value)
 {
 #ifdef _MSC_VER
-#ifdef BIT64
+#ifdef HOST_64BIT
     return (T)(TADDR)_InterlockedExchangePointer((void* volatile *)destination, value);
 #else
     return (T)(TADDR)_InterlockedExchange((long volatile *)(void* volatile *)destination, (long)(void*)value);
@@ -205,7 +205,7 @@ template <typename T>
 __forceinline T Interlocked::ExchangePointer(T volatile * destination, std::nullptr_t value)
 {
 #ifdef _MSC_VER
-#ifdef BIT64
+#ifdef HOST_64BIT
     return (T)(TADDR)_InterlockedExchangePointer((void* volatile *)destination, value);
 #else
     return (T)(TADDR)_InterlockedExchange((long volatile *)(void* volatile *)destination, (long)(void*)value);
@@ -217,7 +217,7 @@ __forceinline T Interlocked::ExchangePointer(T volatile * destination, std::null
 #endif
 }
 
-// Performs an atomic compare-and-exchange operation on the specified pointers. 
+// Performs an atomic compare-and-exchange operation on the specified pointers.
 // Parameters:
 //  destination - value to be exchanged
 //  exchange    - value to set the destinaton to
@@ -229,7 +229,7 @@ template <typename T>
 __forceinline T Interlocked::CompareExchangePointer(T volatile *destination, T exchange, T comparand)
 {
 #ifdef _MSC_VER
-#ifdef BIT64
+#ifdef HOST_64BIT
     return (T)(TADDR)_InterlockedCompareExchangePointer((void* volatile *)destination, exchange, comparand);
 #else
     return (T)(TADDR)_InterlockedCompareExchange((long volatile *)(void* volatile *)destination, (long)(void*)exchange, (long)(void*)comparand);
@@ -245,7 +245,7 @@ template <typename T>
 __forceinline T Interlocked::CompareExchangePointer(T volatile *destination, T exchange, std::nullptr_t comparand)
 {
 #ifdef _MSC_VER
-#ifdef BIT64
+#ifdef HOST_64BIT
     return (T)(TADDR)_InterlockedCompareExchangePointer((void* volatile *)destination, (void*)exchange, (void*)comparand);
 #else
     return (T)(TADDR)_InterlockedCompareExchange((long volatile *)(void* volatile *)destination, (long)(void*)exchange, (long)(void*)comparand);

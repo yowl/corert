@@ -62,12 +62,14 @@ See the LICENSE file in the project root for more information.
       <NativeLibrary Include="uuid.lib" />
       <NativeLibrary Include="bcrypt.lib" />
       <NativeLibrary Include="normaliz.lib" />
+      <NativeLibrary Include="crypt32.lib" />
     </ItemGroup>
 
     <ItemGroup>
       <LinkerArg Condition="$(NativeLib) == 'Shared'" Include="/DLL" />
       <LinkerArg Include="@(NativeLibrary->'&quot;%(Identity)&quot;')" />
-      <LinkerArg Include="/NOLOGO /DEBUG /MANIFEST:NO" />
+      <LinkerArg Include="/NOLOGO /MANIFEST:NO" />
+      <LinkerArg Condition="$(NativeDebugSymbols) == 'true'" Include="/DEBUG" />
       <!-- The runtime is not compatible with jump stubs inserted by incremental linking. -->
       <LinkerArg Include="/INCREMENTAL:NO" />
       <LinkerArg Condition="'$(OutputType)' == 'WinExe'" Include="/SUBSYSTEM:WINDOWS /ENTRY:wmainCRTStartup" />

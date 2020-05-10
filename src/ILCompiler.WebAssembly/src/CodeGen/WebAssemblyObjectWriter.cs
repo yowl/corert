@@ -26,7 +26,7 @@ namespace ILCompiler.DependencyAnalysis
     {
         private string GetBaseSymbolName(ISymbolNode symbol, NameMangler nameMangler, bool objectWriterUse = false)
         {
-            if (symbol is WebAssemblyMethodCodeNode)
+            if (symbol is WebAssemblyMethodCodeNode || symbol is WebAssemblyBlockRefNode)
             {
                 return symbol.GetMangledName(nameMangler);
             }
@@ -96,7 +96,7 @@ namespace ILCompiler.DependencyAnalysis
 
         private static int GetNumericOffsetFromBaseSymbolValue(ISymbolNode symbol)
         {
-            if (symbol is WebAssemblyMethodCodeNode)
+            if (symbol is WebAssemblyMethodCodeNode || symbol is WebAssemblyBlockRefNode)
             {
                 return 0;
             }
@@ -254,6 +254,12 @@ namespace ILCompiler.DependencyAnalysis
             var shadowStack = builder.BuildMalloc(LLVMTypeRef.CreateArray(LLVMTypeRef.Int8, 1000000), String.Empty);
             var castShadowStack = builder.BuildPointerCast(shadowStack, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), String.Empty);
             builder.BuildStore(castShadowStack, shadowStackTop);
+
+            var shadowStackBottom = Module.AddGlobal(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), "t_pShadowStackBottom");
+            shadowStackBottom.Linkage = LLVMLinkage.LLVMExternalLinkage;
+            shadowStackBottom.Initializer = LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0));
+            shadowStackBottom.ThreadLocalMode = LLVMThreadLocalMode.LLVMLocalDynamicTLSModel;
+            builder.BuildStore(castShadowStack, shadowStackBottom);
 
             // Pass on main arguments
             LLVMValueRef argc = mainFunc.GetParam(0);
@@ -538,8 +544,7 @@ namespace ILCompiler.DependencyAnalysis
                 return pointerSize;
             }
             int offsetFromBase = GetNumericOffsetFromBaseSymbolValue(target) + target.Offset;
-
-            return EmitSymbolRef(realSymbolName, offsetFromBase, target is WebAssemblyMethodCodeNode, relocType, delta);
+            return EmitSymbolRef(realSymbolName, offsetFromBase, target is WebAssemblyMethodCodeNode || target is WebAssemblyBlockRefNode, relocType, delta);
         }
 
         public void EmitBlobWithRelocs(byte[] blob, Relocation[] relocs)
@@ -716,7 +721,7 @@ namespace ILCompiler.DependencyAnalysis
                     ObjectNode node = depNode as ObjectNode;
                     if (node == null)
                         continue;
-
+                    
                     if (node.ShouldSkipEmittingObjectNode(factory))
                         continue;
 
@@ -747,7 +752,7 @@ namespace ILCompiler.DependencyAnalysis
                         }
                     }
 #endif
-
+   
                     ObjectNodeSection section = node.Section;
                     if (objectWriter.ShouldShareSymbol(node))
                     {
@@ -782,7 +787,6 @@ namespace ILCompiler.DependencyAnalysis
                     {
                         // Emit symbol definitions if necessary
                         objectWriter.EmitSymbolDefinition(i);
-
                         if (i == nextRelocOffset)
                         {
                             Relocation reloc = relocs[nextRelocIndex];
@@ -804,7 +808,6 @@ namespace ILCompiler.DependencyAnalysis
                                     symbolToWrite = factory.ConstructedTypeSymbol(eeTypeNode.Type);
                                 }
                             }
-
                             int size = objectWriter.EmitSymbolReference(symbolToWrite, (int)delta, reloc.RelocType);
 
                             /*

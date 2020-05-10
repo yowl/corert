@@ -13,7 +13,7 @@ If you would like to give CoreRT a try, we publish daily snapshots of CoreRT to 
 - Windows, MacOS and Linux x64 w/ RyuJIT codegen is able to compile many complex apps.
    - [ASP.NET Core](samples/WebApi/) sample
    - [MonoGame](samples/MonoGame/) sample
-   - [Avalonia](https://www.youtube.com/watch?v=iaC67CUmEXs) demo
+   - Avalonia [sample](https://github.com/teobugslayer/AvaloniaCoreRTDemo) and [demo video](https://www.youtube.com/watch?v=iaC67CUmEXs)
    - [ADO.NET](https://github.com/ifew/corert-db) sample
    - [EntityFrameworkCore.Sqlite](https://github.com/rubin55/dot-hello) sample 
    - Unsupported features: [Dynamic loading](https://github.com/dotnet/corert/issues/6949) (e.g. `Assembly.LoadFile`), [dynamic code generation](https://github.com/dotnet/corert/issues/5011) (e.g. `System.Reflection.Emit`), [Windows-specific interop](https://github.com/dotnet/corert/issues/4219) (e.g. COM, WinRT)
@@ -29,6 +29,10 @@ Looking for something to work on? The [_up for grabs_](https://github.com/dotnet
 This project follows the [.NET Core Contribution Guidelines](https://github.com/dotnet/coreclr/blob/master/Documentation/project-docs/contributing.md).
 
 [![Join the chat at https://gitter.im/dotnet/corert](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/dotnet/corert?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
+### .NET Native for UWP Support
+
+Use https://developercommunity.visualstudio.com/ to report problems and suggestions related to [.NET Native for UWP](https://docs.microsoft.com/en-us/dotnet/framework/net-native/).
 
 ### Reporting security issues and security bugs
 

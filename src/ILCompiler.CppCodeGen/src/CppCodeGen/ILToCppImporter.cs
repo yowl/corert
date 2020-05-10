@@ -795,7 +795,7 @@ namespace Internal.IL
             Indent();
 
 
-            if (_method.IsNativeCallable)
+            if (_method.IsUnmanagedCallersOnly)
             {
                 AppendLine();
                 Append("ReversePInvokeFrame __frame");
@@ -2355,7 +2355,7 @@ namespace Internal.IL
 
         private void ImportReturn()
         {
-            if (_method.IsNativeCallable)
+            if (_method.IsUnmanagedCallersOnly)
             {
                 AppendLine();
                 Append("__reverse_pinvoke_return(&__frame)");
@@ -2876,6 +2876,11 @@ namespace Internal.IL
             Append(" = ");
             if (!fieldType.IsValueType)
             {
+                if (runtimeDeterminedOwningType.IsRuntimeDeterminedSubtype)
+                {
+                    fieldType = _typeSystemContext.GetFieldForInstantiatedType(field.GetTypicalFieldDefinition(), (InstantiatedType)owningType).FieldType;
+                }
+
                 Append("(");
                 Append(_writer.GetCppSignatureTypeName(fieldType));
                 Append(")");
@@ -3718,4 +3723,3 @@ namespace Internal.IL
         }
     }
 }
-

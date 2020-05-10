@@ -17,8 +17,9 @@ using Internal.Runtime.CompilerServices;
 using Internal.Reflection.Core.NonPortable;
 using Internal.IntrinsicSupport;
 using EEType = Internal.Runtime.EEType;
+using EETypeElementType = Internal.Runtime.EETypeElementType;
 
-#if BIT64
+#if TARGET_64BIT
 using nuint = System.UInt64;
 #else
 using nuint = System.UInt32;
@@ -37,7 +38,7 @@ namespace System
         private int _numComponents;
 #pragma warning restore
 
-#if BIT64
+#if TARGET_64BIT
         private const int POINTER_SIZE = 8;
 #else
         private const int POINTER_SIZE = 4;
@@ -220,24 +221,10 @@ namespace System
             return;
         }
 
-        [StructLayout(LayoutKind.Sequential)]
-        private class RawData
-        {
-            public IntPtr Count; // Array._numComponents padded to IntPtr
-            public byte Data;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal ref byte GetRawSzArrayData()
-        {
-            Debug.Assert(IsSzArray);
-            return ref Unsafe.As<RawData>(this).Data;
-        }
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal ref byte GetRawArrayData()
         {
-            return ref Unsafe.Add(ref Unsafe.As<RawData>(this).Data, (int)(EETypePtr.BaseSize - SZARRAY_BASE_SIZE));
+            return ref Unsafe.Add(ref Unsafe.As<RawArrayData>(this).Data, (int)(EETypePtr.BaseSize - SZARRAY_BASE_SIZE));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -588,8 +575,8 @@ namespace System
 
             Debug.Assert(sourceElementEEType.IsPrimitive && destinationElementEEType.IsPrimitive); // Caller has already validated this.
 
-            RuntimeImports.RhCorElementType sourceElementType = sourceElementEEType.CorElementType;
-            RuntimeImports.RhCorElementType destElementType = destinationElementEEType.CorElementType;
+            EETypeElementType sourceElementType = sourceElementEEType.ElementType;
+            EETypeElementType destElementType = destinationElementEEType.ElementType;
 
             nuint srcElementSize = sourceArray.ElementSize;
             nuint destElementSize = destinationArray.ElementSize;
@@ -632,31 +619,31 @@ namespace System
                     // converting w/ sign extension and floating point conversions.
                     switch (sourceElementType)
                     {
-                        case RuntimeImports.RhCorElementType.ELEMENT_TYPE_U1:
+                        case EETypeElementType.Byte:
                             {
                                 switch (destElementType)
                                 {
-                                    case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R4:
+                                    case EETypeElementType.Single:
                                         *(float*)data = *(byte*)srcData;
                                         break;
 
-                                    case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R8:
+                                    case EETypeElementType.Double:
                                         *(double*)data = *(byte*)srcData;
                                         break;
 
-                                    case RuntimeImports.RhCorElementType.ELEMENT_TYPE_CHAR:
-                                    case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I2:
-                                    case RuntimeImports.RhCorElementType.ELEMENT_TYPE_U2:
+                                    case EETypeElementType.Char:
+                                    case EETypeElementType.Int16:
+                                    case EETypeElementType.UInt16:
                                         *(short*)data = *(byte*)srcData;
                                         break;
 
-                                    case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I4:
-                                    case RuntimeImports.RhCorElementType.ELEMENT_TYPE_U4:
+                                    case EETypeElementType.Int32:
+                                    case EETypeElementType.UInt32:
                                         *(int*)data = *(byte*)srcData;
                                         break;
 
-                                    case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I8:
-                                    case RuntimeImports.RhCorElementType.ELEMENT_TYPE_U8:
+                                    case EETypeElementType.Int64:
+                                    case EETypeElementType.UInt64:
                                         *(long*)data = *(byte*)srcData;
                                         break;
 
@@ -666,26 +653,26 @@ namespace System
                                 break;
                             }
 
-                        case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I1:
+                        case EETypeElementType.SByte:
                             switch (destElementType)
                             {
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I2:
+                                case EETypeElementType.Int16:
                                     *(short*)data = *(sbyte*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I4:
+                                case EETypeElementType.Int32:
                                     *(int*)data = *(sbyte*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I8:
+                                case EETypeElementType.Int64:
                                     *(long*)data = *(sbyte*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R4:
+                                case EETypeElementType.Single:
                                     *(float*)data = *(sbyte*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R8:
+                                case EETypeElementType.Double:
                                     *(double*)data = *(sbyte*)srcData;
                                     break;
 
@@ -694,30 +681,30 @@ namespace System
                             }
                             break;
 
-                        case RuntimeImports.RhCorElementType.ELEMENT_TYPE_U2:
-                        case RuntimeImports.RhCorElementType.ELEMENT_TYPE_CHAR:
+                        case EETypeElementType.UInt16:
+                        case EETypeElementType.Char:
                             switch (destElementType)
                             {
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R4:
+                                case EETypeElementType.Single:
                                     *(float*)data = *(ushort*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R8:
+                                case EETypeElementType.Double:
                                     *(double*)data = *(ushort*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_U2:
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_CHAR:
+                                case EETypeElementType.UInt16:
+                                case EETypeElementType.Char:
                                     *(ushort*)data = *(ushort*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I4:
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_U4:
+                                case EETypeElementType.Int32:
+                                case EETypeElementType.UInt32:
                                     *(uint*)data = *(ushort*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I8:
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_U8:
+                                case EETypeElementType.Int64:
+                                case EETypeElementType.UInt64:
                                     *(ulong*)data = *(ushort*)srcData;
                                     break;
 
@@ -726,22 +713,22 @@ namespace System
                             }
                             break;
 
-                        case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I2:
+                        case EETypeElementType.Int16:
                             switch (destElementType)
                             {
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I4:
+                                case EETypeElementType.Int32:
                                     *(int*)data = *(short*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I8:
+                                case EETypeElementType.Int64:
                                     *(long*)data = *(short*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R4:
+                                case EETypeElementType.Single:
                                     *(float*)data = *(short*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R8:
+                                case EETypeElementType.Double:
                                     *(double*)data = *(short*)srcData;
                                     break;
 
@@ -750,18 +737,18 @@ namespace System
                             }
                             break;
 
-                        case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I4:
+                        case EETypeElementType.Int32:
                             switch (destElementType)
                             {
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I8:
+                                case EETypeElementType.Int64:
                                     *(long*)data = *(int*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R4:
+                                case EETypeElementType.Single:
                                     *(float*)data = (float)*(int*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R8:
+                                case EETypeElementType.Double:
                                     *(double*)data = *(int*)srcData;
                                     break;
 
@@ -770,19 +757,19 @@ namespace System
                             }
                             break;
 
-                        case RuntimeImports.RhCorElementType.ELEMENT_TYPE_U4:
+                        case EETypeElementType.UInt32:
                             switch (destElementType)
                             {
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I8:
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_U8:
+                                case EETypeElementType.Int64:
+                                case EETypeElementType.UInt64:
                                     *(long*)data = *(uint*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R4:
+                                case EETypeElementType.Single:
                                     *(float*)data = (float)*(uint*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R8:
+                                case EETypeElementType.Double:
                                     *(double*)data = *(uint*)srcData;
                                     break;
 
@@ -792,14 +779,14 @@ namespace System
                             break;
 
 
-                        case RuntimeImports.RhCorElementType.ELEMENT_TYPE_I8:
+                        case EETypeElementType.Int64:
                             switch (destElementType)
                             {
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R4:
+                                case EETypeElementType.Single:
                                     *(float*)data = (float)*(long*)srcData;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R8:
+                                case EETypeElementType.Double:
                                     *(double*)data = (double)*(long*)srcData;
                                     break;
 
@@ -808,10 +795,10 @@ namespace System
                             }
                             break;
 
-                        case RuntimeImports.RhCorElementType.ELEMENT_TYPE_U8:
+                        case EETypeElementType.UInt64:
                             switch (destElementType)
                             {
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R4:
+                                case EETypeElementType.Single:
 
                                     //*(float*) data = (float) *(Ulong*)srcData;
                                     long srcValToFloat = *(long*)srcData;
@@ -822,7 +809,7 @@ namespace System
                                     *(float*)data = f;
                                     break;
 
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R8:
+                                case EETypeElementType.Double:
                                     //*(double*) data = (double) *(Ulong*)srcData;
                                     long srcValToDouble = *(long*)srcData;
                                     double d = (double)srcValToDouble;
@@ -837,10 +824,10 @@ namespace System
                             }
                             break;
 
-                        case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R4:
+                        case EETypeElementType.Single:
                             switch (destElementType)
                             {
-                                case RuntimeImports.RhCorElementType.ELEMENT_TYPE_R8:
+                                case EETypeElementType.Double:
                                     *(double*)data = *(float*)srcData;
                                     break;
 
@@ -1227,7 +1214,7 @@ namespace System
 
         internal CorElementType GetCorElementTypeOfElementType()
         {
-            return (CorElementType)ElementEEType.CorElementType;
+            return ElementEEType.CorElementType;
         }
 
         internal bool IsValueOfElementType(object o)
@@ -1349,7 +1336,7 @@ namespace System
         }
     }
 
-    internal class ArrayEnumeratorBase
+    internal class ArrayEnumeratorBase : ICloneable
     {
         protected int _index;
         protected int _endIndex;
@@ -1372,6 +1359,11 @@ namespace System
         public void Dispose()
         {
         }
+
+        public object Clone()
+        {
+            return MemberwiseClone();
+        }
     }
 
     //
@@ -1380,6 +1372,9 @@ namespace System
     //
     public class Array<T> : Array, IEnumerable<T>, ICollection<T>, IList<T>, IReadOnlyList<T>
     {
+        // Prevent the C# compiler from generating a public default constructor
+        private Array() { }
+
         public new IEnumerator<T> GetEnumerator()
         {
             // get length so we don't have to call the Length property again in ArrayEnumerator constructor
@@ -1412,12 +1407,12 @@ namespace System
 
         public void Add(T item)
         {
-            throw new NotSupportedException();
+            ThrowHelper.ThrowNotSupportedException();
         }
 
         public void Clear()
         {
-            throw new NotSupportedException();
+            ThrowHelper.ThrowNotSupportedException();
         }
 
         public bool Contains(T item)
@@ -1433,7 +1428,8 @@ namespace System
 
         public bool Remove(T item)
         {
-            throw new NotSupportedException();
+            ThrowHelper.ThrowNotSupportedException();
+            return false; // unreachable
         }
 
         public T this[int index]
@@ -1446,7 +1442,8 @@ namespace System
                 }
                 catch (IndexOutOfRangeException)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(index), SR.ArgumentOutOfRange_Index);
+                    ThrowHelper.ThrowArgumentOutOfRange_IndexException();
+                    return default; // unreachable
                 }
             }
             set
@@ -1457,7 +1454,7 @@ namespace System
                 }
                 catch (IndexOutOfRangeException)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(index), SR.ArgumentOutOfRange_Index);
+                    ThrowHelper.ThrowArgumentOutOfRange_IndexException();
                 }
             }
         }
@@ -1470,15 +1467,15 @@ namespace System
 
         public void Insert(int index, T item)
         {
-            throw new NotSupportedException();
+            ThrowHelper.ThrowNotSupportedException();
         }
 
         public void RemoveAt(int index)
         {
-            throw new NotSupportedException();
+            ThrowHelper.ThrowNotSupportedException();
         }
 
-        private sealed class ArrayEnumerator : ArrayEnumeratorBase, IEnumerator<T>, ICloneable
+        private sealed class ArrayEnumerator : ArrayEnumeratorBase, IEnumerator<T>
         {
             private T[] _array;
 
@@ -1495,8 +1492,8 @@ namespace System
             {
                 get
                 {
-                    if (_index < 0 || _index >= _endIndex)
-                        throw new InvalidOperationException();
+                    if ((uint)_index >= (uint)_endIndex)
+                        ThrowHelper.ThrowInvalidOperationException();
                     return _array[_index];
                 }
             }
@@ -1512,11 +1509,6 @@ namespace System
             void IEnumerator.Reset()
             {
                 _index = -1;
-            }
-
-            public object Clone()
-            {
-                return MemberwiseClone();
             }
         }
     }

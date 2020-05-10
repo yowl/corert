@@ -14,7 +14,7 @@ using System.Threading;
 using Internal.Runtime.Augments;
 
 #pragma warning disable SA1121 // explicitly using type aliases instead of built-in types
-#if BIT64
+#if TARGET_64BIT
 using nint = System.Int64;
 using nuint = System.UInt64;
 #else
@@ -257,7 +257,7 @@ namespace Internal.Runtime.CompilerHelpers
 
         internal static unsafe void FreeLibrary(IntPtr hModule)
         {
-#if !PLATFORM_UNIX
+#if !TARGET_UNIX
             Interop.mincore.FreeLibrary(hModule);
 #else
             Interop.Sys.FreeLibrary(hModule);
@@ -290,7 +290,7 @@ namespace Internal.Runtime.CompilerHelpers
                 // NativeLibrary callback didn't resolve the library. Use built-in rules.
                 NativeLibrary.LoadLibErrorTracker loadLibErrorTracker = default;
 
-                hModule = NativeLibrary.LoadLibraryModuleBySearch(
+                hModule = NativeLibrary.LoadBySearch(
                     callingAssembly,
                     searchAssemblyDirectory: false,
                     dllImportSearchPathFlags: 0,
@@ -324,7 +324,7 @@ namespace Internal.Runtime.CompilerHelpers
         {
             byte* methodName = (byte*)pCell->MethodName;
 
-#if PLATFORM_WINDOWS
+#if TARGET_WINDOWS
             pCell->Target = GetProcAddress(hModule, methodName, pCell->CharSetMangling);
 #else
             pCell->Target = Interop.Sys.GetProcAddress(hModule, methodName);
@@ -336,7 +336,7 @@ namespace Internal.Runtime.CompilerHelpers
             }
         }
 
-#if PLATFORM_WINDOWS
+#if TARGET_WINDOWS
         private static unsafe IntPtr GetProcAddress(IntPtr hModule, byte* methodName, CharSet charSetMangling)
         {
             // First look for the unmangled name.  If it is unicode function, we are going
@@ -405,6 +405,26 @@ namespace Internal.Runtime.CompilerHelpers
         public static T GetCurrentCalleeDelegate<T>() where T : class // constraint can't be System.Delegate
         {
             return PInvokeMarshal.GetCurrentCalleeDelegate<T>();
+        }
+
+        public static IntPtr ConvertManagedComInterfaceToNative(object pUnk)
+        {
+            if (pUnk == null)
+            {
+                return IntPtr.Zero;
+            }
+
+            throw new PlatformNotSupportedException(SR.PlatformNotSupported_ComInterop);
+        }
+
+        public static object ConvertNativeComInterfaceToManaged(IntPtr pUnk)
+        {
+            if (pUnk == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            throw new PlatformNotSupportedException(SR.PlatformNotSupported_ComInterop);
         }
 
         internal static int AsAnyGetNativeSize(object o)

@@ -644,6 +644,10 @@
             "classes": null,
             "methods": [
                 {
+                    "name": "System.Tests.EnvironmentTests.UserInteractive_True",
+                    "reason": "outdated"
+                },
+                {
                     "name": "System.Tests.MathFTests.Min",
                     "reason": "outdated"
                 },
@@ -1017,6 +1021,10 @@
             "classes": null,
             "methods": [
                 {
+                    "name": "System.Reflection.Tests.ReflectionTypeLoadExceptionTests.NullArgumentsNoNullPointerException",
+                    "reason": "Outdated"
+                },
+                {
                     "name": "System.Tests.UriMethodTests.EscapeUriString_HighSurrogatePair",
                     "reason": "Outdated"
                 },
@@ -1090,15 +1098,15 @@
                 },
                 {
                     "name": "System.Tests.DecimalTests.Remainder",
-                    "reason": "https://github.com/dotnet/coreclr/issues/12605"
+                    "reason": "https://github.com/dotnet/runtime/issues/8472"
                 },
                 {
                     "name": "System.Tests.DecimalTests.Remainder_Invalid",
-                    "reason": "https://github.com/dotnet/coreclr/issues/12605"
+                    "reason": "https://github.com/dotnet/runtime/issues/8472"
                 },
                 {
                     "name": "System.Tests.DecimalTests+BigIntegerMod.Test",
-                    "reason": "https://github.com/dotnet/coreclr/issues/12605"
+                    "reason": "https://github.com/dotnet/runtime/issues/8472"
                 },
                 {
                     "name": "System.Tests.DecimalTests.Round_InvalidMidpointRounding_ThrowsArgumentException",

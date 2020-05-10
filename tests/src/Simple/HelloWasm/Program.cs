@@ -10,8 +10,9 @@ using System.Runtime.InteropServices;
 using System.Collections.Generic;
 using System.Reflection;
 
-#if PLATFORM_WINDOWS
+#if TARGET_WINDOWS
 using CpObj;
+using CkFinite;
 #endif
 internal static class Program
 {
@@ -31,6 +32,7 @@ internal static class Program
         TestMetaData();
 
         TestJsInterop();
+        TestGC();
 
         Add(1, 2);
         PrintLine("Hello from C#!");
@@ -46,12 +48,14 @@ internal static class Program
         (*targetAddr) = 1;
         EndTest(tempInt2 == 1 && tempInt == 9);
 
+#if TARGET_WINDOWS
         StartTest("Inline assign byte Test");
         EndTest(ILHelpers.ILHelpersTest.InlineAssignByte() == 100);
 
         StartTest("dup test");
         int dupTestInt = 9;
         EndTest(ILHelpers.ILHelpersTest.DupTest(ref dupTestInt) == 209 && dupTestInt == 209);
+#endif
 
         TestClass tempObj = new TestDerivedClass(1337);
         tempObj.TestMethod("Hello");
@@ -91,6 +95,8 @@ internal static class Program
             PrintLine("Value:");
             PrintLine(boxedInt.ToString());
         }
+
+        TestBoxUnboxDifferentSizes();
 
         var boxedStruct = (object)new BoxStubTest { Value = "Boxed Stub Test: Ok." };
         PrintLine(boxedStruct.ToString());
@@ -146,7 +152,7 @@ internal static class Program
         var switchTestDefault = SwitchOp(5, 5, 20);
         EndTest(switchTestDefault == 0);
 
-#if PLATFORM_WINDOWS
+#if TARGET_WINDOWS
         StartTest("CpObj test");
         var cpObjTestA = new TestValue { Field = 1234 };
         var cpObjTestB = new TestValue { Field = 5678 };
@@ -276,6 +282,8 @@ internal static class Program
 
         TestTryFinally();
 
+
+#if TARGET_WINDOWS
         StartTest("RVA static field test");
         int rvaFieldValue = ILHelpers.ILHelpersTest.StaticInitedInt;
         if (rvaFieldValue == 0x78563412)
@@ -286,6 +294,7 @@ internal static class Program
         {
             FailTest(rvaFieldValue.ToString());
         }
+#endif
 
         TestNativeCallback();
 
@@ -298,6 +307,8 @@ internal static class Program
         TestCallToGenericInterfaceMethod();
 
         TestInitObjDouble();
+
+        TestTryCatch();
 
         StartTest("Non/GCStatics field access test");
         if (new FieldStatics().TestGetSet())
@@ -326,15 +337,25 @@ internal static class Program
 
         TestBoxToGenericTypeFromDirectMethod();
 
-        TestGenericCallInFinally();
-        
         TestGenericStructHandling();
+
+        TestGenericCallInFinally();
 
         TestInitializeArray();
 
-        TestSystemNative_GetSystemTimeAsTicks();
-
         TestImplicitUShortToUInt();
+
+        TestReverseDelegateInvoke();
+
+        TestInterlockedExchange();
+
+        TestThrowIfNull();
+
+#if TARGET_WINDOWS
+        TestCkFinite();
+#endif
+
+        TestIntOverflows();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -346,7 +367,131 @@ internal static class Program
 
     private static void TestJsInterop()
     {
-//        new CoreRT.WebAssembly.Interop.CoreRTWebAssemblyJSRuntime().Invoke<object>("alert");
+    }
+    
+    private static void TestGC()
+    {
+        StartTest("GC");
+
+        var genOfNewObject = GC.GetGeneration(new object());
+        PrintLine("Generation of new object " + genOfNewObject.ToString());
+        if(genOfNewObject != 0)
+        {
+            FailTest("Gen of new object was " + genOfNewObject);
+            return;
+        }
+        var weakReference = MethodWithObjectInShadowStack();
+        GC.Collect();
+        GC.Collect();
+        if (weakReference.IsAlive)
+        {
+            FailTest("object alive when has no references");
+            return;
+        }
+        // create enough arrays to go over 5GB which should force older arrays to get collected
+        // use array of size 1MB, then iterate 5*1024 times
+        for(var i = 0; i < 5 * 1024; i++)
+        {
+            var a = new int[256 * 1024]; // ints are 4 bytes so this is 1MB
+        }
+        for(var i = 0; i < 3; i++)
+        {
+            PrintString("GC Collection Count " + i.ToString() + " ");
+            PrintLine(GC.CollectionCount(i).ToString());
+        }
+        EndTest(true);
+    }
+
+    private static unsafe void TestBoxUnboxDifferentSizes()
+    {
+        StartTest("Box/Unbox different sizes");
+        var pass = true;
+        long longValue = Convert.ToInt64((object)11111111L);
+        if(longValue != 11111111L)
+        {
+            FailTest("Int64");
+            pass = false;
+        }
+
+        int intValue = Convert.ToInt32((object)11111111);
+        if (intValue != 11111111)
+        {
+            FailTest("Int32");
+            pass = false;
+        }
+
+        float singleValue = Convert.ToSingle((object)1f);
+        if (singleValue != 1f)
+        {
+            FailTest("Single");
+            pass = false;
+        }
+
+        double doubleValue = Convert.ToDouble((object)1D);
+        if (doubleValue != 1D)
+        {
+            FailTest("Double");
+            pass = false;
+        }
+
+        short s1 = 1;
+        short shortValue = Convert.ToInt16((object)s1);
+        if (shortValue != 1)
+        {
+            FailTest("Int16");
+            pass = false;
+        }
+
+        byte b1 = 1;
+        byte byteValue = Convert.ToByte((object)b1);
+        if (byteValue != 1)
+        {
+            FailTest("Byte");
+            pass = false;
+        }
+
+        var s = new StructWintIntf();
+        s.IntField = 11111111;
+        s.LongField = 222222222L;
+        IHasTwoFields hasTwoFields = (IHasTwoFields)s;
+
+        if(hasTwoFields.GetIntField() != 11111111)
+        {
+            FailTest("GetIntField");
+            pass = false;
+        }
+        if (hasTwoFields.GetLongField() != 222222222L)
+        {
+            FailTest("GetLongField");
+            pass = false;
+        }
+
+        EndTest(pass);
+    }
+
+    private static WeakReference MethodWithObjectInShadowStack()
+    {
+        var o = new object();
+        var wr = new WeakReference(o);
+        if (!wr.IsAlive)
+        {
+            FailTest("object not alive when still referenced and not collected");
+            return wr;
+        }
+        GC.Collect();
+        GC.Collect();
+        if (!wr.IsAlive)
+        {
+            FailTest("object not alive when still referenced");
+            return wr;
+        }
+        o = null;
+        if (!wr.IsAlive)
+        {
+            FailTest("object not alive when not collected");
+            return wr;
+        }
+        return wr;
     }
 
     private static void StartTest(string testDescription)
@@ -690,7 +835,7 @@ internal static class Program
         EndTest(callbackResult);
     }
 
-    [System.Runtime.InteropServices.NativeCallable(EntryPoint = "CallMe")]
+    [System.Runtime.InteropServices.UnmanagedCallersOnly(EntryPoint = "CallMe")]
     private static void _CallMe(int x)
     {
         if (x == 123)
@@ -759,9 +904,9 @@ internal static class Program
 
         var genericType = typeof(List<object>);
         StartTest("type of generic");
-        if (genericType.FullName != "System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]")
+        if (genericType.FullName.Substring(0, genericType.FullName.LastIndexOf(",")) != "System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral")
         {
-            FailTest("expected System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]] but was " + genericType.FullName);
+            FailTest("expected System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral... but was " + genericType.FullName);
         }
         else
         {
@@ -774,7 +919,9 @@ internal static class Program
         var i = x.IntField;
         var classForMetaTestsType = typeof(ClassForMetaTests);
         FieldInfo[] fields = classForMetaTestsType.GetFields();
-        EndTest(fields.Length == 3);
+        PrintLine("Fields Length");
+        PrintLine(fields.Length.ToString());
+        EndTest(fields.Length == 4);
 
         StartTest("Type get string field via reflection");
         var stringFieldInfo = classForMetaTestsType.GetField("StringField");
@@ -799,6 +946,11 @@ internal static class Program
         StartTest("Type set static int field via reflection");
         staticIntFieldInfo.SetValue(x, 987);
         EndTest(ClassForMetaTests.StaticIntField == 987);
+
+        StartTest("Type set static long field via reflection");
+        var staticLongFieldInfo = classForMetaTestsType.GetField("StaticLongField");
+        staticLongFieldInfo.SetValue(x, 0x11111111);
+        EndTest(ClassForMetaTests.StaticLongField == 0x11111111L);
 
         var st = new StructForMetaTests();
         st.StringField = "xyz";
@@ -848,12 +1000,14 @@ internal static class Program
         public string StringField;
 #pragma warning restore 0169
         public static int StaticIntField;
+        public static long StaticLongField;
 
         public ClassForMetaTests()
         {
             StringField = "ab";
             IntField = 12;
             StaticIntField = 23;
+            StaticLongField = 0x22222222;
         }
 
         public bool ReturnTrueIf1(int i)
@@ -875,6 +1029,28 @@ internal static class Program
     public struct StructForMetaTests
     {
         public string StringField;
+    }
+
+    public interface IHasTwoFields
+    {
+        int GetIntField();
+        long GetLongField();
+    }
+
+    public struct StructWintIntf : IHasTwoFields
+    {
+        public int IntField;
+        public long LongField;
+
+        public int GetIntField()
+        {
+            return IntField;
+        }
+
+        public long GetLongField()
+        {
+            return LongField;
+        }
     }
 
 
@@ -1044,17 +1220,33 @@ internal static class Program
     private static void TestGenericCallInFinally()
     {
         StartTest("calling generic method requiring context from finally block");
-
-        CallGenericInFinally<string>();
-
-        PassTest();
+        if(GenRequiresContext<string>.Called)
+        {
+            FailTest("static bool defaulted to true");
+        }
+        EndTest(CallGenericInFinally<string>());
     }
 
-    private static void CallGenericInFinally<T>()
+    private static bool CallGenericInFinally<T>()
     {
-        List<T> list = new List<T>();
-        foreach (var s in list) // will generate a call to Dispose
+        try
         {
+            // do nothing
+        }
+        finally
+        {
+            GenRequiresContext<T>.Dispose();
+        }
+        return GenRequiresContext<T>.Called;
+    }
+
+    public class GenRequiresContext<T> 
+    {
+        internal static bool Called;
+
+        public static void Dispose()
+        {
+            Called = true;
         }
     }
 
@@ -1150,6 +1342,273 @@ internal static class Program
         }
     }
 
+    private static void TestTryCatch()
+    {
+        // break out the individual tests to their own methods to make looking at the funclets easier
+        TestTryCatchNoException();
+
+        TestTryCatchThrowException(new Exception());
+
+        TestTryCatchExceptionFromCall();
+
+        TestCatchExceptionType();
+
+        TestTryFinallyThrowException();
+
+        TestTryCatchWithCallInIf();
+
+        TestThrowInCatch();
+
+        TestExceptionInGvmCall();
+        
+        TestFilter();
+
+        TestFilterNested();
+    }
+
+    private static void TestTryCatchNoException()
+    {
+        bool caught = false;
+        StartTest("Catch not called when no exception test");
+        try
+        {
+            new Exception();
+        }
+        catch (Exception)
+        {
+            caught = true;
+        }
+        EndTest(!caught);
+    }
+
+    // pass the exception to avoid a call/invoke for that ctor in this function
+    private static void TestTryCatchThrowException(Exception e)
+    {
+        bool caught = false;
+        StartTest("Catch called when exception thrown test");
+        try
+        {
+            throw e;
+        }
+        catch (Exception)
+        {
+            PrintLine("caught");
+            caught = true;
+        }
+        EndTest(caught);
+    }
+
+    static bool finallyCalled;
+    private static void TestTryFinallyThrowException()
+    {
+        finallyCalled = false;
+        StartTest("Try/Finally calls finally when exception thrown test");
+        try
+        {
+            TryFinally();
+        }
+        catch (Exception)
+        {
+
+        }
+        EndTest(finallyCalled);
+    }
+
+    private static void TryFinally()
+    {
+        try
+        {
+            throw new Exception();
+        }
+        finally
+        {
+            finallyCalled = true;
+        }
+    }
+
+    private static void TestTryCatchExceptionFromCall()
+    {
+        bool caught = false;
+        StartTest("Catch called when exception thrown from call");
+        try
+        {
+            ThrowException(new Exception());
+        }
+        catch (Exception)
+        {
+            caught = true;
+        }
+        EndTest(caught);
+    }
+
+    private static void TestCatchExceptionType()
+    {
+        int i = 1;
+        StartTest("Catch called for exception type and order");
+        try
+        {
+            throw new NullReferenceException("test"); // the parameterless ctor is causing some unexplained memory corruption with the EHInfo pointers...
+        }
+        catch (ArgumentException)
+        {
+            i += 10;
+        }
+        catch (NullReferenceException e)
+        {
+            if (e.Message == "test")
+            {
+                i += 100;
+            }
+        }
+        catch (Exception)
+        {
+            i += 1000;
+        }
+        EndTest(i == 101);
+    }
+
+    private static void TestTryCatchWithCallInIf()
+    {
+        int i = 1;
+        bool caught = false;
+        StartTest("Test invoke when last instruction in if block");
+        try
+        {
+            if (i == 1)
+            {
+                PrintString("");
+            }
+        }
+        catch
+        {
+            caught = true;
+        }
+        EndTest(!caught);
+    }
+
+    private static void TestThrowInCatch()
+    {
+        int i = 0;
+        StartTest("Throw exception in catch");
+        Exception outer = new Exception();
+        Exception inner = new Exception();
+        try
+        {
+            ThrowException(outer);
+        }
+        catch
+        {
+            i += 1;
+            try
+            {
+                ThrowException(inner);
+            }
+            catch(Exception e)
+            {
+                if(object.ReferenceEquals(e, inner)) i += 10;
+            }
+        }
+        EndTest(i == 11);
+    }
+
+    private static void TestExceptionInGvmCall()
+    {
+        StartTest("TestExceptionInGvmCall");
+
+        var shouldBeFalse = CatchGvmThrownException(new GenBase<string>(), (string)null);
+        var shouldBeTrue = CatchGvmThrownException(new DerivedThrows<string>(), (string)null);
+
+        EndTest(shouldBeTrue && !shouldBeFalse);
+    }
+
+    private static unsafe void TestFilter()
+    {
+        StartTest("TestFilter");
+
+        int counter = 0;
+        try
+        {
+            counter++;
+            throw new Exception("Testing filter");
+        }
+        catch (Exception e) when (e.Message == "Testing filter" && counter++ > 0)
+        {
+            if (e.Message == "Testing filter")
+            {
+                counter++;
+            }
+            counter++;
+        }
+        EndTest(counter == 4);
+    }
+
+    static string exceptionFlowSequence = "";
+    private static void TestFilterNested()
+    {
+        StartTest("TestFilterNested");
+        foreach (var exception in new Exception[]
+            {new ArgumentException(), new Exception(), new NullReferenceException()})
+        {
+            try
+            {
+                try
+                {
+                    try
+                    {
+                        throw exception;
+                    }
+                    catch (NullReferenceException) when (Print("inner"))
+                    {
+                        exceptionFlowSequence += "In inner catch";
+                    }
+                }
+                catch (ArgumentException)
+                {
+                    exceptionFlowSequence += "In middle catch";
+                }
+            }
+            catch (Exception) when (Print("outer"))
+            {
+                exceptionFlowSequence += "In outer catch";
+            }
+        }
+        PrintLine(exceptionFlowSequence);
+        EndTest(exceptionFlowSequence == @"In middle catchRunning outer filterIn outer catchRunning inner filterIn inner catch");
+    }
+
+    static bool Print(string s)
+    {
+        exceptionFlowSequence += $"Running {s} filter";
+        return true;
+    }
+    
+    class DerivedThrows<A> : GenBase<A>
+    {
+        public override string GMethod1<T>(T t1, T t2) { throw new Exception("ToStringThrows"); }
+    }
+    
+    private static bool CatchGvmThrownException<T>(GenBase<T> g, T p)
+    {
+        try
+        {
+            var i = 1;
+            if (i == 1)
+            {
+                g.GMethod1(p, p);
+            }
+        }
+        catch (Exception e)
+        {
+            return e.Message == "ToStringThrows"; // also testing here that we can return a value out of a catch
+        }
+        return false;
+    }
+
+    private static void ThrowException(Exception e)
+    {
+        throw e;
+    }
+
     private static void TestThreadStaticsForSingleThread()
     {
         var firstClass = new ClassWithFourThreadStatics();
@@ -1222,7 +1681,7 @@ internal static class Program
         using (disposable)
         {
         }
-        EndTest(disposable.Disposed);
+        EndTest(disposable.Count == 1);
     }
 
     private static void TestInitObjDouble()
@@ -1283,6 +1742,14 @@ internal static class Program
         EndTest(f == 0x100000000);
     }
 
+    internal static void TestBoxSingle()
+    {
+        StartTest("Test box single");
+        var fi = typeof(ClassWithFloat).GetField("F");
+        fi.SetValue(null, 1.1f);
+        EndTest(1.1f == ClassWithFloat.F);
+    }
+
     static void TestInitializeArray()
     {
         StartTest("Test InitializeArray");
@@ -1332,6 +1799,260 @@ internal static class Program
         EndTest(start == 0x0000828f);
     }
 
+    unsafe static void TestReverseDelegateInvoke()
+    {
+        // tests the try catch LLVM for reverse delegate invokes
+        DelegateToCallFromUnmanaged del = (char* charPtr) =>
+        {
+            return true;
+        };
+        int i = 1;
+        if (i == 0) // dont actually call it as it doesnt exist, just want the reverse delegate created & compiled
+        {
+            SomeExternalUmanagedFunction(del);
+        }
+    }
+
+    static void TestInterlockedExchange()
+    {
+        StartTest("InterlockedExchange");
+        int exInt1 = 1;
+        Interlocked.Exchange(ref exInt1, 2);
+
+        long exLong1 = 1;
+        Interlocked.Exchange(ref exLong1, 3);
+        EndTest(exInt1 == 2 && exLong1 == 3);
+    }
+
+    static void TestThrowIfNull()
+    {
+        StartTest("TestThrowIfNull");
+        ClassForNre c = null;
+        var success = true;
+        try
+        {
+            var f = c.F; //field access
+            PrintLine("NRE Field access failed");
+            success = false;
+        }
+        catch(NullReferenceException)
+        {
+        }
+        catch(Exception)
+        {
+            success = false;
+        }
+        try
+        {
+            var f = c.ToString(); //method access
+            PrintLine("NRE method access failed");
+            success = false;
+        }
+        catch (NullReferenceException)
+        {
+        }
+        catch (Exception)
+        {
+            success = false;
+        }
+
+        EndTest(success);
+    }
+
+#if TARGET_WINDOWS
+    private static void TestCkFinite()
+    {
+        // includes tests from https://github.com/dotnet/coreclr/blob/9b0a9fd623/tests/src/JIT/IL_Conformance/Old/Base/ckfinite.il4
+        StartTest("CkFiniteTests");
+        if (!CkFiniteTest.CkFinite32(0) || !CkFiniteTest.CkFinite32(1) ||
+            !CkFiniteTest.CkFinite32(100) || !CkFiniteTest.CkFinite32(-100) ||
+            !CkFinite32(0x7F7FFFC0) || CkFinite32(0xFF800000) ||  // use converter function to get the float equivalent of this bits
+            CkFinite32(0x7FC00000) && !CkFinite32(0xFF7FFFFF) ||
+            CkFinite32(0x7F800000))
+        {
+            FailTest("one or more 32 bit tests failed");
+            return;
+        }
+
+        if (!CkFiniteTest.CkFinite64(0) || !CkFiniteTest.CkFinite64(1) ||
+            !CkFiniteTest.CkFinite64(100) || !CkFiniteTest.CkFinite64(-100) ||
+            CkFinite64(0x7FF0000000000000) || CkFinite64(0xFFF0000000000000) ||
+            CkFinite64(0x7FF8000000000000) || !CkFinite64(0xFFEFFFFFFFFFFFFF))
+        {
+            FailTest("one or more 64 bit tests failed.");
+            return;
+        }
+        PassTest();
+    }
+
+    private static unsafe bool CkFinite32(uint value)
+    {
+        return CkFiniteTest.CkFinite32 (* (float*)(&value));
+    }
+
+    private static unsafe bool CkFinite64(ulong value)
+    {
+        return CkFiniteTest.CkFinite64(*(double*)(&value));
+    }
+#endif
+
+    static void TestIntOverflows()
+    {
+        TestSignedIntAddOvf();
+
+        TestSignedLongAddOvf();
+
+        TestUnsignedIntAddOvf();
+
+        TestUnsignedLongAddOvf();
+    }
+
+    private static void TestSignedLongAddOvf()
+    {
+        StartTest("Test long add overflows");
+        bool thrown;
+        long op64l = 1;
+        long op64r = long.MaxValue;
+        thrown = false;
+        try
+        {
+            long res = checked(op64l + op64r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for signed i64 addition of +ve number");
+            return;
+        }
+        thrown = false;
+        op64l = long.MinValue; // add negative to overflow below the MinValue
+        op64r = -1;
+        try
+        {
+            long res = checked(op64l + op64r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for signed i64 addition of -ve number");
+            return;
+        }
+        EndTest(true);
+    }
+
+    private static void TestSignedIntAddOvf()
+    {
+        StartTest("Test int add overflows");
+        bool thrown;
+        int op32l = 1;
+        int op32r = 2;
+        if (checked(op32l + op32r) != 3)
+        {
+            FailTest("No overflow failed"); // check not always throwing an exception
+            return;
+        }
+        op32l = 1;
+        op32r = int.MaxValue;
+        thrown = false;
+        try
+        {
+            int res = checked(op32l + op32r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for signed i32 addition of +ve number");
+            return;
+        }
+
+        thrown = false;
+        op32l = int.MinValue; // add negative to overflow below the MinValue
+        op32r = -1;
+        try
+        {
+            int res = checked(op32l + op32r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for signed i32 addition of -ve number");
+            return;
+        }
+        PassTest();
+    }
+
+    private static void TestUnsignedIntAddOvf()
+    {
+        StartTest("Test uint add overflows");
+        bool thrown;
+        uint op32l = 1;
+        uint op32r = 2;
+        if (checked(op32l + op32r) != 3)
+        {
+            FailTest("No overflow failed"); // check not always throwing an exception
+            return;
+        }
+        op32l = 1;
+        op32r = uint.MaxValue;
+        thrown = false;
+        try
+        {
+            uint res = checked(op32l + op32r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for unsigned i32 addition of +ve number");
+            return;
+        }
+        PassTest();
+    }
+
+    private static void TestUnsignedLongAddOvf()
+    {
+        StartTest("Test ulong add overflows");
+        bool thrown;
+        ulong op64l = 1;
+        ulong op64r = 2;
+        if (checked(op64l + op64r) != 3)
+        {
+            FailTest("No overflow failed"); // check not always throwing an exception
+            return;
+        }
+        op64l = 1;
+        op64r = ulong.MaxValue;
+        thrown = false;
+        try
+        {
+            ulong res = checked(op64l + op64r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for unsigned i64 addition of +ve number");
+            return;
+        }
+        PassTest();
+    }
+
     static ushort ReadUInt16()
     {
         // something with MSB set
@@ -1358,9 +2079,21 @@ internal static class Program
         EndTest(r1 == 1 && r2 == 2);
     }
 
+    // there's no actual implementation for this we just want the reverse delegate created
+    [DllImport("*")]
+    internal static extern bool SomeExternalUmanagedFunction(DelegateToCallFromUnmanaged callback);
+
+    unsafe internal delegate bool DelegateToCallFromUnmanaged(char* charPtr);
+
     [DllImport("*")]
     private static unsafe extern int printf(byte* str, byte* unused);
 }
+
+public class ClassForNre
+{
+    public int F;
+}
+
 
 public class ClassWithFloat
 {
@@ -1429,7 +2162,7 @@ public class TestClass
 
     public TestClass(int number)
     {
-        if(number != 1337)
+        if (number != 1337)
             throw new Exception();
     }
 
@@ -1443,8 +2176,8 @@ public class TestClass
     {
         Program.PrintLine("Virtual Slot Test: Ok If second");
     }
-	
-	public virtual void TestVirtualMethod2(string str)
+
+    public virtual void TestVirtualMethod2(string str)
     {
         Program.PrintLine("Virtual Slot Test 2: Ok");
     }
@@ -1471,7 +2204,7 @@ public class TestDerivedClass : TestClass
         Program.PrintLine("Virtual Slot Test: Ok");
         base.TestVirtualMethod(str);
     }
-    
+
     public override string ToString()
     {
         throw new Exception();
@@ -1724,11 +2457,11 @@ class AnotherClassWithFourThreadStatics
 
 class DisposableTest : IDisposable
 {
-    public bool Disposed;
+    public int Count = 0;
 
     public void Dispose()
     {
-        Disposed = true;
+        Count++;
     }
 }
 
@@ -1755,14 +2488,14 @@ class FieldStatics
 namespace System.Runtime.InteropServices
 {
     /// <summary>
-    /// Any method marked with NativeCallableAttribute can be directly called from
+    /// Any method marked with UnmanagedCallersOnlyAttribute can be directly called from
     /// native code. The function token can be loaded to a local variable using LDFTN
     /// and passed as a callback to native method.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method)]
-    public sealed class NativeCallableAttribute : Attribute
+    public sealed class UnmanagedCallersOnlyAttribute : Attribute
     {
-        public NativeCallableAttribute()
+        public UnmanagedCallersOnlyAttribute()
         {
         }
 

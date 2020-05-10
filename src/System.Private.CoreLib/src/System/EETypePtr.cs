@@ -16,8 +16,12 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
+using Internal.Runtime.CompilerServices;
+
 using EEType = Internal.Runtime.EEType;
+using EETypeElementType = Internal.Runtime.EETypeElementType;
 using EETypeRef = Internal.Runtime.EETypeRef;
+using CorElementType = System.Reflection.CorElementType;
 
 namespace System
 {
@@ -175,10 +179,7 @@ namespace System
         {
             get
             {
-                RuntimeImports.RhCorElementType et = CorElementType;
-                return ((et >= RuntimeImports.RhCorElementType.ELEMENT_TYPE_BOOLEAN) && (et <= RuntimeImports.RhCorElementType.ELEMENT_TYPE_R8)) ||
-                    (et == RuntimeImports.RhCorElementType.ELEMENT_TYPE_I) ||
-                    (et == RuntimeImports.RhCorElementType.ELEMENT_TYPE_U);
+                return ElementType < EETypeElementType.ValueType;
             }
         }
 
@@ -197,14 +198,7 @@ namespace System
 
                 // Generic type definitions that return true for IsPrimitive are type definitions of generic enums.
                 // Otherwise check the base type.
-                return
-                    // RHBind doesn't emit CorElementType on generic type definitions, so this only works for
-                    // open generics outside ProjectN. When we fix this, also remove the N-specific fallback for getting
-                    // the underlying type of open enums in RuntimeAugments.
-#if !PROJECTN
-                    (IsGenericTypeDefinition && IsPrimitive) ||
-#endif
-                    this.BaseType == EETypePtr.EETypePtrOf<Enum>();
+                return (IsGenericTypeDefinition && IsPrimitive) || this.BaseType == EETypePtr.EETypePtrOf<Enum>();
             }
         }
 
@@ -368,6 +362,14 @@ namespace System
             }
         }
 
+        internal IntPtr DispatchMap
+        {
+            get
+            {
+                return (IntPtr)_value->DispatchMap;
+            }
+        }
+
         // Has internal gc pointers. 
         internal bool HasPointers
         {
@@ -385,13 +387,46 @@ namespace System
             }
         }
 
-        internal RuntimeImports.RhCorElementType CorElementType
+        internal CorElementType CorElementType
         {
             get
             {
-                Debug.Assert((int)Internal.Runtime.CorElementType.ELEMENT_TYPE_I1 == (int)RuntimeImports.RhCorElementType.ELEMENT_TYPE_I1);
-                Debug.Assert((int)Internal.Runtime.CorElementType.ELEMENT_TYPE_R8 == (int)RuntimeImports.RhCorElementType.ELEMENT_TYPE_R8);
-                return (RuntimeImports.RhCorElementType)_value->CorElementType;
+                Debug.Assert((int)CorElementType.ELEMENT_TYPE_BOOLEAN == (int)EETypeElementType.Boolean);
+                Debug.Assert((int)CorElementType.ELEMENT_TYPE_I1 == (int)EETypeElementType.SByte);
+                Debug.Assert((int)CorElementType.ELEMENT_TYPE_I8 == (int)EETypeElementType.Int64);
+                EETypeElementType elementType = ElementType;
+
+                if (elementType <= EETypeElementType.UInt64)
+                    return (CorElementType)elementType;
+                else if (elementType == EETypeElementType.Single)
+                    return CorElementType.ELEMENT_TYPE_R4;
+                else if (elementType == EETypeElementType.Double)
+                    return CorElementType.ELEMENT_TYPE_R8;
+                else if (elementType == EETypeElementType.IntPtr)
+                    return CorElementType.ELEMENT_TYPE_I;
+                else if (elementType == EETypeElementType.UIntPtr)
+                    return CorElementType.ELEMENT_TYPE_U;
+                else if (IsValueType)
+                    return CorElementType.ELEMENT_TYPE_VALUETYPE;
+                else if (IsByRef)
+                    return CorElementType.ELEMENT_TYPE_BYREF;
+                else if (IsPointer)
+                    return CorElementType.ELEMENT_TYPE_PTR;
+                else if (IsSzArray)
+                    return CorElementType.ELEMENT_TYPE_SZARRAY;
+                else if (IsArray)
+                    return CorElementType.ELEMENT_TYPE_ARRAY;
+                else
+                    return CorElementType.ELEMENT_TYPE_CLASS;
+
+            }
+        }
+
+        internal EETypeElementType ElementType
+        {
+            get
+            {
+                return _value->ElementType;
             }
         }
 
@@ -399,9 +434,14 @@ namespace System
         {
             get
             {
-                RuntimeImports.RhCorElementType corElementType = this.CorElementType;
-                return RuntimeImports.GetRhCorElementTypeInfo(corElementType);
+                return RuntimeImports.GetRhCorElementTypeInfo(CorElementType);
             }
+        }
+
+        internal ref T GetWritableData<T>() where T : unmanaged
+        {
+            Debug.Assert(Internal.Runtime.WritableData.GetSize(IntPtr.Size) == sizeof(T));
+            return ref Unsafe.AsRef<T>((void*)_value->WritableData);
         }
 
         [Intrinsic]

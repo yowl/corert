@@ -6,39 +6,34 @@
 //
 // This file is a line by line port of callingconvention.h from the desktop CLR. See reference source in the ReferenceSource directory
 //
-#if ARM
-#define _TARGET_ARM_
+#if TARGET_ARM
 #define CALLDESCR_ARGREGS                          // CallDescrWorker has ArgumentRegister parameter
 #define CALLDESCR_FPARGREGS                        // CallDescrWorker has FloatArgumentRegisters parameter
 #define ENREGISTERED_RETURNTYPE_MAXSIZE
 #define ENREGISTERED_RETURNTYPE_INTEGER_MAXSIZE
 #define FEATURE_HFA
-#elif ARM64
-#define _TARGET_ARM64_
+#elif TARGET_ARM64
 #define CALLDESCR_ARGREGS                          // CallDescrWorker has ArgumentRegister parameter
 #define CALLDESCR_FPARGREGS                        // CallDescrWorker has FloatArgumentRegisters parameter
 #define ENREGISTERED_RETURNTYPE_MAXSIZE
 #define ENREGISTERED_RETURNTYPE_INTEGER_MAXSIZE
 #define ENREGISTERED_PARAMTYPE_MAXSIZE
 #define FEATURE_HFA
-#elif X86
-#define _TARGET_X86_
+#elif TARGET_X86
 #define ENREGISTERED_RETURNTYPE_MAXSIZE
 #define ENREGISTERED_RETURNTYPE_INTEGER_MAXSIZE
 #define CALLDESCR_ARGREGS                          // CallDescrWorker has ArgumentRegister parameter
-#elif AMD64
+#elif TARGET_AMD64
 #if UNIXAMD64
 #define UNIX_AMD64_ABI
 #define CALLDESCR_ARGREGS                          // CallDescrWorker has ArgumentRegister parameter
 #else
 #endif
 #define CALLDESCR_FPARGREGS                        // CallDescrWorker has FloatArgumentRegisters parameter
-#define _TARGET_AMD64_
 #define ENREGISTERED_RETURNTYPE_MAXSIZE
 #define ENREGISTERED_RETURNTYPE_INTEGER_MAXSIZE
 #define ENREGISTERED_PARAMTYPE_MAXSIZE
-#elif WASM
-#define _TARGET_WASM_
+#elif TARGET_WASM
 #else
 #error Unknown architecture!
 #endif
@@ -119,7 +114,7 @@ namespace Internal.Runtime.CallConverter
 
         public bool RequiresAlign8()
         {
-#if !ARM
+#if !TARGET_ARM
             return false;
 #else
             if (_isByRef)
@@ -131,7 +126,7 @@ namespace Internal.Runtime.CallConverter
         }
         public bool IsHFA()
         {
-#if !ARM && !ARM64
+#if !TARGET_ARM && !TARGET_ARM64
             return false;
 #else
             if (_isByRef)
@@ -145,12 +140,12 @@ namespace Internal.Runtime.CallConverter
         public CorElementType GetHFAType()
         {
             Debug.Assert(IsHFA());
-#if ARM
+#if TARGET_ARM
             if (RequiresAlign8())
             {
                 return CorElementType.ELEMENT_TYPE_R8;
             }
-#elif ARM64
+#elif TARGET_ARM64
             if (_eeType->FieldAlignmentRequirement == IntPtr.Size)
             {
                 return CorElementType.ELEMENT_TYPE_R8;
@@ -168,13 +163,30 @@ namespace Internal.Runtime.CallConverter
 
             // The core redhawk runtime has a slightly different concept of what CorElementType should be for a type. It matches for primitive and enum types
             // but for other types, it doesn't match the needs in this file.
-            CorElementType rhCorElementType = _eeType->CorElementType;
+            EETypeElementType rhCorElementType = _eeType->ElementType;
 
-            if (((rhCorElementType >= CorElementType.ELEMENT_TYPE_BOOLEAN) && (rhCorElementType <= CorElementType.ELEMENT_TYPE_R8)) ||
-                    (rhCorElementType == CorElementType.ELEMENT_TYPE_I) ||
-                    (rhCorElementType == CorElementType.ELEMENT_TYPE_U))
+            if (rhCorElementType >= EETypeElementType.Boolean && rhCorElementType <= EETypeElementType.UInt64)
             {
-                return rhCorElementType; // If Redhawk thinks the corelementtype is a primitive type, then it agree with the concept of corelement type needed in this codebase.
+                Debug.Assert((int)EETypeElementType.Boolean == (int)CorElementType.ELEMENT_TYPE_BOOLEAN);
+                Debug.Assert((int)EETypeElementType.Int32 == (int)CorElementType.ELEMENT_TYPE_I4);
+                Debug.Assert((int)EETypeElementType.UInt64 == (int)CorElementType.ELEMENT_TYPE_U8);
+                return (CorElementType)rhCorElementType;
+            }
+            else if (rhCorElementType == EETypeElementType.Single)
+            {
+                return CorElementType.ELEMENT_TYPE_R4;
+            }
+            else if (rhCorElementType == EETypeElementType.Double)
+            {
+                return CorElementType.ELEMENT_TYPE_R8;
+            }
+            else if (rhCorElementType == EETypeElementType.IntPtr)
+            {
+                return CorElementType.ELEMENT_TYPE_I;
+            }
+            else if (rhCorElementType == EETypeElementType.UIntPtr)
+            {
+                return CorElementType.ELEMENT_TYPE_U;
             }
             else if (_eeType == typeof(void).TypeHandle.ToEETypePtr())
             {
@@ -277,11 +289,11 @@ namespace Internal.Runtime.CallConverter
         public int m_idxStack;     // First stack slot used (or -1)
         public int m_cStack;       // Count of stack slots used (or 0)
 
-#if _TARGET_ARM64_
+#if TARGET_ARM64
         public bool m_isSinglePrecision;        // For determining if HFA is single or double precision
 #endif
 
-#if _TARGET_ARM_
+#if TARGET_ARM
         public bool m_fRequires64BitAlignment;  // True if the argument should always be aligned (in registers or on the stack
 #endif
 
@@ -295,11 +307,11 @@ namespace Internal.Runtime.CallConverter
             m_idxStack = -1;
             m_cStack = 0;
 
-#if _TARGET_ARM64_
+#if TARGET_ARM64
             m_isSinglePrecision = false;
 #endif
 
-#if _TARGET_ARM_
+#if TARGET_ARM
             m_fRequires64BitAlignment = false;
 #endif
         }
@@ -521,7 +533,7 @@ namespace Internal.Runtime.CallConverter
 
             uint size = SizeOfArgStack();
 
-#if _TARGET_AMD64_ && !UNIX_AMD64_ABI
+#if TARGET_AMD64 && !UNIX_AMD64_ABI
             // The argument registers are not included in the stack size on AMD64
             size += ArchitectureConstants.ARGUMENTREGISTERS_SIZE;
 #endif
@@ -531,7 +543,7 @@ namespace Internal.Runtime.CallConverter
 
         //------------------------------------------------------------------------
 
-#if _TARGET_X86_
+#if TARGET_X86
         public int CbStackPop()
         {
             //        WRAPPER_NO_CONTRACT;
@@ -561,7 +573,7 @@ namespace Internal.Runtime.CallConverter
             return _fpReturnSize;
         }
 
-#if _TARGET_X86_
+#if TARGET_X86
         //=========================================================================
         // Indicates whether an argument is to be put in a register using the
         // default IL calling convention. This should be called on each parameter
@@ -623,7 +635,7 @@ namespace Internal.Runtime.CallConverter
 
             return (false);
         }
-#endif // _TARGET_X86_
+#endif // TARGET_X86
 
 #if ENREGISTERED_PARAMTYPE_MAXSIZE
 
@@ -639,9 +651,9 @@ namespace Internal.Runtime.CallConverter
             Debug.Assert(th.IsValueType());
 
             uint size = th.GetSize();
-#if _TARGET_AMD64_
+#if TARGET_AMD64
             return IsArgPassedByRef((int)size);
-#elif _TARGET_ARM64_
+#elif TARGET_ARM64
             // Composites greater than 16 bytes are passed by reference
             return ((size > ArchitectureConstants.ENREGISTERED_PARAMTYPE_MAXSIZE) && !th.IsHFA());
 #else
@@ -649,7 +661,7 @@ namespace Internal.Runtime.CallConverter
 #endif
         }
 
-#if _TARGET_AMD64_
+#if TARGET_AMD64
         // This overload should only be used in AMD64-specific code only.
         private static bool IsArgPassedByRef(int size)
         {
@@ -666,7 +678,7 @@ namespace Internal.Runtime.CallConverter
         {
             //        LIMITED_METHOD_CONTRACT;
 
-#if _TARGET_AMD64_
+#if TARGET_AMD64
             return IsArgPassedByRef(size);
 #else
             return (size > ArchitectureConstants.ENREGISTERED_PARAMTYPE_MAXSIZE);
@@ -687,9 +699,9 @@ namespace Internal.Runtime.CallConverter
                 return true;
             }
 #if ENREGISTERED_PARAMTYPE_MAXSIZE
-#if _TARGET_AMD64_
+#if TARGET_AMD64
             return IsArgPassedByRef(_argSize);
-#elif _TARGET_ARM64_
+#elif TARGET_ARM64
             if (_argType == CorElementType.ELEMENT_TYPE_VALUETYPE)
             {
                 Debug.Assert(!_argTypeHandle.IsNull());
@@ -725,7 +737,7 @@ namespace Internal.Runtime.CallConverter
 
             Debug.Assert(this.HasRetBuffArg());
 
-#if _TARGET_X86_
+#if TARGET_X86
             // x86 is special as always
             // DESKTOP BEHAVIOR            ret += this.HasThis() ? ArgumentRegisters.GetOffsetOfEdx() : ArgumentRegisters.GetOffsetOfEcx();
             int ret = TransitionBlock.GetOffsetOfArgs();
@@ -733,14 +745,14 @@ namespace Internal.Runtime.CallConverter
             // RetBuf arg is in the first argument register by default
             int ret = TransitionBlock.GetOffsetOfArgumentRegisters();
 
-#if _TARGET_ARM64_
+#if TARGET_ARM64
             ret += ArgumentRegisters.GetOffsetOfx8();
 #else
             // But if there is a this pointer, push it to the second.
             if (this.HasThis())
                 ret += IntPtr.Size;
-#endif  // _TARGET_ARM64_
-#endif  // _TARGET_X86_
+#endif  // TARGET_ARM64
+#endif  // TARGET_X86
 
             return ret;
         }
@@ -751,7 +763,7 @@ namespace Internal.Runtime.CallConverter
 
             Debug.Assert(this.IsVarArg());
 
-#if _TARGET_X86_
+#if TARGET_X86
             // x86 is special as always
             return sizeof(TransitionBlock);
 #else
@@ -776,7 +788,7 @@ namespace Internal.Runtime.CallConverter
         {
             Debug.Assert(this.HasParamType());
 
-#if _TARGET_X86_
+#if TARGET_X86
             // x86 is special as always
             if (!_SIZE_OF_ARG_STACK_COMPUTED)
                 ForceSigWalk();
@@ -826,7 +838,7 @@ namespace Internal.Runtime.CallConverter
             if (!_ITERATION_STARTED)
             {
                 int numRegistersUsed = 0;
-#if _TARGET_X86_
+#if TARGET_X86
                 int initialArgOffset = 0;
 #endif 
                 if (this.HasThis())
@@ -834,7 +846,7 @@ namespace Internal.Runtime.CallConverter
 
                 if (this.HasRetBuffArg() && IsRetBuffPassedAsFirstArg())
                 {
-#if !_TARGET_X86_
+#if !TARGET_X86
                     numRegistersUsed++;
 #else
                     // DESKTOP BEHAVIOR is to do nothing here, as ret buf is never reached by the scan algorithm that walks backwards
@@ -852,14 +864,14 @@ namespace Internal.Runtime.CallConverter
                     numRegistersUsed++;
                 }
 
-#if !_TARGET_X86_
+#if !TARGET_X86
                 if (this.IsVarArg())
                 {
                     numRegistersUsed++;
                 }
 #endif
 
-#if _TARGET_X86_
+#if TARGET_X86
                 if (this.IsVarArg())
                 {
                     numRegistersUsed = ArchitectureConstants.NUM_ARGUMENT_REGISTERS; // Nothing else gets passed in registers for varargs
@@ -890,7 +902,7 @@ namespace Internal.Runtime.CallConverter
                         _curOfs = (int)(TransitionBlock.GetOffsetOfArgs() + initialArgOffset);
 #endif
 
-#elif _TARGET_AMD64_
+#elif TARGET_AMD64
 #if UNIX_AMD64_ABI
                 _idxGenReg = numRegistersUsed;
                 _idxStack = 0;
@@ -898,27 +910,27 @@ namespace Internal.Runtime.CallConverter
 #else
                 _curOfs = TransitionBlock.GetOffsetOfArgs() + numRegistersUsed * IntPtr.Size;
 #endif
-#elif _TARGET_ARM_
+#elif TARGET_ARM
                 _idxGenReg = numRegistersUsed;
                 _idxStack = 0;
 
                 _wFPRegs = 0;
-#elif _TARGET_ARM64_
+#elif TARGET_ARM64
                 _idxGenReg = numRegistersUsed;
                 _idxStack = 0;
 
                 _idxFPReg = 0;
-#elif _TARGET_WASM_
+#elif TARGET_WASM
                 throw new NotImplementedException();
 #else
                 PORTABILITY_ASSERT("ArgIterator::GetNextOffset");
 #endif
 
-#if !_TARGET_WASM_
+#if !TARGET_WASM
                 _argNum = (_skipFirstArg ? 1 : 0);
 
                 _ITERATION_STARTED = true;
-#endif // !_TARGET_WASM_
+#endif // !TARGET_WASM
             }
 
             if (_argNum >= this.NumFixedArgs())
@@ -932,7 +944,7 @@ namespace Internal.Runtime.CallConverter
 
             int argSize = TypeHandle.GetElemSize(argType, _argTypeHandle);
 
-#if _TARGET_ARM64_
+#if TARGET_ARM64
             // NOT DESKTOP BEHAVIOR: The S and D registers overlap, and the UniversalTransitionThunk copies D registers to the transition blocks. We'll need
             // to work with the D registers here as well.
             bool processingFloatsAsDoublesFromTransitionBlock = false;
@@ -956,7 +968,7 @@ namespace Internal.Runtime.CallConverter
             int argOfs;
 #pragma warning restore 219,168
 
-#if _TARGET_X86_
+#if TARGET_X86
 #if FEATURE_INTERPRETER
             if (_interpreterCallingConvention != CallingConvention.ManagedStatic && _interpreterCallingConvention != CallingConvention.ManagedInstance)
             {
@@ -976,7 +988,7 @@ namespace Internal.Runtime.CallConverter
             _curOfs += ArchitectureConstants.StackElemSize(argSize);
             Debug.Assert(argOfs >= TransitionBlock.GetOffsetOfArgs());
             return argOfs;
-#elif _TARGET_AMD64_
+#elif TARGET_AMD64
 #if UNIX_AMD64_ABI
             int cFPRegs = 0;
 
@@ -1045,7 +1057,7 @@ namespace Internal.Runtime.CallConverter
                     break;
             }
 
-            // Each argument takes exactly one slot on AMD64
+            // Each argument takes exactly one slot on TARGET_AMD64
             argOfs = _curOfs - TransitionBlock.GetOffsetOfArgs();
             _curOfs += IntPtr.Size;
 
@@ -1059,7 +1071,7 @@ namespace Internal.Runtime.CallConverter
                 return TransitionBlock.GetOffsetOfFloatArgumentRegisters() + idxFpReg * sizeof(M128A);
             }
 #endif
-#elif _TARGET_ARM_
+#elif TARGET_ARM
             // First look at the underlying type of the argument to determine some basic properties:
             //  1) The size of the argument in bytes (rounded up to the stack slot size of 4 if necessary).
             //  2) Whether the argument represents a floating point primitive (ELEMENT_TYPE_R4 or ELEMENT_TYPE_R8).
@@ -1072,7 +1084,7 @@ namespace Internal.Runtime.CallConverter
             {
                 case CorElementType.ELEMENT_TYPE_I8:
                 case CorElementType.ELEMENT_TYPE_U8:
-                    // 64-bit integers require 64-bit alignment on ARM.
+                    // 64-bit integers require 64-bit alignment on TARGET_ARM.
                     fRequiresAlign64Bit = true;
                     break;
 
@@ -1221,7 +1233,7 @@ namespace Internal.Runtime.CallConverter
             _idxStack += cArgSlots;
 
             return argOfs;
-#elif _TARGET_ARM64_
+#elif TARGET_ARM64
 
             int cFPRegs = 0;
 
@@ -1298,7 +1310,7 @@ namespace Internal.Runtime.CallConverter
             argOfs = TransitionBlock.GetOffsetOfArgs() + _idxStack * 8;
             _idxStack += cArgSlots;
             return argOfs;
-#elif _TARGET_WASM_
+#elif TARGET_WASM
             throw new NotImplementedException();
 #else
 #error            PORTABILITY_ASSERT("ArgIterator::GetNextOffset");
@@ -1331,7 +1343,7 @@ namespace Internal.Runtime.CallConverter
             // This can be only used before the actual argument iteration started
             Debug.Assert(!_ITERATION_STARTED);
 
-#if _TARGET_X86_
+#if TARGET_X86
             //
             // x86 is special as always
             //
@@ -1420,7 +1432,7 @@ namespace Internal.Runtime.CallConverter
             }
 #endif // DESKTOP BEHAVIOR
 
-#else // _TARGET_X86_
+#else // TARGET_X86
 
             int maxOffset = TransitionBlock.GetOffsetOfArgs();
 
@@ -1429,8 +1441,8 @@ namespace Internal.Runtime.CallConverter
             {
                 int stackElemSize;
 
-#if _TARGET_AMD64_
-                // All stack arguments take just one stack slot on AMD64 because of arguments bigger 
+#if TARGET_AMD64
+                // All stack arguments take just one stack slot on AMD64 because of arguments bigger
                 // than a stack slot are passed by reference. 
                 stackElemSize = ArchitectureConstants.STACK_ELEM_SIZE;
 #else
@@ -1454,12 +1466,12 @@ namespace Internal.Runtime.CallConverter
 
             int nSizeOfArgStack = maxOffset - TransitionBlock.GetOffsetOfArgs();
 
-#if _TARGET_AMD64_ && !UNIX_AMD64_ABI
+#if TARGET_AMD64 && !UNIX_AMD64_ABI
             nSizeOfArgStack = (nSizeOfArgStack > (int)sizeof(ArgumentRegisters)) ?
                 (nSizeOfArgStack - sizeof(ArgumentRegisters)) : 0;
 #endif
 
-#endif // _TARGET_X86_
+#endif // TARGET_X86
 
             // Cache the result
             _nSizeOfArgStack = nSizeOfArgStack;
@@ -1469,7 +1481,7 @@ namespace Internal.Runtime.CallConverter
         }
 
 
-#if !_TARGET_X86_
+#if !TARGET_X86
         // Accessors for built in argument descriptions of the special implicit parameters not mentioned directly
         // in signatures (this pointer and the like). Whether or not these can be used successfully before all the
         // explicit arguments have been scanned is platform dependent.
@@ -1477,9 +1489,9 @@ namespace Internal.Runtime.CallConverter
         public unsafe void GetRetBuffArgLoc(ArgLocDesc* pLoc) { GetSimpleLoc(GetRetBuffArgOffset(), pLoc); }
         public unsafe void GetParamTypeLoc(ArgLocDesc* pLoc) { GetSimpleLoc(GetParamTypeArgOffset(), pLoc); }
         public unsafe void GetVASigCookieLoc(ArgLocDesc* pLoc) { GetSimpleLoc(GetVASigCookieOffset(), pLoc); }
-#endif // !_TARGET_X86_
+#endif // !TARGET_X86
 
-#if _TARGET_ARM_
+#if TARGET_ARM
         // Get layout information for the argument that the ArgIterator is currently visiting.
         private unsafe void GetArgLoc(int argOffset, ArgLocDesc* pLoc)
         {
@@ -1520,9 +1532,9 @@ namespace Internal.Runtime.CallConverter
                 pLoc->m_cStack = cSlots;
             }
         }
-#endif // _TARGET_ARM_
+#endif // TARGET_ARM
 
-#if _TARGET_ARM64_
+#if TARGET_ARM64
         // Get layout information for the argument that the ArgIterator is currently visiting.
         private unsafe void GetArgLoc(int argOffset, ArgLocDesc* pLoc)
         {
@@ -1571,9 +1583,9 @@ namespace Internal.Runtime.CallConverter
                 pLoc->m_cStack = cSlots;
             }
         }
-#endif // _TARGET_ARM64_
+#endif // TARGET_ARM64
 
-#if _TARGET_AMD64_ && UNIX_AMD64_ABI
+#if TARGET_AMD64 && UNIX_AMD64_ABI
         // Get layout information for the argument that the ArgIterator is currently visiting.
         unsafe void GetArgLoc(int argOffset, ArgLocDesc* pLoc)
         {
@@ -1613,7 +1625,7 @@ namespace Internal.Runtime.CallConverter
                 pLoc->m_cStack = cSlots;
             }
         }
-#endif // _TARGET_AMD64_ && UNIX_AMD64_ABI
+#endif // TARGET_AMD64 && UNIX_AMD64_ABI
 
         private int _nSizeOfArgStack;      // Cached value of SizeOfArgStack
 
@@ -1626,12 +1638,12 @@ namespace Internal.Runtime.CallConverter
         private TypeHandle _argTypeHandleOfByRefParam;
         private bool _argForceByRef;
 
-#if _TARGET_X86_
+#if TARGET_X86
         private int _curOfs;           // Current position of the stack iterator
         private int _numRegistersUsed;
 #endif
 
-#if _TARGET_AMD64_
+#if TARGET_AMD64
 #if UNIX_AMD64_ABI
         int _idxGenReg;
         int _idxStack;
@@ -1641,7 +1653,7 @@ namespace Internal.Runtime.CallConverter
 #endif
 #endif
 
-#if _TARGET_ARM_
+#if TARGET_ARM
         private int _idxGenReg;        // Next general register to be assigned a value
         private int _idxStack;         // Next stack slot to be assigned a value
 
@@ -1649,7 +1661,7 @@ namespace Internal.Runtime.CallConverter
         private bool _fRequires64BitAlignment; // Cached info about the current arg
 #endif
 
-#if _TARGET_ARM64_
+#if TARGET_ARM64
         private int _idxGenReg;        // Next general register to be assigned a value
         private int _idxStack;         // Next stack slot to be assigned a value
         private int _idxFPReg;         // Next FP register to be assigned a value
@@ -1668,7 +1680,7 @@ namespace Internal.Runtime.CallConverter
                 RETURN_FLAGS_COMPUTED           = 0x0004,
                 RETURN_HAS_RET_BUFFER           = 0x0008,   // Cached value of HasRetBuffArg
         */
-#if _TARGET_X86_
+#if TARGET_X86
         private enum ParamTypeLocation
         {
             Stack,
@@ -1723,7 +1735,7 @@ namespace Internal.Runtime.CallConverter
                         {
                             CorElementType hfaType = thRetType.GetHFAType();
 
-#if _TARGET_ARM64_
+#if TARGET_ARM64
                             // DESKTOP BEHAVIOR fpReturnSize = (hfaType == CorElementType.ELEMENT_TYPE_R4) ? (4 * (uint)sizeof(float)) : (4 * (uint)sizeof(double));
                             // S and D registers overlap. Since we copy D registers in the UniversalTransitionThunk, we'll
                             // thread floats like doubles during copying.
@@ -1740,7 +1752,7 @@ namespace Internal.Runtime.CallConverter
 
                         uint size = thRetType.GetSize();
 
-#if _TARGET_X86_ || _TARGET_AMD64_
+#if TARGET_X86 || TARGET_AMD64
                         // Return value types of size which are not powers of 2 using a RetBuffArg
                         if ((size & (size - 1)) != 0)
                         {
@@ -1777,7 +1789,7 @@ namespace Internal.Runtime.CallConverter
         }
 
 
-#if !_TARGET_X86_
+#if !TARGET_X86
         private unsafe void GetSimpleLoc(int offset, ArgLocDesc* pLoc)
         {
             //        WRAPPER_NO_CONTRACT; 
@@ -1801,11 +1813,44 @@ namespace Internal.Runtime.CallConverter
         public static bool IsRetBuffPassedAsFirstArg()
         {
             //        WRAPPER_NO_CONTRACT; 
-#if !_TARGET_ARM64_
+#if !TARGET_ARM64
             return true;
 #else
             return false;
 #endif
         }
-    };
+    }
+
+    internal enum CorElementType
+    {
+        ELEMENT_TYPE_END = 0x00,
+
+        ELEMENT_TYPE_VOID = 0x1,
+        ELEMENT_TYPE_BOOLEAN = 0x2,
+        ELEMENT_TYPE_CHAR = 0x3,
+        ELEMENT_TYPE_I1 = 0x4,
+        ELEMENT_TYPE_U1 = 0x5,
+        ELEMENT_TYPE_I2 = 0x6,
+        ELEMENT_TYPE_U2 = 0x7,
+        ELEMENT_TYPE_I4 = 0x8,
+        ELEMENT_TYPE_U4 = 0x9,
+        ELEMENT_TYPE_I8 = 0xa,
+        ELEMENT_TYPE_U8 = 0xb,
+        ELEMENT_TYPE_R4 = 0xc,
+        ELEMENT_TYPE_R8 = 0xd,
+        ELEMENT_TYPE_STRING = 0xe,
+        ELEMENT_TYPE_PTR = 0xf,
+        ELEMENT_TYPE_BYREF = 0x10,
+        ELEMENT_TYPE_VALUETYPE = 0x11,
+        ELEMENT_TYPE_CLASS = 0x12,
+
+        ELEMENT_TYPE_ARRAY = 0x14,
+
+        ELEMENT_TYPE_TYPEDBYREF = 0x16,
+        ELEMENT_TYPE_I = 0x18,
+        ELEMENT_TYPE_U = 0x19,
+        ELEMENT_TYPE_FNPTR = 0x1b,
+        ELEMENT_TYPE_OBJECT = 0x1c,
+        ELEMENT_TYPE_SZARRAY = 0x1d,
+    }
 }

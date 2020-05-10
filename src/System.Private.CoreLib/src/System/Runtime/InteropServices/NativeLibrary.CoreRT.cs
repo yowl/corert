@@ -7,14 +7,13 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Text;
-
 using LibraryNameVariation = System.Runtime.Loader.LibraryNameVariation;
 
 namespace System.Runtime.InteropServices
 {
     public static partial class NativeLibrary
     {
-        internal static IntPtr LoadLibraryByName(string libraryName, Assembly assembly, DllImportSearchPath? searchPath, bool throwOnError)
+        internal static IntPtr LoadByName(string libraryName, Assembly assembly, DllImportSearchPath? searchPath, bool throwOnError)
         {
             // First checks if a default dllImportSearchPathFlags was passed in, if so, use that value.
             // Otherwise checks if the assembly has the DefaultDllImportSearchPathsAttribute attribute. 
@@ -33,7 +32,7 @@ namespace System.Runtime.InteropServices
             }
 
             LoadLibErrorTracker errorTracker = default;
-            IntPtr ret = LoadLibraryModuleBySearch(assembly, searchAssemblyDirectory, searchPathFlags, ref errorTracker, libraryName);
+            IntPtr ret = LoadBySearch(assembly, searchAssemblyDirectory, searchPathFlags, ref errorTracker, libraryName);
             if (throwOnError && ret == IntPtr.Zero)
             {
                 errorTracker.Throw(libraryName);
@@ -42,12 +41,9 @@ namespace System.Runtime.InteropServices
             return ret;
         }
 
-        internal const DllImportSearchPath DefaultDllImportSearchPath = DllImportSearchPath.AssemblyDirectory;
-
-        // TODO: make this into a reflection callback so that we can make this work when reflection is disabled.
-        private static void GetDllImportSearchPathFlags(Assembly callingAssembly, out int searchPathFlags, out bool searchAssemblyDirectory)
+        internal static void GetDllImportSearchPathFlags(Assembly callingAssembly, out int searchPathFlags, out bool searchAssemblyDirectory)
         {
-            DllImportSearchPath searchPath = DefaultDllImportSearchPath;
+            var searchPath = DllImportSearchPath.AssemblyDirectory;
 
             foreach (CustomAttributeData cad in callingAssembly.CustomAttributes)
             {
@@ -61,7 +57,7 @@ namespace System.Runtime.InteropServices
             searchAssemblyDirectory = (searchPath & DllImportSearchPath.AssemblyDirectory) != 0;
         }
 
-        internal static IntPtr LoadLibraryModuleBySearch(Assembly callingAssembly, bool searchAssemblyDirectory, int dllImportSearchPathFlags, ref LoadLibErrorTracker errorTracker, string libraryName)
+        internal static IntPtr LoadBySearch(Assembly callingAssembly, bool searchAssemblyDirectory, int dllImportSearchPathFlags, ref LoadLibErrorTracker errorTracker, string libraryName)
         {
             IntPtr ret = IntPtr.Zero;
 
@@ -123,7 +119,7 @@ namespace System.Runtime.InteropServices
 
         private static IntPtr LoadLibraryHelper(string libraryName, int flags, ref LoadLibErrorTracker errorTracker)
         {
-#if PLATFORM_WINDOWS
+#if TARGET_WINDOWS
             IntPtr ret = Interop.mincore.LoadLibraryEx(libraryName, IntPtr.Zero, flags);
             if (ret != IntPtr.Zero)
             {
@@ -165,7 +161,7 @@ namespace System.Runtime.InteropServices
         {
             Debug.Assert(handle != IntPtr.Zero);
 
-#if !PLATFORM_UNIX
+#if !TARGET_UNIX
             bool result = Interop.mincore.FreeLibrary(handle);
             if (!result)
                 throw new InvalidOperationException();
@@ -177,7 +173,7 @@ namespace System.Runtime.InteropServices
         private static unsafe IntPtr GetSymbol(IntPtr handle, string symbolName, bool throwOnError)
         {
             IntPtr ret;
-#if !PLATFORM_UNIX
+#if !TARGET_UNIX
             var symbolBytes = new byte[Encoding.UTF8.GetByteCount(symbolName) + 1];
             Encoding.UTF8.GetBytes(symbolName, symbolBytes);
             fixed (byte* pSymbolBytes = symbolBytes)

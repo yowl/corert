@@ -13,7 +13,7 @@ To specify a switch, add a new property to your project file with one or more of
 under the `<Project>` node of your project file.
 
 ## Options related to globalization
-* `<IlcInvariantGlobalization>true</IlcInvariantGlobalization>`: enables the [globalization invariant mode](https://github.com/dotnet/corefx/blob/master/Documentation/architecture/globalization-invariant-mode.md) that removes code and data that supports non-english cultures. Removing code and data makes your app smaller.
+* `<IlcInvariantGlobalization>true</IlcInvariantGlobalization>`: enables the [globalization invariant mode](https://github.com/dotnet/runtime/blob/master/docs/design/features/globalization-invariant-mode.md) that removes code and data that supports non-english cultures. Removing code and data makes your app smaller.
 
 ## Options related to reflection
 
@@ -34,3 +34,7 @@ By default, the compiler tries to maximize compatibility with existing .NET code
 Debugging symbols (data about your program required for debugging) is by default part of native executable files on Unix-like operating systems. To minimize the size of your CoreRT-compiled executable, you can run the `strip` tool to remove the debugging symbols.
 
 No action is needed on Windows since the platform convention is to generate debug information into a separate file (`*.pdb`).
+
+## Advanced options 
+* `<IlcDisableUnhandledExceptionExperience>true</IlcDisableUnhandledExceptionExperience>`: disables code that prints stack traces for unhandled exceptions to the console.
+* `<IlcSystemModule>classlibmodule</IlcSystemModule>`: Name of the module which contains basic classes. When specified, disable automatic referencing of the `System.Private.CoreLib` and other libraries. See https://github.com/MichalStrehovsky/zerosharp for example of usage.

@@ -5,11 +5,13 @@
     <!--A<IlcArg Include="-r:e:\github\corert\src\CoreRT.WebAssembly.Interop\bin\Debug\netstandard2.0\CoreRT.WebAssembly.Interop.dll" Condition="'$(OS)' == 'Windows_NT'" />-->
     <IlcArg Include="-r:e:\github\corert\src\CoreRT.WebAssembly.Interop\bin\Debug\netstandard2.0\CoreRT.WebAssembly.Interop.dll" />
     <IlcArg Include="-r:$(IntermediateOutputPath)\CpObj.dll" Condition="'$(OS)' == 'Windows_NT'" />
+    <ProjectReference Include="CkFinite.ilproj" Condition="'$(OS)' == 'Windows_NT'" />
+    <IlcArg Include="-r:$(IntermediateOutputPath)\CkFinite.dll" Condition="'$(OS)' == 'Windows_NT'" />	
     <ProjectReference Include="ILHelpers.ilproj" Condition="'$(OS)' == 'Windows_NT'" />
     <IlcArg Include="-r:$(IntermediateOutputPath)\ILHelpers.dll" Condition="'$(OS)' == 'Windows_NT'" />
   </ItemGroup>
   <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
-    <DefineConstants>PLATFORM_WINDOWS;$(DefineConstants)</DefineConstants>
+    <DefineConstants>TARGET_WINDOWS;$(DefineConstants)</DefineConstants>
   </PropertyGroup>
   <PropertyGroup>
     <FileUpgradeFlags>

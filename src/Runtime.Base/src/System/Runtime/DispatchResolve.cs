@@ -11,21 +11,6 @@ namespace System.Runtime
 {
     internal static unsafe class DispatchResolve
     {
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DispatchMapEntry
-        {
-            public ushort _usInterfaceIndex;
-            public ushort _usInterfaceMethodSlot;
-            public ushort _usImplMethodSlot;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DispatchMap
-        {
-            public uint _entryCount;
-            public DispatchMapEntry _dispatchMap; // Actually a variable length array
-        }
-
         public static IntPtr FindInterfaceMethodImplementationTarget(EEType* pTgtType,
                                                                  EEType* pItfType,
                                                                  ushort itfSlotNumber)
@@ -159,12 +144,6 @@ namespace System.Runtime
                 if (fArrayCovariance && pItfType->IsGeneric)
                     fCheckVariance = true;
 
-                // TypeEquivalent interface dispatch is handled at covariance time. At this time we don't have general
-                // type equivalent interface dispatch, but we do use the model for the interface underlying CastableObject
-                // which is done by checking the interface types involved for ICastable.
-                if (pItfType->IsICastable)
-                    fCheckVariance = true;
-
                 // If there is no variance checking, there is no operation to perform. (The non-variance check loop
                 // has already completed)
                 if (!fCheckVariance)
@@ -174,8 +153,8 @@ namespace System.Runtime
             }
 
             DispatchMap* pMap = pTgtType->DispatchMap;
-            DispatchMapEntry* i = &pMap->_dispatchMap;
-            DispatchMapEntry* iEnd = (&pMap->_dispatchMap) + pMap->_entryCount;
+            DispatchMap.DispatchMapEntry* i = (*pMap)[0];
+            DispatchMap.DispatchMapEntry* iEnd = (*pMap)[(int)pMap->NumEntries];
             for (; i != iEnd; ++i)
             {
                 if (i->_usInterfaceMethodSlot == itfSlotNumber)
@@ -187,11 +166,6 @@ namespace System.Runtime
                         pCurEntryType = pCurEntryType->CanonicalEEType;
 
                     if (pCurEntryType == pItfType)
-                    {
-                        *pImplSlotNumber = i->_usImplMethodSlot;
-                        return true;
-                    }
-                    else if (fCheckVariance && pCurEntryType->IsICastable && pItfType->IsICastable)
                     {
                         *pImplSlotNumber = i->_usImplMethodSlot;
                         return true;

@@ -5,6 +5,7 @@
 using System;
 
 using Internal.TypeSystem;
+using Internal.ReadyToRunConstants;
 
 using ILCompiler;
 using ILCompiler.DependencyAnalysis;
@@ -379,6 +380,20 @@ namespace Internal.IL
                     return;
                 }
 
+                if (IsActivatorAllocatorOf(method))
+                {
+                    if (runtimeDeterminedMethod.IsRuntimeDeterminedExactMethod)
+                    {
+                        _dependencies.Add(GetGenericLookupHelper(ReadyToRunHelperId.ObjectAllocator, runtimeDeterminedMethod.Instantiation[0]), reason);
+                    }
+                    else
+                    {
+                        _dependencies.Add(_compilation.ComputeConstantLookup(ReadyToRunHelperId.ObjectAllocator, method.Instantiation[0]), reason);
+                    }
+
+                    return;
+                }
+
                 if (method.OwningType.IsByReferenceOfT && (method.IsConstructor || method.Name == "get_Value"))
                 {
                     return;
@@ -400,9 +415,9 @@ namespace Internal.IL
 
             TypeDesc exactType = method.OwningType;
 
-            if (method.IsNativeCallable && (opcode != ILOpcode.ldftn && opcode != ILOpcode.ldvirtftn))
+            if (method.IsUnmanagedCallersOnly && (opcode != ILOpcode.ldftn && opcode != ILOpcode.ldvirtftn))
             {
-                ThrowHelper.ThrowInvalidProgramException(ExceptionStringID.InvalidProgramNativeCallable, method);
+                ThrowHelper.ThrowInvalidProgramException(ExceptionStringID.InvalidProgramUnmanagedCallersOnly, method);
             }
 
             bool resolvedConstraint = false;
@@ -782,14 +797,16 @@ namespace Internal.IL
             {
                 var type = (TypeDesc)obj;
 
+                ISymbolNode reference;
                 if (type.IsRuntimeDeterminedSubtype)
                 {
-                    _dependencies.Add(GetGenericLookupHelper(ReadyToRunHelperId.TypeHandle, type), "ldtoken");
+                    reference = GetGenericLookupHelper(ReadyToRunHelperId.TypeHandle, type);
                 }
                 else
                 {
-                    _dependencies.Add(_factory.MaximallyConstructableType(type), "ldtoken");
+                    reference = _compilation.ComputeConstantLookup(_compilation.GetLdTokenHelperForType(type), type);
                 }
+                _dependencies.Add(reference, "ldtoken");
 
                 // If this is a ldtoken Type / GetValueInternal sequence, we're done.
                 // If this is a ldtoken Type / Type.GetTypeFromHandle sequence, we need one more helper.
@@ -1131,6 +1148,20 @@ namespace Internal.IL
         private bool IsActivatorDefaultConstructorOf(MethodDesc method)
         {
             if (method.IsIntrinsic && method.Name == "DefaultConstructorOf" && method.Instantiation.Length == 1)
+            {
+                MetadataType owningType = method.OwningType as MetadataType;
+                if (owningType != null)
+                {
+                    return owningType.Name == "Activator" && owningType.Namespace == "System";
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsActivatorAllocatorOf(MethodDesc method)
+        {
+            if (method.IsIntrinsic && method.Name == "AllocatorOf" && method.Instantiation.Length == 1)
             {
                 MetadataType owningType = method.OwningType as MetadataType;
                 if (owningType != null)

@@ -43,6 +43,9 @@
     <Compile Include="..\..\Common\src\Internal\Runtime\EEType.Constants.cs">
       <Link>Common\EEType.Constants.cs</Link>
     </Compile>
+    <Compile Include="..\..\Common\src\Internal\Runtime\CorConstants.cs">
+      <Link>Common\CorConstants.cs</Link>
+    </Compile>
     <Compile Include="..\..\Common\src\System\FormattingHelpers.cs">
       <Link>Common\FormattingHelpers.cs</Link>
     </Compile>
@@ -81,6 +84,9 @@
     </Compile>
     <Compile Include="..\..\JitInterface\src\UnboxingMethodDesc.cs">
       <Link>JitInterface\UnboxingMethodDesc.cs</Link>
+    </Compile>
+    <Compile Include="..\..\JitInterface\src\UnboxingMethodDescFactory.cs">
+      <Link>JitInterface\UnboxingMethodDescFactory.cs</Link>
     </Compile>
     <Compile Include="..\..\JitInterface\src\SystemVStructClassificator.cs">
       <Link>JitInterface\SystemVStructClassificator.cs</Link>

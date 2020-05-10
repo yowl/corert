@@ -43,7 +43,7 @@ namespace System
         [Intrinsic]
         public Type GetType()
         {
-            return RuntimeTypeUnifier.GetRuntimeTypeForEEType(EETypePtr);
+            return Type.GetTypeFromEETypePtr(EETypePtr);
         }
 
         internal EETypePtr EETypePtr
@@ -57,12 +57,6 @@ namespace System
         protected object MemberwiseClone()
         {
             return RuntimeImports.RhMemberwiseClone(this);
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private class RawData
-        {
-            public byte Data;
         }
 
         internal ref byte GetRawData()

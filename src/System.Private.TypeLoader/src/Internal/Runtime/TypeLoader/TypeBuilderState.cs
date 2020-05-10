@@ -530,7 +530,7 @@ namespace Internal.Runtime.TypeLoader
         public bool AllocatedThreadStaticGCDesc;
         public uint ThreadStaticOffset;
         public uint NumSealedVTableEntries;
-        public int[] GenericVarianceFlags;
+        public GenericVariance[] GenericVarianceFlags;
 
         // Sentinel static to allow us to initialize _instanceLayout to something
         // and then detect that InstanceGCLayout should return null
@@ -1069,7 +1069,7 @@ namespace Internal.Runtime.TypeLoader
         {
             get
             {
-#if ARM
+#if TARGET_ARM
                 if (TypeBeingBuilt is DefType)
                 {
                     return ((DefType)TypeBeingBuilt).IsHfa;

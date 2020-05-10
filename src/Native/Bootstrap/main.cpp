@@ -236,15 +236,56 @@ Object * __load_string_literal(const char * string)
     return pString;
 }
 
+#if defined(HOST_WASM)
+// Exception wrapper type that allows us to differentiate managed and native exceptions
+class ManagedExceptionWrapper : exception
+{
+public:
+    ManagedExceptionWrapper(void* pManagedException)
+    {
+        m_pManagedException = pManagedException;
+    }
+
+public:
+    void* m_pManagedException;
+};
+#endif
+
 extern "C" void RhpThrowEx(void * pEx)
 {
+#if defined(HOST_WASM)
+    throw ManagedExceptionWrapper(pEx);
+#else 
     throw "RhpThrowEx";
+#endif
 }
+
 extern "C" void RhpThrowHwEx()
 {
     throw "RhpThrowHwEx";
 }
-extern "C" void* RhpCallCatchFunclet(void *, void*, void*, void*)
+
+#if defined(HOST_WASM)
+// returns the Leave target
+extern "C" uint32_t LlvmCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay); 
+extern "C" uint32_t LlvmCatchFuncletGeneric(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void * genericContext); 
+extern "C" uint32_t RhpCallCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo /* generic context, if any */)
+{
+    return exInfo 
+        ? LlvmCatchFuncletGeneric(exceptionObj, pHandlerIP, pvRegDisplay, exInfo)
+        : LlvmCatchFunclet(exceptionObj, pHandlerIP, pvRegDisplay);
+}
+
+extern "C" uint32_t LlvmFilterFunclet(void* exceptionObj, unsigned int pHandlerIP, void* pvRegDisplay);
+extern "C" uint32_t LlvmFilterFuncletGeneric(void* exceptionObj, unsigned int pHandlerIP, void* pvRegDisplay, void* genericContext);
+extern "C" uint32_t RhpCallFilterFunclet(void* exceptionObj, unsigned int pHandlerIP, void* shadowStack)
+{
+    return 0 /* how to tell we need the generic context ? */
+        ? LlvmFilterFuncletGeneric(exceptionObj, pHandlerIP, shadowStack, NULL /* generic context do we pass this? */)
+        : LlvmFilterFunclet(exceptionObj, pHandlerIP, shadowStack);
+}
+#else 
+extern "C" uint32_t RhpCallCatchFunclet(void *, void*, void*, void*)
 {
     throw "RhpCallCatchFunclet";
 }
@@ -252,10 +293,21 @@ extern "C" void* RhpCallFilterFunclet(void*, void*, void*)
 {
     throw "RhpCallFilterFunclet";
 }
+#endif
+
+#if defined(HOST_WASM)
+extern "C" void LlvmFinallyFunclet(void *finallyHandler, void *shadowStack);
+extern "C" void RhpCallFinallyFunclet(void *finallyHandler, void *shadowStack)
+{
+    LlvmFinallyFunclet(finallyHandler, shadowStack);
+}
+#else 
 extern "C" void RhpCallFinallyFunclet(void *, void*)
 {
     throw "RhpCallFinallyFunclet";
 }
+#endif
+
 extern "C" void RhpUniversalTransition()
 {
     throw "RhpUniversalTransition";
@@ -342,7 +394,7 @@ static int InitializeRuntime()
     if (!RhInitialize())
         return -1;
 
-#if defined(CPPCODEGEN)
+#if defined(CPPCODEGEN) || defined(HOST_WASM)
     RhpEnableConservativeStackReporting();
 #endif // CPPCODEGEN
 
@@ -362,8 +414,8 @@ static int InitializeRuntime()
 
 #ifndef CPPCODEGEN
     InitializeModules(osModule, __modules_a, (int)((__modules_z - __modules_a)), (void **)&c_classlibFunctions, _countof(c_classlibFunctions));
-#elif defined _WASM_
-    InitializeModules(nullptr, (void**)RtRHeaderWrapper(), 1, nullptr, 0);
+#elif defined HOST_WASM
+    InitializeModules(nullptr, (void**)RtRHeaderWrapper(), 1, (void **)&c_classlibFunctions, _countof(c_classlibFunctions));
 #else // !CPPCODEGEN
     InitializeModules(nullptr, (void**)RtRHeaderWrapper(), 2, (void **)&c_classlibFunctions, _countof(c_classlibFunctions));
 #endif // !CPPCODEGEN

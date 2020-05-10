@@ -2,7 +2,7 @@
   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.props))\dir.props" />
   <PropertyGroup>
     <AssemblyName>System.Private.Jit</AssemblyName>
-    <AssemblyVersion>4.0.0.0</AssemblyVersion>
+    <AssemblyVersion>5.0.0.0</AssemblyVersion>
     <OutputType>Library</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DefineConstants>TYPE_LOADER_IMPLEMENTATION;SUPPORTS_NATIVE_METADATA_TYPE_LOADING;$(DefineConstants)</DefineConstants>
@@ -17,14 +17,14 @@
   <PropertyGroup Condition="'$(EcmaMetadataSupport)' == 'true'">
     <DefineConstants>ECMA_METADATA_SUPPORT;$(DefineConstants)</DefineConstants>
   </PropertyGroup>
-  <!-- Setup the right references -->
   <ItemGroup>
-    <ProjectReference Include="..\..\AotPackageReference\AotPackageReference.depproj">
+    <ProjectReference Include="..\..\Framework\Framework.depproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
     </ProjectReference>
-    <ReferencePath Include="$(AotPackageReferencePath)\System.Runtime.dll" />
-    <ReferencePath Include="$(AotPackageReferencePath)\System.Private.Reflection.Metadata.Ecma335.dll" />
+    <ReferencePath Include="$(FrameworkReferencePath)\System.Runtime.dll" />
+    <ReferencePath Include="$(FrameworkReferencePath)\System.Collections.Immutable.dll" />
+    <ReferencePath Include="$(FrameworkReferencePath)\System.Reflection.Metadata.dll" />
     <ProjectReference Include="..\..\System.Private.CoreLib\src\System.Private.CoreLib.csproj" />
     <ProjectReference Include="..\..\System.Private.Reflection.Metadata\src\System.Private.Reflection.Metadata.csproj" />
     <ProjectReference Include="..\..\System.Private.TypeLoader\src\System.Private.TypeLoader.Experimental.csproj" />
@@ -53,6 +53,8 @@
     <Compile Include="Internal\Runtime\JitSupport\JitMethodEntrypointNode.cs" />
     <Compile Include="Internal\Runtime\JitSupport\JitNodeFactory.cs" />
     <Compile Include="Internal\Runtime\JitSupport\JitTemp.cs" />
+    <Compile Include="$(CommonBasePath)\Internal\Runtime\CorConstants.cs" />
+    <Compile Include="$(CommonBasePath)\Internal\Runtime\ReadyToRunConstants.cs" />
     <Compile Include="$(CommonBasePath)\Internal\Runtime\EEType.Constants.cs" />
     <Compile Include="$(CommonBasePath)\Internal\Runtime\EETypeBuilderHelpers.cs" />
     <Compile Include="$(CommonBasePath)\Internal\Runtime\RuntimeConstants.cs" />
@@ -82,6 +84,7 @@
     <Compile Include="$(TypeSystemBasePath)\IL\Stubs\TypeGetTypeMethodThunk.cs" />
     <Compile Include="$(TypeSystemBasePath)\IL\Stubs\InterlockedIntrinsics.cs" />
     <Compile Include="$(TypeSystemBasePath)\IL\Stubs\RuntimeHelpersIntrinsics.cs" />
+    <Compile Include="$(TypeSystemBasePath)\IL\Stubs\MemoryMarshalIntrinsics.cs" />
     <Compile Include="$(TypeSystemBasePath)\IL\Stubs\UnsafeIntrinsics.cs" />
     <Compile Include="$(TypeSystemBasePath)\IL\Stubs\VolatileIntrinsics.cs" />
     <Compile Include="$(TypeSystemBasePath)\Interop\IL\Marshaller.cs" />
@@ -133,16 +136,19 @@
     <Compile Include="$(ILCompilerBasePath)\Compiler\DependencyAnalysis\Relocation.cs" />
     <Compile Include="$(ILCompilerBasePath)\Compiler\DependencyAnalysis\ISortableNode.cs" />
     <Compile Include="$(ILCompilerBasePath)\Compiler\DependencyAnalysis\SortableDependencyNode.cs" />
+    <Compile Include="$(ILCompilerBasePath)\Compiler\DependencyAnalysis\SettableReadOnlyDataBlob.cs" />
     <Compile Include="$(ILCompilerBasePath)\Compiler\DelegateCreationInfo.cs" />
     <Compile Include="$(ILCompilerBasePath)\Compiler\JitHelper.cs" />
     <Compile Include="$(ILCompilerBasePath)\Compiler\GenericDictionaryLookup.cs" />
     <Compile Include="$(ILCompilerBasePath)\Compiler\HardwareIntrinsicHelpers.cs" />
+    <Compile Include="$(ILCompilerBasePath)\Compiler\HardwareIntrinsicHelpers.Aot.cs" />
     <Compile Include="$(ILCompilerBasePath)\Compiler\MethodExtensions.cs" />
-    <Compile Include="$(ILCompilerBasePath)\Compiler\ReadyToRun.cs" />
     <Compile Include="$(ILCompilerBasePath)\Compiler\TypeExtensions.cs" />
     <Compile Include="$(ILCompilerBasePath)\Compiler\NameMangler.cs" />
     <Compile Include="$(ILCompilerBasePath)\Compiler\NodeMangler.cs" />
     <Compile Include="$(ILCompilerBasePath)\Compiler\DevirtualizationManager.cs" />
+    <Compile Include="$(ILCompilerBasePath)\Compiler\VectorFieldLayoutAlgorithm.cs" />
+    <Compile Include="$(ILCompilerBasePath)\Compiler\VectorOfTFieldLayoutAlgorithm.cs" />
     <Compile Include="$(ILCompilerBasePath)\IL\Stubs\PInvokeILProvider.cs" />
     <Compile Include="$(ILCompilerRyuJitBasePath)\JitInterface\CorInfoImpl.RyuJit.cs" />
     <Compile Include="$(DependencyAnalysisFrameworkBasePath)\IDependencyNode.cs" />
@@ -152,12 +158,14 @@
     <Compile Include="$(JitInterfaceBasePath)\CorInfoHelpFunc.cs" />
     <Compile Include="$(JitInterfaceBasePath)\CorInfoImpl.cs" />
     <Compile Include="$(JitInterfaceBasePath)\CorInfoImpl.Intrinsics.cs" />
+    <Compile Include="$(JitInterfaceBasePath)\CorInfoInstructionSet.cs" />
     <Compile Include="$(JitInterfaceBasePath)\CorInfoTypes.cs" />
     <Compile Include="$(JitInterfaceBasePath)\CorInfoTypes.VarInfo.cs" />
     <Compile Include="$(JitInterfaceBasePath)\JitConfigProvider.cs" />
     <Compile Include="$(JitInterfaceBasePath)\MemoryHelper.cs" />
     <Compile Include="$(JitInterfaceBasePath)\TypeString.cs" />
     <Compile Include="$(JitInterfaceBasePath)\UnboxingMethodDesc.cs" />
+    <Compile Include="$(JitInterfaceBasePath)\UnboxingMethodDescFactory.cs" />
     <Compile Include="$(JitInterfaceBasePath)\SystemVStructClassificator.cs" />
     <Compile Include="$(TypeLoaderBasePath)\Internal\TypeSystem\PInvokeTargetNativeMethod.Runtime.cs" />
     <Compile Include="Internal\Runtime\JitSupport\RyuJitExecutionStrategy.cs" />

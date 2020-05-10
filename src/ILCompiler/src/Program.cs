@@ -303,6 +303,56 @@ namespace ILCompiler
             if (_isWasmCodegen)
                 _targetArchitecture = TargetArchitecture.Wasm32;
 
+            InstructionSetSupportBuilder instructionSetSupportBuilder = new InstructionSetSupportBuilder(_targetArchitecture);
+
+            // The runtime expects certain baselines that the codegen can assume as well.
+            if ((_targetArchitecture == TargetArchitecture.X86) || (_targetArchitecture == TargetArchitecture.X64))
+            {
+                instructionSetSupportBuilder.AddSupportedInstructionSet("sse");
+                instructionSetSupportBuilder.AddSupportedInstructionSet("sse2");
+            }
+            else if (_targetArchitecture == TargetArchitecture.ARM64)
+            {
+                instructionSetSupportBuilder.AddSupportedInstructionSet("base");
+                instructionSetSupportBuilder.AddSupportedInstructionSet("neon");
+            }
+
+            // TODO: read instruction sets from the command line
+
+            instructionSetSupportBuilder.ComputeInstructionSetFlags(out var supportedInstructionSet, out var unsupportedInstructionSet,
+                (string specifiedInstructionSet, string impliedInstructionSet) =>
+                    throw new CommandLineException(String.Format("Unsupported combination of instruction sets: {0}/{1}", specifiedInstructionSet, impliedInstructionSet)));
+
+            InstructionSetSupportBuilder optimisticInstructionSetSupportBuilder = new InstructionSetSupportBuilder(_targetArchitecture);
+
+            // Optimistically assume some instruction sets are present.
+            if ((_targetArchitecture == TargetArchitecture.X86) || (_targetArchitecture == TargetArchitecture.X64))
+            {
+                // We set these hardware features as enabled always, as most
+                // of hardware in the wild supports them. Note that we do not indicate support for AVX, or any other
+                // instruction set which uses the VEX encodings as the presence of those makes otherwise acceptable
+                // code be unusable on hardware which does not support VEX encodings, as well as emulators that do not
+                // support AVX instructions. As the jit generates logic that depends on these features it will call
+                // notifyInstructionSetUsage, which will result in generation of a fixup to verify the behavior of
+                // code.
+                // 
+                optimisticInstructionSetSupportBuilder.AddSupportedInstructionSet("ssse3");
+                optimisticInstructionSetSupportBuilder.AddSupportedInstructionSet("aes");
+                optimisticInstructionSetSupportBuilder.AddSupportedInstructionSet("pclmul");
+                optimisticInstructionSetSupportBuilder.AddSupportedInstructionSet("lzcnt");
+            }
+
+            optimisticInstructionSetSupportBuilder.ComputeInstructionSetFlags(out var optimisticInstructionSet, out _,
+                (string specifiedInstructionSet, string impliedInstructionSet) => throw new NotSupportedException());
+            optimisticInstructionSet.Remove(unsupportedInstructionSet);
+            optimisticInstructionSet.Add(supportedInstructionSet);
+
+            var instructionSetSupport = new InstructionSetSupport(supportedInstructionSet,
+                                                                  unsupportedInstructionSet,
+                                                                  optimisticInstructionSet,
+                                                                  InstructionSetSupportBuilder.GetNonSpecifiableInstructionSetsForArch(_targetArchitecture),
+                                                                  _targetArchitecture);
+
             bool supportsReflection = !_disableReflection && _systemModuleName == DefaultSystemModule;
 
             //
@@ -311,8 +361,7 @@ namespace ILCompiler
 
             SharedGenericsMode genericsMode = SharedGenericsMode.CanonicalReferenceTypes;
 
-            // TODO: compiler switch for SIMD support?
-            var simdVectorLength = (_isCppCodegen || _isWasmCodegen) ? SimdVectorLength.None : SimdVectorLength.Vector128Bit;
+            var simdVectorLength = (_isCppCodegen || _isWasmCodegen) ? SimdVectorLength.None : instructionSetSupport.GetVectorTSimdVector();
             var targetAbi = _isCppCodegen ? TargetAbi.CppCodegen : TargetAbi.CoreRT;
             var targetDetails = new TargetDetails(_targetArchitecture, _targetOS, targetAbi, simdVectorLength);
             CompilerTypeSystemContext typeSystemContext = 
@@ -343,6 +392,9 @@ namespace ILCompiler
 
             typeSystemContext.InputFilePaths = inputFilePaths;
             typeSystemContext.ReferenceFilePaths = _referenceFilePaths;
+            if (!typeSystemContext.InputFilePaths.ContainsKey(_systemModuleName)
+                && !typeSystemContext.ReferenceFilePaths.ContainsKey(_systemModuleName))
+                throw new CommandLineException($"System module {_systemModuleName} does not exists. Make sure that you specify --systemmodule");
 
             typeSystemContext.SetSystemModule(typeSystemContext.GetModuleForSimpleName(_systemModuleName));
 
@@ -470,6 +522,8 @@ namespace ILCompiler
                     removedFeatures |= RemovedFeature.Comparers;
                 else if (feature == "SerializationGuard")
                     removedFeatures |= RemovedFeature.SerializationGuard;
+                else if (feature == "XmlNonFileStream")
+                    removedFeatures |= RemovedFeature.XmlDownloadNonFileStream;
             }
 
             ILProvider ilProvider = new CoreRTILProvider();
@@ -480,27 +534,36 @@ namespace ILCompiler
             var stackTracePolicy = _emitStackTraceData ?
                 (StackTraceEmissionPolicy)new EcmaMethodStackTraceEmissionPolicy() : new NoStackTraceEmissionPolicy();
 
-            MetadataBlockingPolicy mdBlockingPolicy = _noMetadataBlocking 
-                    ? (MetadataBlockingPolicy)new NoMetadataBlockingPolicy() 
+            MetadataBlockingPolicy mdBlockingPolicy;
+            ManifestResourceBlockingPolicy resBlockingPolicy;
+            UsageBasedMetadataGenerationOptions metadataGenerationOptions = UsageBasedMetadataGenerationOptions.IteropILScanning;
+            if (supportsReflection)
+            {
+                mdBlockingPolicy = _noMetadataBlocking
+                    ? (MetadataBlockingPolicy)new NoMetadataBlockingPolicy()
                     : new BlockedInternalsBlockingPolicy(typeSystemContext);
 
-            ManifestResourceBlockingPolicy resBlockingPolicy = (removedFeatures & RemovedFeature.FrameworkResources) != 0 ?
-                new FrameworkStringResourceBlockingPolicy() : (ManifestResourceBlockingPolicy)new NoManifestResourceBlockingPolicy();
+                resBlockingPolicy = (removedFeatures & RemovedFeature.FrameworkResources) != 0
+                    ? new FrameworkStringResourceBlockingPolicy()
+                    : (ManifestResourceBlockingPolicy)new NoManifestResourceBlockingPolicy();
 
-            UsageBasedMetadataGenerationOptions metadataGenerationOptions = UsageBasedMetadataGenerationOptions.AnonymousTypeHeuristic;
-            if (_completeTypesMetadata)
-                metadataGenerationOptions |= UsageBasedMetadataGenerationOptions.CompleteTypesOnly;
-            if (_scanReflection)
-                metadataGenerationOptions |= UsageBasedMetadataGenerationOptions.ILScanning;
-            if (_rootAllApplicationAssemblies)
-                metadataGenerationOptions |= UsageBasedMetadataGenerationOptions.FullUserAssemblyRooting;
+                metadataGenerationOptions |= UsageBasedMetadataGenerationOptions.AnonymousTypeHeuristic;
+                if (_completeTypesMetadata)
+                    metadataGenerationOptions |= UsageBasedMetadataGenerationOptions.CompleteTypesOnly;
+                if (_scanReflection)
+                    metadataGenerationOptions |= UsageBasedMetadataGenerationOptions.ReflectionILScanning;
+                if (_rootAllApplicationAssemblies)
+                    metadataGenerationOptions |= UsageBasedMetadataGenerationOptions.FullUserAssemblyRooting;
+            }
+            else
+            {
+                mdBlockingPolicy = new FullyBlockedMetadataBlockingPolicy();
+                resBlockingPolicy = new FullyBlockedManifestResourceBlockingPolicy();
+            }
 
             DynamicInvokeThunkGenerationPolicy invokeThunkGenerationPolicy = new DefaultDynamicInvokeThunkGenerationPolicy();
 
-            MetadataManager metadataManager;
-            if (supportsReflection)
-            {
-                metadataManager = new UsageBasedMetadataManager(
+            MetadataManager metadataManager = new UsageBasedMetadataManager(
                     compilationGroup,
                     typeSystemContext,
                     mdBlockingPolicy,
@@ -510,11 +573,6 @@ namespace ILCompiler
                     invokeThunkGenerationPolicy,
                     ilProvider,
                     metadataGenerationOptions);
-            }
-            else
-            {
-                metadataManager = new EmptyMetadataManager(typeSystemContext, stackTracePolicy, ilProvider);
-            }
 
             InteropStateManager interopStateManager = new InteropStateManager(typeSystemContext.GeneratedAssembly);
             InteropStubManager interopStubManager = new UsageBasedInteropStubManager(interopStateManager, pinvokePolicy);
@@ -547,16 +605,7 @@ namespace ILCompiler
 
                 scanResults = scanner.Scan();
 
-                if (metadataManager is UsageBasedMetadataManager usageBasedManager)
-                {
-                    metadataManager = usageBasedManager.ToAnalysisBasedMetadataManager();
-                }
-                else
-                {
-                    // MetadataManager collects a bunch of state (e.g. list of compiled method bodies) that we need to reset.
-                    Debug.Assert(metadataManager is EmptyMetadataManager);
-                    metadataManager = new EmptyMetadataManager(typeSystemContext, stackTracePolicy, ilProvider);
-                }
+                metadataManager = ((UsageBasedMetadataManager)metadataManager).ToAnalysisBasedMetadataManager();
 
                 interopStubManager = scanResults.GetInteropStubManager(interopStateManager, pinvokePolicy);
             }
@@ -574,6 +623,7 @@ namespace ILCompiler
             compilationRoots.Add(interopStubManager);
 
             builder
+                .UseInstructionSetSupport(instructionSetSupport)
                 .UseBackendOptions(_codegenOptions)
                 .UseMethodBodyFolding(enable: _methodBodyFolding)
                 .UseSingleThread(enable: _singleThreaded)

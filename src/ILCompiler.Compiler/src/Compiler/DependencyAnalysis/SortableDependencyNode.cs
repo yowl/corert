@@ -1,4 +1,4 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
@@ -30,7 +30,7 @@ namespace ILCompiler.DependencyAnalysis
         /// If two manage to conflict (which is pretty unlikely), just make a new one...
         /// </remarks>
         public abstract int ClassCode { get; }
-        
+
         // Note to implementers: the type of `other` is actually the same as the type of `this`.
         public virtual int CompareToImpl(ISortableNode other, CompilerComparer comparer)
         {
@@ -52,6 +52,21 @@ namespace ILCompiler.DependencyAnalysis
             //
             // The ordering of this sequence of nodes is deliberate and currently required for 
             // compiler correctness.
+            //
+
+            //
+            // ReadyToRun Nodes
+            //
+            CorHeaderNode,
+            ReadyToRunHeaderNode,
+            ReadyToRunAssemblyHeaderNode,
+            ImportSectionsTableNode,
+            ImportSectionNode,
+            MethodEntrypointTableNode,
+
+
+            //
+            // CoreRT Nodes
             //
             MetadataNode,
             ResourceDataNode,
