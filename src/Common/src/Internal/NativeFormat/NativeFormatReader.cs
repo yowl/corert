@@ -10,7 +10,7 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
+
 namespace Internal.NativeFormat
 {
     internal unsafe partial struct NativePrimitiveDecoder
@@ -503,6 +503,7 @@ namespace Internal.NativeFormat
                 while (_parser.Offset < _endOffset)
                 {
                     byte lowHashcode = _parser.GetUInt8();
+
                     if (lowHashcode == _lowHashcode)
                     {
                         return _parser.GetParserFromRelativeOffset();

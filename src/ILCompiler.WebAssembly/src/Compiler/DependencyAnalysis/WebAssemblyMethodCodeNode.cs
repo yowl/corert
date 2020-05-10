@@ -62,13 +62,6 @@ namespace ILCompiler.DependencyAnalysis
         public WebAssemblyMethodBodyNode(MethodDesc method)
             : base(method)
         {
-            if (method.Name.Contains("Dictionary")
-                && method.Name.Contains("TKey")
-                && method.Name.Contains("FindValue")
-            )
-            {
-
-            }
         }
 
         protected override string GetName(NodeFactory factory) => this.GetMangledName(factory.NameMangler);
