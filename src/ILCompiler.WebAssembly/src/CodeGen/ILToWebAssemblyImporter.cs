@@ -7,7 +7,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using Internal.TypeSystem;
 using ILCompiler;
 using LLVMSharp.Interop;
@@ -168,10 +167,6 @@ namespace Internal.IL
 
             Context = Module.Context;
             _builder = Context.CreateBuilder();
-            if (_mangledName.Contains("ClassConstructorRunner"))
-            {
-
-            }
         }
 
         public void Import()
@@ -714,27 +709,19 @@ namespace Internal.IL
             {
                 bool foundSequencePoint = false;
                 ILSequencePoint curSequencePoint = default;
-                try
+                foreach (var sequencePoint in _debugInformation.GetSequencePoints() ?? Enumerable.Empty<ILSequencePoint>())
                 {
-                    foreach (var sequencePoint in _debugInformation.GetSequencePoints() ?? Enumerable.Empty<ILSequencePoint>())
+                    if (sequencePoint.Offset == _currentOffset)
                     {
-                        if (sequencePoint.Offset == _currentOffset)
-                        {
-                            curSequencePoint = sequencePoint;
-                            foundSequencePoint = true;
-                            break;
-                        }
-                        else if (sequencePoint.Offset < _currentOffset)
-                        {
-                            curSequencePoint = sequencePoint;
-                            foundSequencePoint = true;
-                        }
+                        curSequencePoint = sequencePoint;
+                        foundSequencePoint = true;
+                        break;
                     }
-                }
-                catch (BadImageFormatException)
-                {
-                    _compilation.Logger.Writer.WriteLine($"Warning: ignoring debug info for {_method.ToString()}");
-                    foundSequencePoint = false;
+                    else if (sequencePoint.Offset < _currentOffset)
+                    {
+                        curSequencePoint = sequencePoint;
+                        foundSequencePoint = true;
+                    }
                 }
 
                 if (!foundSequencePoint)
@@ -780,60 +767,6 @@ namespace Internal.IL
                 _builder.CurrentDebugLocation = Context.MetadataAsValue(currentLine);
             }
         }
-
-        public void CreateDebugLocation()
-        {
-            string fileName = Path.GetFileName("DIBuilder.c");
-            string directory = Path.GetDirectoryName(".");
-            LLVMModuleRef module = LLVMModuleRef.CreateWithName("netscripten");
-            module.Target = "asmjs-unknown-emscripten";
-            var dIBuilder = module.CreateDIBuilder();
-            var builder = module.Context.CreateBuilder();
-            LLVMMetadataRef fileMetadata = dIBuilder.CreateFile(fileName, directory);
-
-            LLVMMetadataRef compileUnitMetadata = dIBuilder.CreateCompileUnit(
-                LLVMDWARFSourceLanguage.LLVMDWARFSourceLanguageC,
-                fileMetadata, "ILC", 0 /* Optimized */, String.Empty, 1, String.Empty,
-                LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, 0, 0, 0);
-            module.AddNamedMetadataOperand("llvm.dbg.cu", compileUnitMetadata);
-
-            LLVMMetadataRef functionMetaType = dIBuilder.CreateSubroutineType(fileMetadata,
-                ReadOnlySpan<LLVMMetadataRef>.Empty, LLVMDIFlags.LLVMDIFlagZero);
-
-            uint lineNumber = 1;
-            var debugFunction = dIBuilder.CreateFunction(fileMetadata, "CreateDebugLocation", "CreateDebugLocation",
-                fileMetadata,
-                lineNumber, functionMetaType, 1, 1, lineNumber, 0, 0);
-            LLVMMetadataRef currentLine =
-                module.Context.CreateDebugLocation(lineNumber, 0, debugFunction, default(LLVMMetadataRef));
-
-            LLVMTypeRef[] FooParamTys = { LLVMTypeRef.Int64, LLVMTypeRef.Int64, };
-            LLVMTypeRef FooFuncTy = LLVMTypeRef.CreateFunction(LLVMTypeRef.Int64, FooParamTys);
-            LLVMValueRef FooFunction = module.AddFunction("foo", FooFuncTy);
-
-            var funcBlock = module.Context.AppendBasicBlock(FooFunction, "foo");
-            builder.PositionAtEnd(funcBlock);
-            builder.BuildRet(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, 0));
-            builder.CurrentDebugLocation = module.Context.MetadataAsValue(currentLine);
-            var dwarfVersion = LLVMValueRef.CreateMDNode(new[]
-            {
-                LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 2), module.Context.GetMDString("Dwarf Version", 13),
-                LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 4)
-            });
-            var dwarfSchemaVersion = LLVMValueRef.CreateMDNode(new[]
-            {
-                LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 2),
-                module.Context.GetMDString("Debug Info Version", 18),
-                LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 3)
-            });
-            module.AddNamedMetadataOperand("llvm.module.flags", dwarfVersion);
-            module.AddNamedMetadataOperand("llvm.module.flags", dwarfSchemaVersion);
-            dIBuilder.DIBuilderFinalize();
-
-            module.TryVerify(LLVMVerifierFailureAction.LLVMPrintMessageAction, out string message);
-
-        }
-
 
         private void EndImportingInstruction()
         {
@@ -1134,7 +1067,6 @@ namespace Internal.IL
             }
             else if (toStoreKind == LLVMTypeKind.LLVMPointerTypeKind && valueTypeKind != LLVMTypeKind.LLVMIntegerTypeKind)
             {
-                System.Diagnostics.Debugger.Break();
                 throw new NotImplementedException($"trying to cast {toStoreKind} to {valueTypeKind}");
             }
             else if (toStoreKind == LLVMTypeKind.LLVMIntegerTypeKind && valueTypeKind == LLVMTypeKind.LLVMPointerTypeKind)
@@ -1143,7 +1075,6 @@ namespace Internal.IL
             }
             else if (toStoreKind != LLVMTypeKind.LLVMIntegerTypeKind && valueTypeKind == LLVMTypeKind.LLVMPointerTypeKind)
             {
-                System.Diagnostics.Debugger.Break();
                 throw new NotImplementedException($"trying to cast {toStoreKind} to {valueTypeKind}");
             }
             else if (toStoreKind == LLVMTypeKind.LLVMFloatTypeKind && valueTypeKind == LLVMTypeKind.LLVMDoubleTypeKind)
@@ -1695,7 +1626,7 @@ namespace Internal.IL
         private void ImportCasting(ILOpcode opcode, int token)
         {
             TypeDesc type = (TypeDesc)_methodIL.GetObject(token);
-            
+
             //TODO: call GetCastingHelperNameForType from JitHelper.cs (needs refactoring)
             string function;
             bool throwing = opcode == ILOpcode.castclass;
@@ -1723,7 +1654,7 @@ namespace Internal.IL
                                 {
                                     new LoadExpressionEntry(StackValueKind.ValueType, "eeType", GetEETypePointerForTypeDesc(type, true),
                                         GetEETypePtrTypeDesc()),
-                                        _stack.Pop()
+                                    _stack.Pop()
                                 };
             }
 
@@ -1781,15 +1712,35 @@ namespace Internal.IL
                 }
             }
 
+            if (callee.IsInternalCall)
+            {
+                if (callee.Name == "InvokeJS")
+                {
+                    var coreRtJsInternalCallsType = _compilation.TypeSystemContext
+                        .GetModuleForSimpleName("CoreRT.WebAssembly.Interop")
+                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
+                    callee = coreRtJsInternalCallsType.GetMethod("InvokeJS", null);
+                }
+                else if (callee.Name == "InvokeJSMarshalled")
+                {
+                    var coreRtJsInternalCallsType = _compilation.TypeSystemContext
+                        .GetModuleForSimpleName("CoreRT.WebAssembly.Interop")
+                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
+                    callee = coreRtJsInternalCallsType.GetMethod("InvokeJSMarshalled", null);
+                }
+                else if (callee.Name == "InvokeJSUnmarshalled")
+                {
+                    var coreRtJsInternalCallsType = _compilation.TypeSystemContext
+                        .GetModuleForSimpleName("CoreRT.WebAssembly.Interop")
+                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
+                    callee = coreRtJsInternalCallsType.GetMethod("InvokeJSUnmarshalled", null);
+                }
+            }
+
             if (callee.IsRawPInvoke() || (callee.IsInternalCall && callee.HasCustomAttribute("System.Runtime", "RuntimeImportAttribute")))
             {
                 ImportRawPInvoke(callee);
                 return;
-            }
-            if (callee.IsInternalCall)
-            {
-                // replace calls made to methods that are implemented in the mono runtime with managed calls to CoreRT methods
-                ReplaceInternalCall(ref callee);
             }
 
             TypeDesc localConstrainedType = _constrainedType;
@@ -1925,7 +1876,7 @@ namespace Internal.IL
 
                     List<LLVMValueRef> helperParams = new List<LLVMValueRef>
                     {
-                        shadowStack, 
+                        shadowStack,
                         GetGenericContext()
                     };
 
@@ -1995,13 +1946,6 @@ namespace Internal.IL
             dictPtrPtrStore = default(LLVMValueRef);
             fatFunctionPtr = default(LLVMValueRef);
 
-            if (canonMethod.ToString().Contains("Generic")
-                && canonMethod.ToString().Contains("Dictionary")
-                && canonMethod.ToString().Contains("ctor")
-            )
-            {
-
-            }
             string canonMethodName = _compilation.NameMangler.GetMangledMethodName(canonMethod).ToString();
             TypeDesc owningType = callee.OwningType;
             bool delegateInvoke = owningType.IsDelegate && callee.Name == "Invoke";
@@ -2338,34 +2282,6 @@ namespace Internal.IL
             _dependencies.Add(node);
 
             return eeTypePointer;
-        }
-
-        /// <summary>
-        /// Implements  MethodImplOptions.InternalCall calls that are implemented in the mono runtime to get the same surface in CoreRT
-        /// </summary>
-        private void ReplaceInternalCall(ref MethodDesc callee)
-        {
-            if (callee.OwningType is EcmaType type)
-            {
-                if (callee.Name == "InvokeJS" && type.Namespace == "WebAssembly" && type.Name == "Runtime")
-                {
-                    MetadataType helperType = callee.Context.ResolveAssembly(new AssemblyName("CoreRT.WebAssembly.Interop"), true)
-                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
-                    callee = helperType.GetKnownMethod(callee.Name, null); // use the same method name 
-                    _dependencies.Add(_compilation.NodeFactory.MethodEntrypoint(callee, false)); // TODO: probably dont need this
-                }
-                else if (callee.Name == "InvokeJSUnmarshalled" && type.Namespace == "WebAssembly.JSInterop" && type.Name == "InternalCalls")
-                {
-                    MetadataType helperType = callee.Context.ResolveAssembly(new AssemblyName("CoreRT.WebAssembly.Interop"), true)
-                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
-                    callee = helperType.GetKnownMethod(callee.Name, null);
-                    _dependencies.Add(_compilation.NodeFactory.MethodEntrypoint(callee, false)); // TODO: probably dont need this
-                }
-
-//                if (callee.Name == "InvokeJSUnmarshalled" && type.Namespace == "WebAssembly.JSInterop" && type.Name == "InternalCalls")
-//                {
-//                }
-            }
         }
 
         /// <summary>
@@ -3673,6 +3589,7 @@ namespace Internal.IL
         {
             var pointer = _stack.Pop();
             Debug.Assert(pointer is ExpressionEntry || pointer is ConstantEntry);
+            var expressionPointer = pointer as ExpressionEntry;
             if (type == null)
             {
                 type = GetWellKnownType(WellKnownType.Object);
@@ -4257,7 +4174,7 @@ namespace Internal.IL
             }
             else if (ldtokenValue is MethodDesc)
             {
-//                var handle = LLVM.BuildLoad(_builder, GetMethodPointerForMethodDesc((MethodDesc)ldtokenValue, false), "handle");
+                //                var handle = LLVM.BuildLoad(_builder, GetMethodPointerForMethodDesc((MethodDesc)ldtokenValue, false), "handle");
                 //var ptrCast = LLVM.BuildPointerCast(_builder, handle, LLVMTypeRef.PointerType(LLVMTypeRef.PointerType(LLVMTypeRef.Int8Type(), 0), 0), "ptrSig");
                 PushLoadExpression(StackValueKind.ByRef, "ldtoken", GetMethodPointerForMethodDesc((MethodDesc)ldtokenValue, false), GetWellKnownType(WellKnownType.IntPtr));
                 MethodDesc helper = _compilation.TypeSystemContext.GetHelperEntryPoint("LdTokenHelpers", "GetRuntimeMethodHandle");
