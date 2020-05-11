@@ -2116,15 +2116,6 @@ internal static class Program
         return 0x828f;
     }
 
-    internal static void TestBoxSingle()
-    {
-        StartTest("Test box single");
-        var fi = typeof(ClassWithFloat).GetField("F");
-        fi.SetValue(null, 1.1f);
-        EndTest(1.1f == ClassWithFloat.F);
-    }
-    
-    
     static void TestLdTokenMethod()
     {
         StartTest("Test ldtoken method");
