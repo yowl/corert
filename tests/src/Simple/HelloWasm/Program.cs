@@ -1176,11 +1176,19 @@ internal static class Program
         // test call param is cast
         GenStructCallParam(new GenStructWithImplicitOp<string>());
 
+        // replicate compilation error with https://github.com/dotnet/corert/blob/66fbcd492fbc08db4f472e7e8fa368cb523b38d4/src/System.Private.CoreLib/shared/System/Array.cs#L1482
+        GenStructCallParam(CreateGenStruct<string>(new [] {""}));
+
         // replicate compilation error with https://github.com/dotnet/corefx/blob/e99ec129cfd594d53f4390bf97d1d736cff6f860/src/System.Collections.Immutable/src/System/Collections/Immutable/SortedInt32KeyNode.cs#L561
         new GenClassUsingFieldOfInnerStruct<GenClassWithInnerStruct<string>.GenInterfaceOverGenStructStruct>(
             new GenClassWithInnerStruct<string>.GenInterfaceOverGenStructStruct(), null).Create();
 
         PassTest();
+    }
+
+    private static GenStructWithImplicitOp<T> CreateGenStruct<T>(T[] v)
+    {
+        return new GenStructWithImplicitOp<T>(v);
     }
 
     public class GenClassWithInnerStruct<TKey>
