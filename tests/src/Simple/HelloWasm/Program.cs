@@ -1166,6 +1166,18 @@ internal static class Program
         }
     }
 
+    public struct GenStruct2<TKey, T2>
+    {
+        private TKey key;
+        T2 field2;
+
+        public GenStruct2(TKey key, T2 v)
+        {
+            this.key = key;
+            this.field2 = v;
+        }
+    }
+
     private static void TestGenericStructHandling()
     {
         StartTest("Casting of generic structs on return and in call params");
@@ -1177,22 +1189,37 @@ internal static class Program
         GenStructCallParam(new GenStructWithImplicitOp<string>());
 
         // replicate compilation error with https://github.com/dotnet/corert/blob/66fbcd492fbc08db4f472e7e8fa368cb523b38d4/src/System.Private.CoreLib/shared/System/Array.cs#L1482
-        GenStructCallParam(CreateGenStruct<string>(new [] {""}));
+        GenStructCallParam(CreateGenStructWithImplicitOp<string>(new [] {""}));
 
         // replicate compilation error with https://github.com/dotnet/corefx/blob/e99ec129cfd594d53f4390bf97d1d736cff6f860/src/System.Collections.Immutable/src/System/Collections/Immutable/SortedInt32KeyNode.cs#L561
         new GenClassUsingFieldOfInnerStruct<GenClassWithInnerStruct<string>.GenInterfaceOverGenStructStruct>(
             new GenClassWithInnerStruct<string>.GenInterfaceOverGenStructStruct(), null).Create();
 
+        // replicate compilation error with https://github.com/dotnet/runtime/blob/b57a099c1773eeb52d3c663211e275131b4b7938/src/libraries/System.Net.Primitives/src/System/Net/CredentialCache.cs#L328
+        new GenClassWithInnerStruct<string>().SetField("");
+
         PassTest();
     }
 
-    private static GenStructWithImplicitOp<T> CreateGenStruct<T>(T[] v)
+    private static GenStructWithImplicitOp<T> CreateGenStructWithImplicitOp<T>(T[] v)
     {
         return new GenStructWithImplicitOp<T>(v);
     }
 
+    private static GenStruct2<T, T2> CreateGenStruct2<T, T2>(T k, T2 v)
+    {
+        return new GenStruct2<T, T2>(k, v);
+    }
+
     public class GenClassWithInnerStruct<TKey>
     {
+        private GenStruct2<TKey, string> structField;
+
+        public void SetField(TKey v)
+        {
+            structField = Program.CreateGenStruct2(v, "");
+        }
+
         internal readonly struct GenInterfaceOverGenStructStruct 
         {
             // 2 fields to avoid struct collapsing to an i32
@@ -1614,6 +1641,51 @@ internal static class Program
             return e.Message == "ToStringThrows"; // also testing here that we can return a value out of a catch
         }
         return false;
+    }
+
+    private static void TestCatchHandlerNeedsGenericContext()
+    {
+        StartTest("Catch handler can access generic context");
+        DerivedCatches<object> c = new DerivedCatches<object>();
+        EndTest(c.GvmInCatch<string>("a", "b") == "GenBase<System.Object>.GMethod1<System.String>(a,b)");  
+    }
+
+    private static void TestFilterHandlerNeedsGenericContext()
+    {
+        StartTest("Filter funclet can access generic context");
+        DerivedCatches<object> c = new DerivedCatches<object>();
+        EndTest(c.GvmInFilter<string>("a", "b"));
+    }
+
+    class DerivedCatches<A> : GenBase<A>
+    {
+        public string GvmInCatch<T>(T t1, T t2)
+        {
+            try
+            {
+                throw new Exception();
+            }
+            catch (Exception)
+            {
+                return GMethod1(t1, t2);
+            }
+        }
+
+        public bool GvmInFilter<T>(T t1, T t2)
+        {
+            try
+            {
+                throw new Exception();
+            }
+            catch when (GMethod1(t1, t2) == "GenBase<System.Object>.GMethod1<System.String>(a,b)")
+            {
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
 
     private static void TestCatchHandlerNeedsGenericContext()
