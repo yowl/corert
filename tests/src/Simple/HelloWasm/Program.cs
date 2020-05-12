@@ -1688,51 +1688,6 @@ internal static class Program
         }
     }
 
-    private static void TestCatchHandlerNeedsGenericContext()
-    {
-        StartTest("Catch handler can access generic context");
-        DerivedCatches<object> c = new DerivedCatches<object>();
-        EndTest(c.GvmInCatch<string>("a", "b") == "GenBase<System.Object>.GMethod1<System.String>(a,b)");  
-    }
-
-    private static void TestFilterHandlerNeedsGenericContext()
-    {
-        StartTest("Filter funclet can access generic context");
-        DerivedCatches<object> c = new DerivedCatches<object>();
-        EndTest(c.GvmInFilter<string>("a", "b"));
-    }
-
-    class DerivedCatches<A> : GenBase<A>
-    {
-        public string GvmInCatch<T>(T t1, T t2)
-        {
-            try
-            {
-                throw new Exception();
-            }
-            catch (Exception)
-            {
-                return GMethod1(t1, t2);
-            }
-        }
-
-        public bool GvmInFilter<T>(T t1, T t2)
-        {
-            try
-            {
-                throw new Exception();
-            }
-            catch when (GMethod1(t1, t2) == "GenBase<System.Object>.GMethod1<System.String>(a,b)")
-            {
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-    }
-
     private static void ThrowException(Exception e)
     {
         throw e;
