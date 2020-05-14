@@ -148,6 +148,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)System\Collections\Generic\IReadOnlyCollection.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)System\Collections\Generic\IReadOnlyDictionary.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)System\Collections\Generic\IReadOnlyList.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)System\Collections\Generic\IReadOnlySet.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)System\Collections\Generic\ISet.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)System\Collections\Generic\KeyNotFoundException.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)System\Collections\Generic\KeyValuePair.cs" />
