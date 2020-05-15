@@ -294,3 +294,5 @@ src/ILCompiler/reproNative/reproNativeCpp.sln
 
 #python import files
 *.pyc
+/src/Native/System.Security.Crypto.Native/*.o
+/src/Native/System.Security.Crypto.Native/libCryptoNative.a

@@ -1,10 +1,10 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.JSInterop;
 using Microsoft.JSInterop.Infrastructure;
-
 namespace CoreRT.WebAssembly.Interop
 {
     /// <summary>
@@ -154,19 +154,51 @@ namespace CoreRT.WebAssembly.Interop
     }
 }
 
-//namespace WebAssembly
-//{
-//    public static class Runtime
-//    {
-//        public static void InvokeJS(string identifier, ref int exceptionNo)
-//        {
-//            var noAsyncHandle = default(long);
-//            var result = InternalCalls.InvokeJSMarshalled(out var exception, ref noAsyncHandle, identifier, null);
-//            if (exception != null)
-//            {
-//                exceptionNo = 1;
-//            }
-//            else exceptionNo = 0;
-//        }
-//    }
-//}
+namespace System.Runtime.InteropServices
+{
+    /// <summary>
+    /// Any method marked with <see cref="System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute" /> can be directly called from
+    /// native code. The function token can be loaded to a local variable using the <see href="https://docs.microsoft.com/dotnet/csharp/language-reference/operators/pointer-related-operators#address-of-operator-">address-of</see> operator
+    /// in C# and passed as a callback to a native method.
+    /// </summary>
+    /// <remarks>
+    /// Methods marked with this attribute have the following restrictions:
+    ///   * Method must be marked "static".
+    ///   * Must not be called from managed code.
+    ///   * Must only have <see href="https://docs.microsoft.com/dotnet/framework/interop/blittable-and-non-blittable-types">blittable</see> arguments.
+    /// </remarks>
+    [AttributeUsage(AttributeTargets.Method)]
+    public sealed class UnmanagedCallersOnlyAttribute : Attribute
+    {
+        public UnmanagedCallersOnlyAttribute()
+        {
+        }
+
+        /// <summary>
+        /// Optional. If omitted, the runtime will use the default platform calling convention.
+        /// </summary>
+        public CallingConvention CallingConvention;
+
+        /// <summary>
+        /// Optional. If omitted, no named export is emitted during compilation.
+        /// </summary>
+        public string? EntryPoint;
+    }
+}
+namespace WebAssembly
+{
+    public static class Runtime
+    {
+        // missing as per mono driver.c
+        [UnmanagedCallersOnly(EntryPoint = "InitializeModules", CallingConvention = CallingConvention.Cdecl)]
+        public static int SystemNative_CloseNetworkChangeListenerSocket(int a) { return 0; }
+        [UnmanagedCallersOnly(EntryPoint = "InitializeModules", CallingConvention = CallingConvention.Cdecl)]
+        public static int SystemNative_CreateNetworkChangeListenerSocket(int a) { return 0; }
+        [UnmanagedCallersOnly(EntryPoint = "InitializeModules", CallingConvention = CallingConvention.Cdecl)]
+        public static void SystemNative_ReadEvents(int a, int b) { }
+        [UnmanagedCallersOnly(EntryPoint = "InitializeModules", CallingConvention = CallingConvention.Cdecl)]
+        public static int SystemNative_SchedGetAffinity(int a, int b) { return 0; }
+        [UnmanagedCallersOnly(EntryPoint = "InitializeModules", CallingConvention = CallingConvention.Cdecl)]
+        public static int SystemNative_SchedSetAffinity(int a, int b) { return 0; }
+    }
+}
