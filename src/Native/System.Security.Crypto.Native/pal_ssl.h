@@ -127,6 +127,7 @@ typedef int32_t (*SslCtxSetAlpnCallback)(SSL* ssl,
     const uint8_t* in,
     uint32_t inlen,
     void* arg);
+extern "C" {
 /*
 Ensures that libssl is correctly initialized and ready to use.
 */
@@ -398,3 +399,4 @@ Looks up a cipher by the IANA identifier, returns a shared string for the OpenSS
 and emits a value indicating if the cipher belongs to the SSL2-TLS1.2 list, or the TLS1.3+ list.
 */
 PALEXPORT const char* CryptoNative_GetOpenSslCipherSuiteName(SSL* ssl, int32_t cipherSuite, int32_t* isTls12OrLower);
+}
