@@ -136,14 +136,46 @@ namespace System
                     return _stackTraceString;
 
                 if (!HasBeenThrown)
+                {
+                    WriteLine("!HasBeenThrown");
                     return null;
+                }
+                WriteLine("formatting");
 
                 return StackTraceHelper.FormatStackTrace(GetStackIPs(), true);
             }
         }
 
+        struct TwoByteStr
+        {
+            public byte first;
+            public byte second;
+        }
+
+        [DllImport("*")]
+        private static unsafe extern int printf(byte* str, byte* unused);
+        private static unsafe void PrintString(string s)
+        {
+            int length = s.Length;
+            fixed (char* curChar = s)
+            {
+                for (int i = 0; i < length; i++)
+                {
+                    TwoByteStr curCharStr = new TwoByteStr();
+                    curCharStr.first = (byte)(*(curChar + i));
+                    printf((byte*)&curCharStr, null);
+                }
+            }
+        }
+
+        internal static void WriteLine(string s)
+        {
+            PrintString(s);
+            PrintString("\n");
+        }
         internal IntPtr[] GetStackIPs()
         {
+            WriteLine("_idxFirstFreeStackTraceEntry " + _idxFirstFreeStackTraceEntry.ToString());
             IntPtr[] ips = new IntPtr[_idxFirstFreeStackTraceEntry];
             if (_corDbgStackTrace != null)
             {
