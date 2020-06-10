@@ -394,13 +394,31 @@ internal static class Program
         }
         if(!TestObjectRefInUncoveredShadowStackSlot())
         {
-            FailTest("struct Child1 alive unexpectedly");
-
+            FailTest("child in reused interop/exception slot alive unexpectedly");
         }
+        if (!TestObjectRefUncoveredViaSpillSlot())
+        {
+            FailTest("child in reused spill slot alive unexpectedly");
+        }
+
         EndTest(true);
     }
 
     private static WeakReference childRef;
+
+    private static bool TestObjectRefUncoveredViaSpillSlot()
+    {
+        CreateObjectRefsInShadowStack();
+        CreateSpillAndCollect();
+        return !childRef.IsAlive;
+    }
+
+    private static object CreateSpillAndCollect()
+    {
+        GC.Collect();
+        return null;
+    }
+
     // This test is to catch where slots are allocated on the shadow stack uncovering object references that were there previously.
     // If this happens in the call to GC.Collect, which at the time of writing allocate 12 bytes in the call, 3 slots, then any objects that were in those 
     // 3 slots will not be collected as they will now be (back) in the range of bottom of stack -> top of stack.
@@ -415,8 +433,8 @@ internal static class Program
     static unsafe void CreateObjectRefsInShadowStack()
     {
         var child = new Child();
-        Child c1, c2, c3;  // 3 more locals to cover give a bit more resiliency to the test, in case of slots being added or removed in the RhCollect calls
-        c1 = c2 = c3 = child;
+        Child c1, c2, c3, c4, c5, c6;  // 3 more locals to cover give a bit more resiliency to the test, in case of slots being added or removed in the RhCollect calls
+        c1 = c2 = c3 = c4 = c5 = c6 = child;
         childRef = new WeakReference(child);
     }
 
