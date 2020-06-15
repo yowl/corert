@@ -37,14 +37,6 @@ namespace System.Runtime
             }
         }
 
-        private static void DispatchEx(object exception)
-        {
-            bool isFirstRethrowFrame = true;
-            bool isFirstFrame = true;
-
-            AppendExceptionStackFrameViaClasslib(exception, IntPtr.Zero, ref isFirstRethrowFrame, ref isFirstFrame);
-        }
-
         // TODO: temporary to try things out, when working look to see how to refactor with FindFirstPassHandler
         private static bool FindFirstPassHandlerWasm(object exception, uint idxStart, uint idxTryLandingStart /* the start IL idx of the try region for the landing pad, will use in place of PC */, 
             void* shadowStack, ref EHClauseIterator clauseIter, out uint tryRegionIdx, out byte* pHandler)
