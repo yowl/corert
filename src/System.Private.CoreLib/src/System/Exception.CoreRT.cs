@@ -11,6 +11,7 @@ using System.Runtime.InteropServices;
 using MethodBase = System.Reflection.MethodBase;
 
 using Internal.Diagnostics;
+using Internal.Runtime.CompilerServices;
 
 namespace System
 {
@@ -136,14 +137,92 @@ namespace System
                     return _stackTraceString;
 
                 if (!HasBeenThrown)
+                {
+                    WriteLine("!HasBeenThrown");
                     return null;
+                }
+                WriteLine("formatting");
 
                 return StackTraceHelper.FormatStackTrace(GetStackIPs(), true);
             }
         }
 
+        struct TwoByteStr
+        {
+            public byte first;
+            public byte second;
+        }
+
+        [DllImport("*")]
+        private static unsafe extern int printf(byte* str, byte* unused);
+
+        public unsafe static void PrintByte(byte b)
+        {
+            TwoByteStr curCharStr = new TwoByteStr();
+            var nib = (b & 0xf0) >> 4;
+            curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
+            // printf((byte*)&curCharStr, null);
+            nib = (b & 0xf);
+            curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
+  //          printf((byte*)&curCharStr, null);
+        }
+
+
+        public unsafe static void PrintInt(int l)
+        {
+            PrintByte((byte)((l >> 24) & 0xff));
+            PrintByte((byte)((l >> 16) & 0xff));
+            PrintByte((byte)((l >> 8) & 0xff));
+            PrintByte((byte)(l & 0xff));
+            PrintString("\n");
+        }
+
+        public unsafe static void Print24Bytes(object o)
+        {
+            var ptr = *(byte**)Unsafe.AsPointer(ref o);
+            TwoByteStr curCharStr = new TwoByteStr();
+            var nib = (ptr[0] & 0xf0) >> 4;
+            curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
+            // printf((byte*)&curCharStr, null);
+            nib = (ptr[0] & 0xf);
+            curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
+            //Print24Bytes(*(byte**)Unsafe.AsPointer(ref o));
+        }
+
+        [CLSCompliant(false)]
+        public unsafe static void Print24Bytes(byte* b)
+        {
+
+
+            // for (var i = 0; i < 24; i++)
+            // {
+            //     PrintByte(b[i]);
+            // }
+            // PrintString("\n");
+        }
+
+        public static unsafe void PrintString(string s)
+        {
+            int length = s.Length;
+            fixed (char* curChar = s)
+            {
+                for (int i = 0; i < length; i++)
+                {
+                    TwoByteStr curCharStr = new TwoByteStr();
+                    curCharStr.first = (byte)(*(curChar + i));
+                    printf((byte*)&curCharStr, null);
+                }
+            }
+        }
+
+        internal static void WriteLine(string s)
+        {
+            PrintString(s);
+            PrintString("\n");
+        }
         internal IntPtr[] GetStackIPs()
         {
+            WriteLine("_idxFirstFreeStackTraceEntry " + _idxFirstFreeStackTraceEntry.ToString());
             IntPtr[] ips = new IntPtr[_idxFirstFreeStackTraceEntry];
             if (_corDbgStackTrace != null)
             {

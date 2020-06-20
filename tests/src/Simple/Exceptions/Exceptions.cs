@@ -4,6 +4,10 @@
 
 using System;
 using System.Text;
+#if CODEGEN_WASM
+using System.Runtime.InteropServices;
+using Console=BringUpTest.Console;
+#endif
 
 public class BringUpTest
 {
@@ -53,12 +57,19 @@ public class BringUpTest
                  return Fail;
             }
 
+            Console.WriteLine("Exception gettin st!");
             string stackTrace = e.StackTrace;
+            Console.WriteLine("got st!");
+            if (stackTrace == null)
+            {
+                Console.WriteLine("got st but was null");
+            }
             if (!stackTrace.Contains("BringUpTest.Main"))
             {
                 Console.WriteLine("Unexpected stack trace: " + stackTrace);
                 return Fail;
             }
+            Console.WriteLine("got st and contained Main");
             counter++;
         }
 
@@ -199,5 +210,44 @@ public class BringUpTest
         CreateSomeGarbage();
         return true;
     }
-}
 
+#if CODEGEN_WASM
+    internal class Console
+    {
+        private static unsafe void PrintString(string s)
+        {
+            int length = s.Length;
+            fixed (char* curChar = s)
+            {
+                for (int i = 0; i < length; i++)
+                {
+                    TwoByteStr curCharStr = new TwoByteStr();
+                    curCharStr.first = (byte)(*(curChar + i));
+                    printf((byte*)&curCharStr, null);
+                }
+            }
+        }
+
+        internal static void WriteLine(string s)
+        {
+            PrintString(s);
+            PrintString("\n");
+        }
+
+        internal static void WriteLine(string format, string param)
+        {
+            PrintString(string.Format(format, param));
+            PrintString("\n");
+        }
+    }
+
+    struct TwoByteStr
+    {
+        public byte first;
+        public byte second;
+    }
+
+    [DllImport("*")]
+    private static unsafe extern int printf(byte* str, byte* unused);
+#endif
+}

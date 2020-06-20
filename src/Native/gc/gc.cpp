@@ -17681,7 +17681,7 @@ uint8_t* gc_heap::find_object (uint8_t* interior)
         heap_segment* seg = find_segment (interior, FALSE);
         if (seg
 #ifdef FEATURE_CONSERVATIVE_GC
-            && (GCConfig::GetConservativeGC() || interior <= heap_segment_allocated(seg))
+            && (!GCConfig::GetConservativeGC() || interior <= heap_segment_allocated(seg))
 #endif
             )
         {
@@ -17692,6 +17692,13 @@ uint8_t* gc_heap::find_object (uint8_t* interior)
                                                        || (GCConfig::GetConservativeGC() && !heap_segment_uoh_p (seg))
 #endif
                                                       );
+#ifdef FEATURE_CONSERVATIVE_GC
+            printf("conservative gc\n");
+#endif
+            if (interior >= heap_segment_allocated(seg))
+            {
+                printf("interior %08x seg %d heap_segment_allocated(seg) %08x\n", interior, seg, heap_segment_allocated(seg));
+            }
             assert (interior < heap_segment_allocated (seg));
 
             uint8_t* o = heap_segment_mem (seg);
