@@ -20,10 +20,58 @@ internal static class Program
     private static int threadStaticInt;
 
     internal static bool Success;
+
+
+    static void FixedUnalterableMethod()
+    {
+        try
+        {
+            PrintLine("throwing 1");
+            throw new Exception("Exception 1"); //line 12.
+        }
+        finally
+        {
+            PrintLine("finally");
+            throw new Exception("Exception 2"); //line 16.
+        }
+    }
+
+    static bool StoreFirstException(Exception x, Action<Exception> store)
+    {
+        PrintLine("storing");
+
+        if (x.Message == "Exception 1")
+        {
+            PrintLine("storing 1");
+
+            store(x);
+        }
+
+        return true;
+    }
+
+    static void Method1()
+    {
+        Exception firstException = null;
+
+        try
+        {
+            FixedUnalterableMethod(); //line 24.
+        }
+        catch (Exception ex) when (StoreFirstException(ex, x => firstException = x))
+        {
+            PrintLine(firstException.ToString());
+            PrintLine(ex.ToString());
+        }
+    }
+
+
     private static unsafe int Main(string[] args)
     {
         Success = true;
         PrintLine("Starting " + 1);
+
+        Method1();
 
         TestBox();
 
@@ -1386,6 +1434,8 @@ internal static class Program
         TestFilterNested();
 
         TestCatchAndThrow();
+
+        TestRethrow();
     }
 
     private static void TestTryCatchNoException()
@@ -1596,6 +1646,32 @@ internal static class Program
         }
         PrintLine(exceptionFlowSequence);
         EndTest(exceptionFlowSequence == @"In middle catchRunning outer filterIn outer catchRunning inner filterIn inner catch");
+    }
+
+    private static void TestRethrow()
+    {
+        StartTest("Test rethrow");
+        int caught = 0;
+        try
+        {
+            try
+            {
+                throw new Exception("first");
+            }
+            catch
+            {
+                caught++;
+                throw;
+            }
+        }
+        catch(Exception e)
+        {
+            if (e.Message == "first")
+            {
+                caught++;
+            }
+        }
+        EndTest(caught == 2);
     }
 
     private static void TestCatchAndThrow()
