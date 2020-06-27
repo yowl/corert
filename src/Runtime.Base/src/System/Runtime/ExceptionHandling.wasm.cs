@@ -37,11 +37,137 @@ namespace System.Runtime
             }
         }
 
-        // TODO: temporary to try things out, when working look to see how to refactor with FindFirstPassHandler
-        private static bool FindFirstPassHandlerWasm(object exception, uint idxStart, uint idxCurrentBlockStart /* the start IL idx of the current block for the landing pad, will use in place of PC */, 
-            void* shadowStack, ref EHClauseIterator clauseIter, out uint tryRegionIdx, out byte* pHandler)
+        // thie method and DispatchExSecondPass similar to src\Runtime.Base\src\System\Runtime\ExceptionHandling.cs but only iterates the current frame for handlers, if a handler is not found, the finally funclets are stored and the exception resumed
+        // when a handler is found the stored finally funclets are run along with any in the current frame.
+        private static byte* DispatchExFirstPass(object exception, byte* ehInfoStart, byte* ehInfoEnd,
+            uint idxCurrentBlockStart, void* shadowStack)
         {
-            pHandler = (byte*)0;
+            var ehInfoIterator = new EHClauseIterator();
+            ehInfoIterator.InitFromEhInfo(ehInfoStart, ehInfoEnd, 0);
+
+            uint tryRegionIdx;
+
+            return FindFirstPassHandlerWasm(exception, 0xFFFFFFFFu, idxCurrentBlockStart, shadowStack, ref ehInfoIterator,
+                out tryRegionIdx); // LLVM LandingPad detects non zero and branches to LPFoundCatch, executing catch handler
+        }
+
+
+        // private static byte* DispatchExSecondPass(object exception, byte* ehInfoStart, byte* ehInfoEnd,
+        //     uint idxCurrentBlockStart, void* shadowStack)
+        // {
+        //     int leaveDestination = 0;
+        //     var foundCatchBlock = _currentFunclet.AppendBasicBlock("LPFoundCatch");
+        //     // If it didn't find a catch block, we can rethrow (resume in LLVM) the C++ exception to continue the stack walk.
+        //     var noCatch = landingPadBuilder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 0, false),
+        //         handler.ValueAsInt32(landingPadBuilder, false), "testCatch");
+        //     var secondPassBlock = _currentFunclet.AppendBasicBlock("SecondPass");
+        //     landingPadBuilder.BuildCondBr(noCatch, secondPassBlock, foundCatchBlock);
+        //
+        //     landingPadBuilder.PositionAtEnd(foundCatchBlock);
+        //
+        //     LLVMValueRef[] callCatchArgs = new LLVMValueRef[]
+        //                           {
+        //                               LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)),
+        //                               CastIfNecessary(landingPadBuilder, handlerFunc, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)), /* catch funclet address */
+        //                               _currentFunclet.GetParam(0),
+        //                               LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0))
+        //                           };
+        //     LLVMValueRef leaveReturnValue = landingPadBuilder.BuildCall(RhpCallCatchFunclet, callCatchArgs, "");
+        //
+        //     landingPadBuilder.BuildStore(leaveReturnValue, leaveDestination);
+        //     landingPadBuilder.BuildBr(secondPassBlock);
+        //
+        //     landingPadBuilder.PositionAtEnd(secondPassBlock);
+        //
+        //     // reinitialise the iterator
+        //     CallRuntime(_compilation.TypeSystemContext, "EHClauseIterator", "InitFromEhInfo", iteratorInitArgs, null, fromLandingPad: true, builder: landingPadBuilder);
+        //
+        //     var secondPassArgs = new StackEntry[] { new ExpressionEntry(StackValueKind.Int32, "idxStart", LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 0xFFFFFFFFu, false)),
+        //                                               new ExpressionEntry(StackValueKind.Int32, "idxTryLandingStart", LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (ulong)tryRegion.ILRegion.TryOffset, false)),
+        //                                               new ExpressionEntry(StackValueKind.ByRef, "refFrameIter", ehInfoIterator),
+        //                                               new ExpressionEntry(StackValueKind.Int32, "idxLimit", LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 0xFFFFFFFFu, false)),
+        //                                               new ExpressionEntry(StackValueKind.NativeInt, "shadowStack", _currentFunclet.GetParam(0))
+        //                                           };
+        //     CallRuntime(_compilation.TypeSystemContext, "EH", "InvokeSecondPassWasm", secondPassArgs, null, true, builder: landingPadBuilder);
+        //
+        //     var catchLeaveBlock = _currentFunclet.AppendBasicBlock("CatchLeave");
+        //     landingPadBuilder.BuildCondBr(noCatch, GetOrCreateResumeBlock(pad, tryRegion.ILRegion.TryOffset.ToString()), catchLeaveBlock);
+        //     landingPadBuilder.PositionAtEnd(catchLeaveBlock);
+        //
+        //     // Use the else as the path for no exception handler found for this exception
+        //     LLVMValueRef @switch = landingPadBuilder.BuildSwitch(landingPadBuilder.BuildLoad(leaveDestination, "loadLeaveDest"), GetOrCreateUnreachableBlock(), 1 /* number of cases, but fortunately this doesn't seem to make much difference */);
+        //
+        //     if (_leaveTargets != null)
+        //     {
+        //         LLVMBasicBlockRef switchReturnBlock = default;
+        //         foreach (var leaveTarget in _leaveTargets)
+        //         {
+        //             var targetBlock = _basicBlocks[leaveTarget];
+        //             var funcletForBlock = GetFuncletForBlock(targetBlock);
+        //             if (funcletForBlock.Handle.Equals(_currentFunclet.Handle))
+        //             {
+        //                 @switch.AddCase(BuildConstInt32(targetBlock.StartOffset), GetLLVMBasicBlockForBlock(targetBlock));
+        //             }
+        //             else
+        //             {
+        //
+        //                 // leave destination is in a different funclet, this happens when an exception is thrown/rethrown from inside a catch handler and the throw is not directly in a try handler
+        //                 // In this case we need to return out of this funclet to get back to the containing funclet.  Logic checks we are actually in a catch funclet as opposed to a finally or the main function funclet
+        //                 ExceptionRegion currentRegion = GetTryRegion(_currentBasicBlock.StartOffset);
+        //                 if (currentRegion != null && _currentBasicBlock.StartOffset >= currentRegion.ILRegion.HandlerOffset && _currentBasicBlock.StartOffset < currentRegion.ILRegion.HandlerOffset + currentRegion.ILRegion.HandlerLength
+        //                     && currentRegion.ILRegion.Kind == ILExceptionRegionKind.Catch)
+        //                 {
+        //                     if (switchReturnBlock == default)
+        //                     {
+        //                         switchReturnBlock = _currentFunclet.AppendBasicBlock("SwitchReturn");
+        //                     }
+        //                     @switch.AddCase(BuildConstInt32(targetBlock.StartOffset), switchReturnBlock);
+        //                 }
+        //             }
+        //         }
+        //         if (switchReturnBlock != default)
+        //         {
+        //             landingPadBuilder.PositionAtEnd(switchReturnBlock);
+        //             landingPadBuilder.BuildRet(landingPadBuilder.BuildLoad(leaveDestination, "loadLeaveDest"));
+        //         }
+        //     }
+        //
+        //     landingPadBuilder.Dispose();
+        //
+        //     return landingPad;
+        // }
+
+        private static unsafe void PrintString(string s)
+        {
+            int length = s.Length;
+            fixed (char* curChar = s)
+            {
+                for (int i = 0; i < length; i++)
+                {
+                    TwoByteStr curCharStr = new TwoByteStr();
+                    curCharStr.first = (byte)(*(curChar + i));
+                    printf((byte*)&curCharStr, null);
+                }
+            }
+        }
+        public struct TwoByteStr
+        {
+            public byte first;
+            public byte second;
+        }
+        [DllImport("*")]
+        private static unsafe extern int printf(byte* str, byte* unused);
+        public static void PrintLine(string s)
+        {
+            PrintString(s);
+            PrintString("\n");
+        }
+
+        // TODO: temporary to try things out, when working look to see how to refactor with FindFirstPassHandler
+        private static byte* FindFirstPassHandlerWasm(object exception, uint idxStart, uint idxCurrentBlockStart /* the start IL idx of the current block for the landing pad, will use in place of PC */, 
+            void* shadowStack, ref EHClauseIterator clauseIter, out uint tryRegionIdx)
+        {
+            byte * pHandler = (byte*)0;
             tryRegionIdx = MaxTryRegionIdx;
             uint lastTryStart = 0, lastTryEnd = 0;
             RhEHClauseWasm ehClause = new RhEHClauseWasm();
@@ -84,12 +210,15 @@ namespace System.Runtime
                 // most containing.
                 if (clauseKind == EHClauseIterator.RhEHClauseKindWasm.RH_EH_CLAUSE_TYPED)
                 {
+                    PrintLine("ShoudCatch");
                     if (ShouldTypedClauseCatchThisException(exception, (EEType*)ehClause._typeSymbol))
                     {
+                        PrintLine("ShoudCatch true");
                         pHandler = ehClause._handlerAddress;
                         tryRegionIdx = curIdx;
-                        return true;
+                        return pHandler;
                     }
+                    PrintLine("ShoudCatch false");
                 }
                 else
                 {
@@ -99,12 +228,12 @@ namespace System.Runtime
                     {
                         pHandler = ehClause._handlerAddress;
                         tryRegionIdx = curIdx;
-                        return true;
+                        return pHandler;
                     }
                 }
             }
 
-            return false;
+            return pHandler;
         }
 
         private static void InvokeSecondPassWasm(uint idxStart, uint idxTryLandingStart, ref EHClauseIterator clauseIter, uint idxLimit, void* shadowStack)

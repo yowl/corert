@@ -20,58 +20,18 @@ internal static class Program
     private static int threadStaticInt;
 
     internal static bool Success;
-
-
-    static void FixedUnalterableMethod()
-    {
-        try
-        {
-            PrintLine("throwing 1");
-            throw new Exception("Exception 1"); //line 12.
-        }
-        finally
-        {
-            PrintLine("finally");
-            throw new Exception("Exception 2"); //line 16.
-        }
-    }
-
-    static bool StoreFirstException(Exception x, Action<Exception> store)
-    {
-        PrintLine("storing");
-
-        if (x.Message == "Exception 1")
-        {
-            PrintLine("storing 1");
-
-            store(x);
-        }
-
-        return true;
-    }
-
-    static void Method1()
-    {
-        Exception firstException = null;
-
-        try
-        {
-            FixedUnalterableMethod(); //line 24.
-        }
-        catch (Exception ex) when (StoreFirstException(ex, x => firstException = x))
-        {
-            PrintLine(firstException.ToString());
-            PrintLine(ex.ToString());
-        }
-    }
-
-
     private static unsafe int Main(string[] args)
     {
         Success = true;
-        PrintLine("Starting " + 1);
-
-        Method1();
+        var ae = new ArgumentException();
+        var e = new Exception();
+        var nre = new NullReferenceException();
+        foreach (var exception in new Exception[]
+            {ae, e, nre})
+        {
+            PrintLine("Exception created");
+        }
+            PrintLine("Starting " + 1);
 
         TestBox();
 
@@ -1408,6 +1368,15 @@ internal static class Program
 
     private static void TestTryCatch()
     {
+        var ae = new ArgumentException();
+        var e = new Exception();
+        var nre = new NullReferenceException();
+        foreach (var exception in new Exception[]
+            {ae, e, nre})
+        {
+            PrintLine("Exception created");
+        }
+
         // break out the individual tests to their own methods to make looking at the funclets easier
         TestTryCatchNoException();
 
@@ -1434,8 +1403,6 @@ internal static class Program
         TestFilterNested();
 
         TestCatchAndThrow();
-
-        TestRethrow();
     }
 
     private static void TestTryCatchNoException()
@@ -1527,8 +1494,10 @@ internal static class Program
         }
         catch (NullReferenceException e)
         {
+            PrintLine("in catch");
             if (e.Message == "test")
             {
+                PrintLine("in catch message is test");
                 i += 100;
             }
         }
@@ -1618,9 +1587,15 @@ internal static class Program
     private static void TestFilterNested()
     {
         StartTest("TestFilterNested");
+                    PrintLine("TestFilterNested");
+        var ae = new ArgumentException();
+        var e = new Exception();
+        var nre = new NullReferenceException();
         foreach (var exception in new Exception[]
-            {new ArgumentException(), new Exception(), new NullReferenceException()})
+            {ae, e, nre})
         {
+            PrintLine("TestFilterNested foreach");
+
             try
             {
                 try
@@ -1631,47 +1606,25 @@ internal static class Program
                     }
                     catch (NullReferenceException) when (Print("inner"))
                     {
+                    PrintLine("NullReferenceException");
                         exceptionFlowSequence += "In inner catch";
                     }
                 }
                 catch (ArgumentException)
                 {
+                    PrintLine("ArgumentException");
                     exceptionFlowSequence += "In middle catch";
                 }
             }
             catch (Exception) when (Print("outer"))
             {
+                PrintLine("Exception");
+
                 exceptionFlowSequence += "In outer catch";
             }
         }
         PrintLine(exceptionFlowSequence);
         EndTest(exceptionFlowSequence == @"In middle catchRunning outer filterIn outer catchRunning inner filterIn inner catch");
-    }
-
-    private static void TestRethrow()
-    {
-        StartTest("Test rethrow");
-        int caught = 0;
-        try
-        {
-            try
-            {
-                throw new Exception("first");
-            }
-            catch
-            {
-                caught++;
-                throw;
-            }
-        }
-        catch(Exception e)
-        {
-            if (e.Message == "first")
-            {
-                caught++;
-            }
-        }
-        EndTest(caught == 2);
     }
 
     private static void TestCatchAndThrow()
