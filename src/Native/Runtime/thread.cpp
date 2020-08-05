@@ -403,8 +403,8 @@ void Thread::Destroy()
 }
 
 #ifdef HOST_WASM
-extern RtuObjectRef * t_pShadowStackTop;
-extern RtuObjectRef * t_pShadowStackBottom;
+extern thread_local RtuObjectRef * t_pShadowStackTop;
+extern thread_local RtuObjectRef * t_pShadowStackBottom;
 
 void GcScanWasmShadowStack(void * pfnEnumCallback, void * pvCallbackData)
 {

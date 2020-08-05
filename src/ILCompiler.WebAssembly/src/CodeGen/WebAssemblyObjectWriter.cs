@@ -257,7 +257,7 @@ namespace ILCompiler.DependencyAnalysis
             var shadowStackBottom = Module.AddGlobal(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), "t_pShadowStackBottom");
             shadowStackBottom.Linkage = LLVMLinkage.LLVMExternalLinkage;
             shadowStackBottom.Initializer = LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0));
-            shadowStackBottom.ThreadLocalMode = LLVMThreadLocalMode.LLVMLocalDynamicTLSModel;
+            shadowStackBottom.ThreadLocalMode = LLVMThreadLocalMode.LLVMLocalExecTLSModel;
             builder.BuildStore(castShadowStack, shadowStackBottom);
 
             // Pass on main arguments
