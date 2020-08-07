@@ -3874,8 +3874,8 @@ namespace Internal.IL
                         result = _builder.BuildAdd(left, right, "add");
                         break;
                     case ILOpcode.sub_ovf:
-                        Debug.Assert(type.Category == TypeFlags.Int32 || type.Category == TypeFlags.Int64);
-                        if (type.Category == TypeFlags.Int32)
+                        Debug.Assert(type.Category == TypeFlags.Int32 || type.Category == TypeFlags.Int64 || type.Category == TypeFlags.Char);
+                        if (type.Category == TypeFlags.Int32  || type.Category == TypeFlags.Char)
                         {
                             BuildSubOverflowChecksForSize(ref SubOvf32Function, left, right, LLVMTypeRef.Int32, BuildConstInt32(int.MaxValue), BuildConstInt32(int.MinValue), true);
                         }
