@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 namespace System.Globalization
 {
@@ -69,7 +68,7 @@ namespace System.Globalization
         {
             // See if we need to build it
             return s_japaneseEraInfo ??
-                (s_japaneseEraInfo = GetJapaneseEras()) ??
+                (s_japaneseEraInfo = GlobalizationMode.UseNls ? NlsGetJapaneseEras() : IcuGetJapaneseEras()) ??
                 // See if we have to use the built-in eras
                 (s_japaneseEraInfo = new EraInfo[]
                 {

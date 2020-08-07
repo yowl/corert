@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 ////////////////////////////////////////////////////////////////////////////
 //
@@ -436,7 +435,7 @@ namespace System.Globalization
                         _ymdFlags |= FoundDatePattern.FoundMonthPatternFlag;
                         break;
                     case 'y':
-                        i = ScanRepeatChar(pattern, 'y', i, out chCount);
+                        i = ScanRepeatChar(pattern, 'y', i, out _);
                         _ymdFlags |= FoundDatePattern.FoundYearPatternFlag;
                         break;
                     case 'd':

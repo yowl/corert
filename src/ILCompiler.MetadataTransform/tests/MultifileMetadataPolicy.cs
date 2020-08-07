@@ -1,6 +1,5 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Collections.Generic;
@@ -17,13 +16,11 @@ namespace MetadataTransformTests
     /// </summary>
     struct MultifileMetadataPolicy : IMetadataPolicy
     {
-        ExplicitScopeAssemblyPolicyMixin _explicitScopePolicyMixin;
         HashSet<ModuleDesc> _modules;
 
         public MultifileMetadataPolicy(params ModuleDesc[] modules)
         {
             _modules = new HashSet<ModuleDesc>(modules);
-            _explicitScopePolicyMixin = new ExplicitScopeAssemblyPolicyMixin();
         }
 
         public bool GeneratesMetadata(MethodDesc methodDef)
@@ -55,11 +52,6 @@ namespace MetadataTransformTests
         public bool IsBlocked(MethodDesc method)
         {
             return IsBlocked((MetadataType)method.OwningType);
-        }
-
-        public ModuleDesc GetModuleOfType(MetadataType typeDef)
-        {
-            return _explicitScopePolicyMixin.GetModuleOfType(typeDef);
         }
     }
 }

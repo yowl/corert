@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 //
 // Implementation of the Redhawk Platform Abstraction Layer (PAL) library when Unix is the platform.
@@ -720,6 +719,11 @@ REDHAWK_PALEXPORT HANDLE REDHAWK_PALAPI PalGetModuleHandleFromPointer(_In_ void*
     return moduleHandle;
 }
 
+REDHAWK_PALEXPORT bool REDHAWK_PALAPI PalIsAvxEnabled()
+{
+    return true;
+}
+
 REDHAWK_PALEXPORT void PalPrintFatalError(const char* message)
 {
     // Write the message using lowest-level OS API available. This is used to print the stack overflow
@@ -1326,4 +1330,15 @@ REDHAWK_PALEXPORT uint32_t REDHAWK_PALAPI getextcpuid(uint32_t arg1, uint32_t ar
     return eax;
 }
 
+REDHAWK_PALEXPORT uint32_t REDHAWK_PALAPI xmmYmmStateSupport()
+{
+    DWORD eax;
+    __asm("  xgetbv\n" \
+        : "=a"(eax) /*output in eax*/\
+        : "c"(0) /*inputs - 0 in ecx*/\
+        : "edx" /* registers that are clobbered*/
+      );
+    // check OS has enabled both XMM and YMM state support
+    return ((eax & 0x06) == 0x06) ? 1 : 0;
+}
 #endif // defined(HOST_X86) || defined(HOST_AMD64)

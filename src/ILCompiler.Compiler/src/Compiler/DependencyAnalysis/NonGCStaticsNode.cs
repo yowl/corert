@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Collections.Generic;
@@ -20,26 +19,35 @@ namespace ILCompiler.DependencyAnalysis
     /// </summary>
     public class NonGCStaticsNode : ObjectNode, IExportableSymbolNode, ISortableSymbolNode, ISymbolNodeWithDebugInfo
     {
-        private MetadataType _type;
-        private NodeFactory _factory;
-        private List<PreInitFieldInfo> _sortedPreInitFields;
+        private readonly MetadataType _type;
+        private readonly PreinitializationManager _preinitializationManager;
 
-        public NonGCStaticsNode(MetadataType type, NodeFactory factory)
+        public NonGCStaticsNode(MetadataType type, PreinitializationManager preinitializationManager)
         {
             Debug.Assert(!type.IsCanonicalSubtype(CanonicalFormKind.Specific));
             _type = type;
-            _factory = factory;
-            var preInitFieldInfos = PreInitFieldInfo.GetPreInitFieldInfos(_type, hasGCStaticBase: false);
-            if (preInitFieldInfos != null)
-            {
-                _sortedPreInitFields = new List<PreInitFieldInfo>(preInitFieldInfos);
-                _sortedPreInitFields.Sort(PreInitFieldInfo.FieldDescCompare);
-            }
+            _preinitializationManager = preinitializationManager;
         }
 
         protected override string GetName(NodeFactory factory) => this.GetMangledName(factory.NameMangler);
 
-        public override ObjectNodeSection Section => ObjectNodeSection.DataSection;
+        public override ObjectNodeSection Section
+        {
+            get
+            {
+                if (_preinitializationManager.HasLazyStaticConstructor(_type)
+                    || _preinitializationManager.IsPreinitialized(_type))
+                {
+                    // We have data to be emitted so this needs to be in an initialized data section
+                    return ObjectNodeSection.DataSection;
+                }
+                else
+                {
+                    // This is all zeros; place this to the BSS section
+                    return ObjectNodeSection.BssSection;
+                }
+            }
+        }
 
         public static string GetMangledName(TypeDesc type, NameMangler nameMangler)
         {
@@ -58,9 +66,9 @@ namespace ILCompiler.DependencyAnalysis
             get
             {
                 // Make sure the NonGCStatics symbol always points to the beginning of the data.
-                if (_factory.TypeSystemContext.HasLazyStaticConstructor(_type))
+                if (_preinitializationManager.HasLazyStaticConstructor(_type))
                 {
-                    return GetClassConstructorContextStorageSize(_factory.Target, _type);
+                    return GetClassConstructorContextStorageSize(_type.Context.Target, _type);
                 }
                 else
                 {
@@ -68,6 +76,8 @@ namespace ILCompiler.DependencyAnalysis
                 }
             }
         }
+
+        public bool HasCCtorContext => _preinitializationManager.HasLazyStaticConstructor(_type);
 
         public IDebugInfo DebugInfo => NullTypeIndexDebugInfo.Instance;
 
@@ -106,7 +116,7 @@ namespace ILCompiler.DependencyAnalysis
         {
             DependencyList dependencyList = null;
 
-            if (factory.TypeSystemContext.HasEagerStaticConstructor(_type))
+            if (factory.PreinitializationManager.HasEagerStaticConstructor(_type))
             {
                 dependencyList = new DependencyList();
                 dependencyList.Add(factory.EagerCctorIndirection(_type.GetStaticConstructor()), "Eager .cctor");
@@ -123,7 +133,7 @@ namespace ILCompiler.DependencyAnalysis
 
             // If the type has a class constructor, its non-GC statics section is prefixed  
             // by System.Runtime.CompilerServices.StaticClassConstructionContext struct.
-            if (factory.TypeSystemContext.HasLazyStaticConstructor(_type))
+            if (factory.PreinitializationManager.HasLazyStaticConstructor(_type))
             {
                 int alignmentRequired = Math.Max(_type.NonGCStaticFieldAlignment.AsInt, GetClassConstructorContextAlignment(_type.Context.Target));
                 int classConstructorContextStorageSize = GetClassConstructorContextStorageSize(factory.Target, _type);
@@ -144,31 +154,28 @@ namespace ILCompiler.DependencyAnalysis
                 builder.RequireInitialAlignment(_type.NonGCStaticFieldAlignment.AsInt);
             }
 
-            if (_sortedPreInitFields != null)
+            if (_preinitializationManager.IsPreinitialized(_type))
             {
-                int staticOffsetBegin = builder.CountBytes;
-                int staticOffsetEnd = builder.CountBytes + _type.NonGCStaticFieldSize.AsInt;
-                int staticOffset = staticOffsetBegin;
-                int idx = 0;
-
-                while (staticOffset < staticOffsetEnd)
+                TypePreinit.PreinitializationInfo preinitInfo = _preinitializationManager.GetPreinitializationInfo(_type);
+                int initialOffset = builder.CountBytes;
+                foreach (FieldDesc field in _type.GetFields())
                 {
-                    int writeTo = staticOffsetEnd;
-                    if (idx < _sortedPreInitFields.Count)
-                        writeTo = staticOffsetBegin + _sortedPreInitFields[idx].Field.Offset.AsInt;
+                    if (!field.IsStatic || field.HasRva || field.IsLiteral || field.IsThreadStatic || field.HasGCStaticBase)
+                        continue;
 
-                    // Emit the zeros before the next preinitField
-                    builder.EmitZeros(writeTo - staticOffset);
-                    staticOffset = writeTo;
+                    int padding = field.Offset.AsInt - builder.CountBytes + initialOffset;
+                    Debug.Assert(padding >= 0);
+                    builder.EmitZeros(padding);
 
-                    // Emit the data 
-                    if (idx < _sortedPreInitFields.Count)
-                    {
-                        _sortedPreInitFields[idx].WriteData(ref builder, factory);
-                        idx++;
-                        staticOffset = builder.CountBytes;
-                    }
+                    TypePreinit.ISerializableValue val = preinitInfo.GetFieldValue(field);
+                    int currentOffset = builder.CountBytes;
+                    val.WriteFieldData(ref builder, field, factory);
+                    Debug.Assert(builder.CountBytes - currentOffset == field.FieldType.GetElementSize().AsInt);
                 }
+
+                int pad = _type.NonGCStaticFieldSize.AsInt - builder.CountBytes + initialOffset;
+                Debug.Assert(pad >= 0);
+                builder.EmitZeros(pad);
             }
             else
             {

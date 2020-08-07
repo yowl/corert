@@ -1,10 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Buffers;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -128,7 +126,6 @@ namespace System.IO
             unsafe
             {
                 byte* pointer = null;
-                RuntimeHelpers.PrepareConstrainedRegions();
                 try
                 {
                     buffer.AcquirePointer(ref pointer);
@@ -260,7 +257,6 @@ namespace System.IO
                 {
                     byte* pointer = null;
 
-                    RuntimeHelpers.PrepareConstrainedRegions();
                     try
                     {
                         _buffer.AcquirePointer(ref pointer);
@@ -490,7 +486,6 @@ namespace System.IO
                     {
                         byte* pointer = null;
 
-                        RuntimeHelpers.PrepareConstrainedRegions();
                         try
                         {
                             _buffer.AcquirePointer(ref pointer);
@@ -606,7 +601,6 @@ namespace System.IO
                 unsafe
                 {
                     byte* pointer = null;
-                    RuntimeHelpers.PrepareConstrainedRegions();
                     try
                     {
                         _buffer.AcquirePointer(ref pointer);
@@ -786,7 +780,6 @@ namespace System.IO
                     }
 
                     byte* pointer = null;
-                    RuntimeHelpers.PrepareConstrainedRegions();
                     try
                     {
                         _buffer.AcquirePointer(ref pointer);
@@ -920,7 +913,6 @@ namespace System.IO
                 unsafe
                 {
                     byte* pointer = null;
-                    RuntimeHelpers.PrepareConstrainedRegions();
                     try
                     {
                         _buffer.AcquirePointer(ref pointer);

@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
 
@@ -16,17 +15,15 @@ namespace System.Threading
 
             private static int s_runningState;
 
-            private static AutoResetEvent s_runGateThreadEvent = new AutoResetEvent(true);
+            private static readonly AutoResetEvent s_runGateThreadEvent = new AutoResetEvent(initialState: true);
 
-            private static LowLevelLock s_createdLock = new LowLevelLock();
-
-            private static CpuUtilizationReader s_cpu = new CpuUtilizationReader();
+            private static CpuUtilizationReader s_cpu;
             private const int MaxRuns = 2;
 
             // TODO: CoreCLR: Worker Tracking in CoreCLR? (Config name: ThreadPool_EnableWorkerTracking)
             private static void GateThreadStart()
             {
-                var initialCpuRead = s_cpu.CurrentUtilization; // The first reading is over a time range other than what we are focusing on, so we do not use the read.
+                _ = s_cpu.CurrentUtilization; // The first reading is over a time range other than what we are focusing on, so we do not use the read.
 
                 AppContext.TryGetSwitch("System.Threading.ThreadPool.DisableStarvationDetection", out bool disableStarvationDetection);
                 AppContext.TryGetSwitch("System.Threading.ThreadPool.DebugBreakOnWorkerStarvation", out bool debuggerBreakOnWorkStarvation);
@@ -87,7 +84,7 @@ namespace System.Threading
 
                 int minimumDelay;
 
-                if(ThreadPoolInstance._cpuUtilization < CpuUtilizationLow)
+                if (ThreadPoolInstance._cpuUtilization < CpuUtilizationLow)
                 {
                     minimumDelay = GateThreadDelayMs;
                 }

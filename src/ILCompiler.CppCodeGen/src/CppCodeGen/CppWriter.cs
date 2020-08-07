@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Text;
@@ -589,6 +588,16 @@ namespace ILCompiler.CppCodeGen
             sb.AppendLine();
             AppendCppMethodDeclaration(sb, method, true);
             sb.AppendLine();
+
+            // TODO: workaround unreachable globalization methods
+            string moduleName = method.GetPInvokeMethodMetadata().Module;
+            if (moduleName == (_compilation.TypeSystemContext.Target.IsWindows ? "libSystem.Globalization.Native" : "kernel32.dll"))
+            {
+                sb.Append("{ throw 0; }");
+                methodCodeNodeNeedingCode.SetCode(sb.ToString(), Array.Empty<Object>());
+                return;
+            }
+
             sb.Append("{");
             sb.Indent();
 
@@ -1268,7 +1277,7 @@ namespace ILCompiler.CppCodeGen
                 relocCode.Append("(char*)&");
                 relocCode.Append(GetCppStaticsName(nonGcStaticNode.Type));
 
-                if (_compilation.TypeSystemContext.HasLazyStaticConstructor(nonGcStaticNode.Type))
+                if (_compilation.HasLazyStaticConstructor(nonGcStaticNode.Type))
                     relocCode.Append(" + sizeof(StaticClassConstructionContext)");
             }
             else if (reloc.Target is TypeThreadStaticIndexNode)
@@ -1370,7 +1379,7 @@ namespace ILCompiler.CppCodeGen
                     var method = methodCodeNode.Method;
                     var type = method.OwningType;
 
-                    if (_compilation.TypeSystemContext.HasLazyStaticConstructor(type) && method.Equals(type.GetStaticConstructor()))
+                    if (_compilation.HasLazyStaticConstructor(type) && method.Equals(type.GetStaticConstructor()))
                         _typesWithCctor.Add(type);
 
                     List<MethodDesc> methodList;
@@ -1717,7 +1726,7 @@ namespace ILCompiler.CppCodeGen
 
             if (nodeType.IsDefType && !nodeType.IsGenericDefinition)
             {
-                if (_compilation.TypeSystemContext.HasLazyStaticConstructor(nodeType))
+                if (_compilation.HasLazyStaticConstructor(nodeType))
                 {
                     MethodDesc cctor = nodeType.GetStaticConstructor().GetCanonMethodTarget(CanonicalFormKind.Specific);
 
@@ -2034,7 +2043,7 @@ namespace ILCompiler.CppCodeGen
                     {
                         MetadataType target = (MetadataType)node.Target;
 
-                        if (_compilation.TypeSystemContext.HasLazyStaticConstructor(target))
+                        if (_compilation.HasLazyStaticConstructor(target))
                         {
                             OutputCodeForTriggerCctor(sb, factory, target, resVarName);
 
@@ -2058,7 +2067,7 @@ namespace ILCompiler.CppCodeGen
                         sb.Append(";");
                         sb.AppendLine();
 
-                        if (_compilation.TypeSystemContext.HasLazyStaticConstructor(target))
+                        if (_compilation.HasLazyStaticConstructor(target))
                         {
                             string nonGcStaticsBase = "nonGcBase";
 
@@ -2080,7 +2089,7 @@ namespace ILCompiler.CppCodeGen
                     {
                         MetadataType target = (MetadataType)node.Target;
 
-                        if (_compilation.TypeSystemContext.HasLazyStaticConstructor(target))
+                        if (_compilation.HasLazyStaticConstructor(target))
                         {
                             string nonGcStaticsBase = "nonGcBase";
 
@@ -2279,7 +2288,7 @@ namespace ILCompiler.CppCodeGen
                 sb.Append(" ");
                 sb.Append(GetCppStaticsName(t, isGCStatic, isThreadStatic, isGCStatic && !isThreadStatic));
 
-                if (!isGCStatic && _compilation.TypeSystemContext.HasLazyStaticConstructor(t))
+                if (!isGCStatic && _compilation.HasLazyStaticConstructor(t))
                 {
                     MethodDesc cctor = t.GetStaticConstructor();
                     MethodDesc canonCctor = cctor.GetCanonMethodTarget(CanonicalFormKind.Specific);

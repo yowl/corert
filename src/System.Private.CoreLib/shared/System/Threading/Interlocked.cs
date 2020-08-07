@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Runtime.CompilerServices;
 using Internal.Runtime.CompilerServices;
@@ -132,7 +131,7 @@ namespace System.Threading
         /// <summary>Bitwise "ands" two 32-bit signed integers and replaces the first integer with the result, as an atomic operation.</summary>
         /// <param name="location1">A variable containing the first value to be combined. The result is stored in <paramref name="location1"/>.</param>
         /// <param name="value">The value to be combined with the integer at <paramref name="location1"/>.</param>
-        /// <returns>The new value stored at <paramref name="location1"/>.</returns>
+        /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int And(ref int location1, int value)
@@ -144,7 +143,7 @@ namespace System.Threading
                 int oldValue = CompareExchange(ref location1, newValue, current);
                 if (oldValue == current)
                 {
-                    return newValue;
+                    return oldValue;
                 }
                 current = oldValue;
             }
@@ -153,7 +152,7 @@ namespace System.Threading
         /// <summary>Bitwise "ands" two 32-bit unsigned integers and replaces the first integer with the result, as an atomic operation.</summary>
         /// <param name="location1">A variable containing the first value to be combined. The result is stored in <paramref name="location1"/>.</param>
         /// <param name="value">The value to be combined with the integer at <paramref name="location1"/>.</param>
-        /// <returns>The new value stored at <paramref name="location1"/>.</returns>
+        /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CLSCompliant(false)]
@@ -163,7 +162,7 @@ namespace System.Threading
         /// <summary>Bitwise "ands" two 64-bit signed integers and replaces the first integer with the result, as an atomic operation.</summary>
         /// <param name="location1">A variable containing the first value to be combined. The result is stored in <paramref name="location1"/>.</param>
         /// <param name="value">The value to be combined with the integer at <paramref name="location1"/>.</param>
-        /// <returns>The new value stored at <paramref name="location1"/>.</returns>
+        /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static long And(ref long location1, long value)
@@ -175,7 +174,7 @@ namespace System.Threading
                 long oldValue = CompareExchange(ref location1, newValue, current);
                 if (oldValue == current)
                 {
-                    return newValue;
+                    return oldValue;
                 }
                 current = oldValue;
             }
@@ -184,7 +183,7 @@ namespace System.Threading
         /// <summary>Bitwise "ands" two 64-bit unsigned integers and replaces the first integer with the result, as an atomic operation.</summary>
         /// <param name="location1">A variable containing the first value to be combined. The result is stored in <paramref name="location1"/>.</param>
         /// <param name="value">The value to be combined with the integer at <paramref name="location1"/>.</param>
-        /// <returns>The new value stored at <paramref name="location1"/>.</returns>
+        /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CLSCompliant(false)]
@@ -196,7 +195,7 @@ namespace System.Threading
         /// <summary>Bitwise "ors" two 32-bit signed integers and replaces the first integer with the result, as an atomic operation.</summary>
         /// <param name="location1">A variable containing the first value to be combined. The result is stored in <paramref name="location1"/>.</param>
         /// <param name="value">The value to be combined with the integer at <paramref name="location1"/>.</param>
-        /// <returns>The new value stored at <paramref name="location1"/>.</returns>
+        /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Or(ref int location1, int value)
@@ -208,7 +207,7 @@ namespace System.Threading
                 int oldValue = CompareExchange(ref location1, newValue, current);
                 if (oldValue == current)
                 {
-                    return newValue;
+                    return oldValue;
                 }
                 current = oldValue;
             }
@@ -217,7 +216,7 @@ namespace System.Threading
         /// <summary>Bitwise "ors" two 32-bit unsigned integers and replaces the first integer with the result, as an atomic operation.</summary>
         /// <param name="location1">A variable containing the first value to be combined. The result is stored in <paramref name="location1"/>.</param>
         /// <param name="value">The value to be combined with the integer at <paramref name="location1"/>.</param>
-        /// <returns>The new value stored at <paramref name="location1"/>.</returns>
+        /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CLSCompliant(false)]
@@ -227,7 +226,7 @@ namespace System.Threading
         /// <summary>Bitwise "ors" two 64-bit signed integers and replaces the first integer with the result, as an atomic operation.</summary>
         /// <param name="location1">A variable containing the first value to be combined. The result is stored in <paramref name="location1"/>.</param>
         /// <param name="value">The value to be combined with the integer at <paramref name="location1"/>.</param>
-        /// <returns>The new value stored at <paramref name="location1"/>.</returns>
+        /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static long Or(ref long location1, long value)
@@ -239,7 +238,7 @@ namespace System.Threading
                 long oldValue = CompareExchange(ref location1, newValue, current);
                 if (oldValue == current)
                 {
-                    return newValue;
+                    return oldValue;
                 }
                 current = oldValue;
             }
@@ -248,7 +247,7 @@ namespace System.Threading
         /// <summary>Bitwise "ors" two 64-bit unsigned integers and replaces the first integer with the result, as an atomic operation.</summary>
         /// <param name="location1">A variable containing the first value to be combined. The result is stored in <paramref name="location1"/>.</param>
         /// <param name="value">The value to be combined with the integer at <paramref name="location1"/>.</param>
-        /// <returns>The new value stored at <paramref name="location1"/>.</returns>
+        /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CLSCompliant(false)]

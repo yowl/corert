@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
 
@@ -105,7 +104,11 @@ namespace System.Globalization
 
             Debug.Assert(!GlobalizationMode.Invariant);
 
-            if (!LoadCalendarDataFromSystem(localeName, calendarId))
+            bool loadedCalendarData = GlobalizationMode.UseNls ?
+                                        NlsLoadCalendarDataFromSystem(localeName, calendarId) :
+                                        IcuLoadCalendarDataFromSystem(localeName, calendarId);
+
+            if (!loadedCalendarData)
             {
                 // LoadCalendarDataFromSystem sometimes can fail on Linux if the installed ICU package is missing some resources.
                 // The ICU package can miss some resources in some cases like if someone compile and build the ICU package manually or ICU has a regression.
@@ -376,5 +379,9 @@ namespace System.Globalization
 
             return "en-US";
         }
+
+        private bool SystemSupportsTaiwaneseCalendar() => GlobalizationMode.UseNls ?
+                                                            NlsSystemSupportsTaiwaneseCalendar() :
+                                                            IcuSystemSupportsTaiwaneseCalendar();
     }
 }

@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Runtime.Serialization;
 using System.Runtime.CompilerServices;
@@ -1091,9 +1090,7 @@ namespace System.Text
             }
             Debug.Assert(insertingChars + this.Length < int.MaxValue);
 
-            StringBuilder chunk;
-            int indexInChunk;
-            MakeRoom(index, (int)insertingChars, out chunk, out indexInChunk, false);
+            MakeRoom(index, (int)insertingChars, out StringBuilder chunk, out int indexInChunk, false);
             unsafe
             {
                 fixed (char* valuePtr = value)
@@ -1140,9 +1137,7 @@ namespace System.Text
 
             if (length > 0)
             {
-                StringBuilder chunk;
-                int indexInChunk;
-                Remove(startIndex, length, out chunk, out indexInChunk);
+                Remove(startIndex, length, out _, out _);
             }
 
             return this;
@@ -2140,9 +2135,7 @@ namespace System.Text
 
             if (valueCount > 0)
             {
-                StringBuilder chunk;
-                int indexInChunk;
-                MakeRoom(index, valueCount, out chunk, out indexInChunk, false);
+                MakeRoom(index, valueCount, out StringBuilder chunk, out int indexInChunk, false);
                 ReplaceInPlaceAtChunk(ref chunk!, ref indexInChunk, value, valueCount);
             }
         }

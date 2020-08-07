@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Collections.Generic;
@@ -36,7 +35,8 @@ namespace ILCompiler.DependencyAnalysis
             LazyGenericsPolicy lazyGenericsPolicy,
             VTableSliceProvider vtableSliceProvider,
             DictionaryLayoutProvider dictionaryLayoutProvider,
-            ImportedNodeProvider importedNodeProvider)
+            ImportedNodeProvider importedNodeProvider,
+            PreinitializationManager preinitializationManager)
         {
             _target = context.Target;
             _context = context;
@@ -50,6 +50,7 @@ namespace ILCompiler.DependencyAnalysis
             LazyGenericsPolicy = lazyGenericsPolicy;
             _importedNodeProvider = importedNodeProvider;
             InterfaceDispatchCellSection = new InterfaceDispatchCellSectionNode(this);
+            PreinitializationManager = preinitializationManager;
         }
 
         public void SetMarkingComplete()
@@ -90,6 +91,11 @@ namespace ILCompiler.DependencyAnalysis
         }
 
         public NameMangler NameMangler
+        {
+            get;
+        }
+
+        public PreinitializationManager PreinitializationManager
         {
             get;
         }
@@ -179,7 +185,7 @@ namespace ILCompiler.DependencyAnalysis
             {
                 if (_compilationModuleGroup.ContainsType(type) && !_compilationModuleGroup.ShouldReferenceThroughImportTable(type))
                 {
-                    return new NonGCStaticsNode(type, this);
+                    return new NonGCStaticsNode(type, PreinitializationManager);
                 }
                 else
                 {
@@ -191,7 +197,7 @@ namespace ILCompiler.DependencyAnalysis
             {
                 if (_compilationModuleGroup.ContainsType(type) && !_compilationModuleGroup.ShouldReferenceThroughImportTable(type))
                 {
-                    return new GCStaticsNode(type);
+                    return new GCStaticsNode(type, PreinitializationManager);
                 }
                 else
                 {
@@ -235,11 +241,6 @@ namespace ILCompiler.DependencyAnalysis
                 return new BlobNode(key.Name, ObjectNodeSection.BssSection, new byte[key.Size], key.Alignment);
             });
 
-            _settableReadOnlyDataBlobs = new NodeCache<Utf8String, SettableReadOnlyDataBlob>(key =>
-            {
-                return new SettableReadOnlyDataBlob(key, ObjectNodeSection.ReadOnlyDataSection);
-            });
-            
             _externSymbols = new NodeCache<string, ExternSymbolNode>((string name) =>
             {
                 return new ExternSymbolNode(name);
@@ -327,9 +328,9 @@ namespace ILCompiler.DependencyAnalysis
                 return new FrozenStringNode(data, Target);
             });
 
-            _frozenArrayNodes = new NodeCache<PreInitFieldInfo, FrozenArrayNode>((PreInitFieldInfo fieldInfo) =>
+            _frozenObjectNodes = new NodeCache<SerializedFrozenObjectKey, FrozenObjectNode>(key =>
             {
-                return new FrozenArrayNode(fieldInfo);
+                return new FrozenObjectNode(key.Owner, key.SerializableObject);
             });
 
             _interfaceDispatchCells = new NodeCache<DispatchCellKey, InterfaceDispatchCellNode>(callSiteCell =>
@@ -370,7 +371,7 @@ namespace ILCompiler.DependencyAnalysis
             _eagerCctorIndirectionNodes = new NodeCache<MethodDesc, EmbeddedObjectNode>((MethodDesc method) =>
             {
                 Debug.Assert(method.IsStaticConstructor);
-                Debug.Assert(TypeSystemContext.HasEagerStaticConstructor((MetadataType)method.OwningType));
+                Debug.Assert(PreinitializationManager.HasEagerStaticConstructor((MetadataType)method.OwningType));
                 return EagerCctorTable.NewNode(MethodEntrypoint(method));
             });
 
@@ -620,7 +621,7 @@ namespace ILCompiler.DependencyAnalysis
 
         private NodeCache<MetadataType, TypeThreadStaticIndexNode> _typeThreadStaticIndices;
 
-        public ISymbolNode TypeThreadStaticIndex(MetadataType type)
+        public ISortableSymbolNode TypeThreadStaticIndex(MetadataType type)
         {
             if (_compilationModuleGroup.ContainsType(type))
             {
@@ -673,14 +674,6 @@ namespace ILCompiler.DependencyAnalysis
         {
             return _readOnlyDataBlobs.GetOrAdd(new ReadOnlyDataBlobKey(name, blobData, alignment));
         }
-
-        private NodeCache<Utf8String, SettableReadOnlyDataBlob> _settableReadOnlyDataBlobs;
-
-        public SettableReadOnlyDataBlob SettableReadOnlyDataBlob(Utf8String name)
-        {
-            return _settableReadOnlyDataBlobs.GetOrAdd(name);
-        }
-
         private NodeCache<TypeDesc, SealedVTableNode> _sealedVtableNodes;
 
         internal SealedVTableNode SealedVTable(TypeDesc type)
@@ -981,11 +974,11 @@ namespace ILCompiler.DependencyAnalysis
             return _frozenStringNodes.GetOrAdd(data);
         }
 
-        private NodeCache<PreInitFieldInfo, FrozenArrayNode> _frozenArrayNodes;
+        private NodeCache<SerializedFrozenObjectKey, FrozenObjectNode> _frozenObjectNodes;
 
-        public FrozenArrayNode SerializedFrozenArray(PreInitFieldInfo preInitFieldInfo)
+        public FrozenObjectNode SerializedFrozenObject(FieldDesc owningField, TypePreinit.ISerializableReference data)
         {
-            return _frozenArrayNodes.GetOrAdd(preInitFieldInfo);
+            return _frozenObjectNodes.GetOrAdd(new SerializedFrozenObjectKey(owningField, data));
         }
 
         private NodeCache<MethodDesc, EmbeddedObjectNode> _eagerCctorIndirectionNodes;
@@ -1223,6 +1216,22 @@ namespace ILCompiler.DependencyAnalysis
             public bool Equals(UninitializedWritableDataBlobKey other) => Name.Equals(other.Name);
             public override bool Equals(object obj) => obj is UninitializedWritableDataBlobKey && Equals((UninitializedWritableDataBlobKey)obj);
             public override int GetHashCode() => Name.GetHashCode();
+        }
+
+        protected struct SerializedFrozenObjectKey : IEquatable<SerializedFrozenObjectKey>
+        {
+            public readonly FieldDesc Owner;
+            public readonly TypePreinit.ISerializableReference SerializableObject;
+
+            public SerializedFrozenObjectKey(FieldDesc owner, TypePreinit.ISerializableReference obj)
+            {
+                Owner = owner;
+                SerializableObject = obj;
+            }
+
+            public override bool Equals(object obj) => obj is SerializedFrozenObjectKey && Equals((SerializedFrozenObjectKey)obj);
+            public bool Equals(SerializedFrozenObjectKey other) => Owner == other.Owner;
+            public override int GetHashCode() => Owner.GetHashCode();
         }
     }
 }

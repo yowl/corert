@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Runtime;
 using System.Runtime.CompilerServices;
@@ -18,16 +17,15 @@ namespace System
     // Data Contract: Single field of type EEType_ptr (or void * till a tool bug can be fixed)
     // VTable Contract: The first vtable slot should be the finalizer for object => The first virtual method in the object class should be the Finalizer
 
-    public partial class Object
+    public unsafe partial class Object
     {
         // CS0649: Field '{blah}' is never assigned to, and will always have its default value
 #pragma warning disable 649
         // Marked as internal for now so that some classes (System.Buffer, System.Enum) can use C#'s fixed
         // statement on partially typed objects. Wouldn't have to do this if we could directly declared pinned
         // locals.
-        // TODO: Consider making this EEType* instead of IntPtr.
         [NonSerialized]
-        internal IntPtr m_pEEType;
+        private EEType* m_pEEType;
 #pragma warning restore
 
 #if INPLACE_RUNTIME
@@ -35,7 +33,7 @@ namespace System
         {
             get
             {
-                return (EEType*)m_pEEType;
+                return m_pEEType;
             }
         }
 #endif

@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 #pragma warning disable CS0067 // events are declared but not used
 
@@ -149,8 +148,7 @@ namespace System
 
         public bool? IsCompatibilitySwitchSet(string value)
         {
-            bool result;
-            return AppContext.TryGetSwitch(value, out result) ? result : default(bool?);
+            return AppContext.TryGetSwitch(value, out bool result) ? result : default(bool?);
         }
 
         public bool IsDefaultAppDomain() => true;

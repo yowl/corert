@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Diagnostics.Tracing;
 
@@ -68,7 +67,7 @@ namespace System.Threading
             }
         }
 
-        [Event(5, Level = EventLevel.Informational, Message = WorkerThreadAdjustmentSampleMessage, Opcode = Opcodes.AdjustmentOpcode, Version = 0, Task = Tasks.WorkerThreadAdjustmentTask, Keywords = Keywords.ThreadingKeyword)]
+        [Event(5, Level = EventLevel.Informational, Message = WorkerThreadAdjustmentAdjustmentEventMessage, Opcode = Opcodes.AdjustmentOpcode, Version = 0, Task = Tasks.WorkerThreadAdjustmentTask, Keywords = Keywords.ThreadingKeyword)]
         public unsafe void WorkerThreadAdjustmentAdjustment(double averageThroughput, int newWorkerThreadCount, int stateOrTransition)
         {
             if (IsEnabled())
@@ -84,7 +83,7 @@ namespace System.Threading
             }
         }
 
-        [Event(6, Level = EventLevel.Verbose, Message = WorkerThreadAdjustmentSampleMessage, Opcode = Opcodes.StatsOpcode, Version = 0, Task = Tasks.WorkerThreadAdjustmentTask, Keywords = Keywords.ThreadingKeyword)]
+        [Event(6, Level = EventLevel.Verbose, Message = WorkerThreadAdjustmentStatsEventMessage, Opcode = Opcodes.StatsOpcode, Version = 0, Task = Tasks.WorkerThreadAdjustmentTask, Keywords = Keywords.ThreadingKeyword)]
         [CLSCompliant(false)]
         public unsafe void WorkerThreadAdjustmentStats(double duration, double throughput, double threadWave, double throughputWave, double throughputErrorEstimate,
             double averageThroughputNoise, double ratio, double confidence, double currentControlSetting, ushort newThreadWaveMagnitude)

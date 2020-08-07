@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 //
 // Miscellaneous unmanaged helpers called by managed code.
@@ -225,7 +224,6 @@ inline Int32 GetThumb2BlRel24(UInt16 * p)
 // or unboxing stub, and if so, return the address that stub jumps to
 COOP_PINVOKE_HELPER(UInt8 *, RhGetCodeTarget, (UInt8 * pCodeOrg))
 {
-    Module * pModule = NULL;
     bool unboxingStub = false;
 
     // First, check the unboxing stubs regions known by the runtime (if any exist)
@@ -283,7 +281,6 @@ COOP_PINVOKE_HELPER(UInt8 *, RhGetCodeTarget, (UInt8 * pCodeOrg))
     {
         // normal import stub - address of IAT follows
         UInt8 **pIatCell = *(UInt8 ***)&pCode[2];
-        ASSERT(pModule == NULL || pModule->ContainsDataAddress(pIatCell));
         return *pIatCell;
     }
     // is this an unboxing stub followed by a relative jump?
@@ -351,7 +348,6 @@ COOP_PINVOKE_HELPER(UInt8 *, RhGetCodeTarget, (UInt8 * pCodeOrg))
         // ldr: offset = LSL(ZeroExtend(imm12, 64), 3);
         distToIatCell += (pCode[1] >> 7) & 0x7ff8;
         UInt8 ** pIatCell = (UInt8 **)(((Int64)pCode & ~0xfff) + distToIatCell);
-        ASSERT(pModule == NULL || pModule->ContainsDataAddress(pIatCell));
         return *pIatCell;
     }
     // is this an unboxing stub followed by a relative jump?

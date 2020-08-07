@@ -1,6 +1,5 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using ILCompiler.DependencyAnalysisFramework;
@@ -11,7 +10,7 @@ namespace ILCompiler.DependencyAnalysis
     public sealed class CppCodegenNodeFactory : NodeFactory
     {
         public CppCodegenNodeFactory(CompilerTypeSystemContext context, CompilationModuleGroup compilationModuleGroup, MetadataManager metadataManager,
-            InteropStubManager interopStubManager, NameMangler nameMangler, VTableSliceProvider vtableSliceProvider, DictionaryLayoutProvider dictionaryLayoutProvider)
+            InteropStubManager interopStubManager, NameMangler nameMangler, VTableSliceProvider vtableSliceProvider, DictionaryLayoutProvider dictionaryLayoutProvider, PreinitializationManager preinitializationManager)
             : base(context, 
                   compilationModuleGroup, 
                   metadataManager, 
@@ -20,7 +19,8 @@ namespace ILCompiler.DependencyAnalysis
                   new LazyGenericsDisabledPolicy(), 
                   vtableSliceProvider, 
                   dictionaryLayoutProvider, 
-                  new ImportedNodeProviderThrowing())
+                  new ImportedNodeProviderThrowing(),
+                  preinitializationManager)
         {
         }
 

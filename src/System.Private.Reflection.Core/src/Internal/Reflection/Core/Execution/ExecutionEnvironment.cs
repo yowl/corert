@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.IO;
@@ -12,6 +11,7 @@ using Internal.Metadata.NativeFormat;
 
 using OpenMethodInvoker = System.Reflection.Runtime.MethodInfos.OpenMethodInvoker;
 using EnumInfo = Internal.Runtime.Augments.EnumInfo;
+using System.Reflection.Runtime.MethodInfos;
 
 namespace Internal.Reflection.Core.Execution
 {
@@ -41,6 +41,8 @@ namespace Internal.Reflection.Core.Execution
         public abstract bool IsAssignableFrom(RuntimeTypeHandle dstType, RuntimeTypeHandle srcType);
         public abstract bool TryGetBaseType(RuntimeTypeHandle typeHandle, out RuntimeTypeHandle baseTypeHandle);
         public abstract IEnumerable<RuntimeTypeHandle> TryGetImplementedInterfaces(RuntimeTypeHandle typeHandle);
+        public abstract void VerifyInterfaceIsImplemented(RuntimeTypeHandle typeHandle, RuntimeTypeHandle ifaceHandle);
+        public abstract void GetInterfaceMap(Type instanceType, Type interfaceType, out MethodInfo[] interfaceMethods, out MethodInfo[] targetMethods);
         public abstract bool IsReflectionBlocked(RuntimeTypeHandle typeHandle);
         public abstract string GetLastResortString(RuntimeTypeHandle typeHandle);
 
@@ -119,6 +121,11 @@ namespace Internal.Reflection.Core.Execution
             if (methodInvoker == null)
                 throw ReflectionCoreExecution.ExecutionDomain.CreateNonInvokabilityException(exceptionPertainant);
             return methodInvoker;
+        }
+
+        protected MethodInvoker GetMethodInvoker(MethodInfo methodInfo)
+        {
+            return ((RuntimeMethodInfo)methodInfo).MethodInvoker;
         }
     }
 }

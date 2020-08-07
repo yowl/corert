@@ -1,6 +1,5 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 
@@ -72,7 +71,7 @@ namespace ILCompiler.DependencyAnalysis
                         EmitDictionaryLookup(factory, ref encoder, encoder.TargetRegister.Arg0, encoder.TargetRegister.Result, _lookupSignature, relocsOnly);
 
                         MetadataType target = (MetadataType)_target;
-                        if (!factory.TypeSystemContext.HasLazyStaticConstructor(target))
+                        if (!factory.PreinitializationManager.HasLazyStaticConstructor(target))
                         {
                             encoder.EmitRET();
                         }
@@ -101,7 +100,7 @@ namespace ILCompiler.DependencyAnalysis
                         encoder.EmitLDR(encoder.TargetRegister.Result, encoder.TargetRegister.Result);
 
                         MetadataType target = (MetadataType)_target;
-                        if (!factory.TypeSystemContext.HasLazyStaticConstructor(target))
+                        if (!factory.PreinitializationManager.HasLazyStaticConstructor(target))
                         {
                             encoder.EmitRET();
                         }
@@ -134,7 +133,7 @@ namespace ILCompiler.DependencyAnalysis
                         EmitDictionaryLookup(factory, ref encoder, encoder.TargetRegister.Arg0, encoder.TargetRegister.Arg1, _lookupSignature, relocsOnly);
 
                         ISymbolNode helperEntrypoint;
-                        if (factory.TypeSystemContext.HasLazyStaticConstructor(target))
+                        if (factory.PreinitializationManager.HasLazyStaticConstructor(target))
                         {
                             // There is a lazy class constructor. We need the non-GC static base because that's where the
                             // class constructor context lives.

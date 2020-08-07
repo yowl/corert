@@ -1,6 +1,5 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Collections.Generic;
@@ -19,6 +18,7 @@ namespace ILCompiler
         private readonly CompilationModuleGroup _compilationGroup;
         private readonly NameMangler _nameMangler;
         private readonly ILProvider _ilProvider;
+        private readonly PreinitializationManager _preinitializationManager;
 
         // These need to provide reasonable defaults so that the user can optionally skip
         // calling the Use/Configure methods and still get something reasonable back.
@@ -29,13 +29,14 @@ namespace ILCompiler
         private InteropStubManager _interopStubManager = new EmptyInteropStubManager();
         private bool _singleThreaded;
 
-        internal ILScannerBuilder(CompilerTypeSystemContext context, CompilationModuleGroup compilationGroup, NameMangler mangler, ILProvider ilProvider)
+        internal ILScannerBuilder(CompilerTypeSystemContext context, CompilationModuleGroup compilationGroup, NameMangler mangler, ILProvider ilProvider, PreinitializationManager preinitializationManager)
         {
             _context = context;
             _compilationGroup = compilationGroup;
             _nameMangler = mangler;
             _metadataManager = new AnalysisBasedMetadataManager(context);
             _ilProvider = ilProvider;
+            _preinitializationManager = preinitializationManager;
         }
 
         public ILScannerBuilder UseDependencyTracking(DependencyTrackingLevel trackingLevel)
@@ -70,7 +71,7 @@ namespace ILCompiler
 
         public IILScanner ToILScanner()
         {
-            var nodeFactory = new ILScanNodeFactory(_context, _compilationGroup, _metadataManager, _interopStubManager, _nameMangler);
+            var nodeFactory = new ILScanNodeFactory(_context, _compilationGroup, _metadataManager, _interopStubManager, _nameMangler, _preinitializationManager);
             DependencyAnalyzerBase<NodeFactory> graph = _dependencyTrackingLevel.CreateDependencyGraph(nodeFactory);
 
             return new ILScanner(graph, nodeFactory, _compilationRoots, _ilProvider, new NullDebugInformationProvider(), _logger, _singleThreaded);

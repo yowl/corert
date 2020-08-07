@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.IO;
 using System.Runtime.InteropServices;
@@ -89,16 +88,16 @@ namespace System
 
         private static unsafe OperatingSystem GetOSVersion()
         {
-            var version = new Interop.Kernel32.OSVERSIONINFOEX { dwOSVersionInfoSize = sizeof(Interop.Kernel32.OSVERSIONINFOEX) };
-            if (!Interop.Kernel32.GetVersionExW(ref version))
+            if (Interop.NtDll.RtlGetVersionEx(out Interop.NtDll.RTL_OSVERSIONINFOEX osvi) != 0)
             {
                 throw new InvalidOperationException(SR.InvalidOperation_GetVersion);
             }
 
-            return new OperatingSystem(
-                PlatformID.Win32NT,
-                new Version(version.dwMajorVersion, version.dwMinorVersion, version.dwBuildNumber, (version.wServicePackMajor << 16) | version.wServicePackMinor),
-                Marshal.PtrToStringUni((IntPtr)version.szCSDVersion));
+            var version = new Version((int)osvi.dwMajorVersion, (int)osvi.dwMinorVersion, (int)osvi.dwBuildNumber, 0);
+
+            return osvi.szCSDVersion[0] != '\0' ?
+                new OperatingSystem(PlatformID.Win32NT, version, new string(&osvi.szCSDVersion[0])) :
+                new OperatingSystem(PlatformID.Win32NT, version);
         }
 
         public static string SystemDirectory

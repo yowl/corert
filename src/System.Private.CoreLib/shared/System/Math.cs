@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 // ===================================================================================================
 // Portions of the code implemented below are based on the 'Berkeley SoftFloat Release 3e' algorithms.
@@ -539,6 +538,7 @@ namespace System
             return decimal.Max(val1, val2);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Max(double val1, double val2)
         {
             // This matches the IEEE 754:2019 `maximum` function
@@ -547,17 +547,17 @@ namespace System
             // otherwise returns the larger of the inputs. It
             // treats +0 as larger than -0 as per the specification.
 
-            if ((val1 > val2) || double.IsNaN(val1))
+            if (val1 != val2)
             {
+                if (!double.IsNaN(val1))
+                {
+                    return val2 < val1 ? val1 : val2;
+                }
+
                 return val1;
             }
 
-            if (val1 == val2)
-            {
-                return double.IsNegative(val1) ? val2 : val1;
-            }
-
-            return val2;
+            return double.IsNegative(val2) ? val1 : val2;
         }
 
         [NonVersionable]
@@ -585,6 +585,7 @@ namespace System
             return (val1 >= val2) ? val1 : val2;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float Max(float val1, float val2)
         {
             // This matches the IEEE 754:2019 `maximum` function
@@ -593,17 +594,17 @@ namespace System
             // otherwise returns the larger of the inputs. It
             // treats +0 as larger than -0 as per the specification.
 
-            if ((val1 > val2) || float.IsNaN(val1))
+            if (val1 != val2)
             {
+                if (!float.IsNaN(val1))
+                {
+                    return val2 < val1 ? val1 : val2;
+                }
+
                 return val1;
             }
 
-            if (val1 == val2)
-            {
-                return float.IsNegative(val1) ? val2 : val1;
-            }
-
-            return val2;
+            return float.IsNegative(val2) ? val1 : val2;
         }
 
         [CLSCompliant(false)]
@@ -663,6 +664,7 @@ namespace System
             return decimal.Min(val1, val2);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Min(double val1, double val2)
         {
             // This matches the IEEE 754:2019 `minimum` function
@@ -671,17 +673,12 @@ namespace System
             // otherwise returns the larger of the inputs. It
             // treats +0 as larger than -0 as per the specification.
 
-            if ((val1 < val2) || double.IsNaN(val1))
+            if (val1 != val2 && !double.IsNaN(val1))
             {
-                return val1;
+                return val1 < val2 ? val1 : val2;
             }
 
-            if (val1 == val2)
-            {
-                return double.IsNegative(val1) ? val1 : val2;
-            }
-
-            return val2;
+            return double.IsNegative(val1) ? val1 : val2;
         }
 
         [NonVersionable]
@@ -709,6 +706,7 @@ namespace System
             return (val1 <= val2) ? val1 : val2;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float Min(float val1, float val2)
         {
             // This matches the IEEE 754:2019 `minimum` function
@@ -717,17 +715,12 @@ namespace System
             // otherwise returns the larger of the inputs. It
             // treats +0 as larger than -0 as per the specification.
 
-            if ((val1 < val2) || float.IsNaN(val1))
+            if (val1 != val2 && !float.IsNaN(val1))
             {
-                return val1;
+                return val1 < val2 ? val1 : val2;
             }
 
-            if (val1 == val2)
-            {
-                return float.IsNegative(val1) ? val1 : val2;
-            }
-
-            return val2;
+            return float.IsNegative(val1) ? val1 : val2;
         }
 
         [CLSCompliant(false)]

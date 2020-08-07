@@ -1,6 +1,5 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Collections.Generic;
@@ -291,12 +290,17 @@ namespace ILCompiler
                     dependencies.Add(factory.TypeGCStaticsSymbol(metadataType), reason);
                 }
 
-                if (metadataType.NonGCStaticFieldSize.AsInt > 0 || _typeSystemContext.HasLazyStaticConstructor(metadataType))
+                if (metadataType.NonGCStaticFieldSize.AsInt > 0 || factory.PreinitializationManager.HasLazyStaticConstructor(metadataType))
                 {
                     dependencies.Add(factory.TypeNonGCStaticsSymbol(metadataType), reason);
                 }
 
-                // TODO: tread static fields
+                if (metadataType.ThreadGcStaticFieldSize.AsInt > 0)
+                {
+                    dependencies.Add(factory.TypeThreadStaticIndex(metadataType), reason);
+                }
+
+                Debug.Assert(metadataType.ThreadNonGcStaticFieldSize.AsInt == 0);
             }
         }
 
@@ -554,13 +558,11 @@ namespace ILCompiler
         {
             private readonly MetadataBlockingPolicy _blockingPolicy;
             private readonly NodeFactory _factory;
-            private readonly ExplicitScopeAssemblyPolicyMixin _explicitScopeMixin;
 
             public GeneratedTypesAndCodeMetadataPolicy(MetadataBlockingPolicy blockingPolicy, NodeFactory factory)
             {
                 _blockingPolicy = blockingPolicy;
                 _factory = factory;
-                _explicitScopeMixin = new ExplicitScopeAssemblyPolicyMixin();
             }
 
             public bool GeneratesMetadata(FieldDesc fieldDef)
@@ -586,11 +588,6 @@ namespace ILCompiler
             public bool IsBlocked(MethodDesc methodDef)
             {
                 return _blockingPolicy.IsBlocked(methodDef);
-            }
-
-            public ModuleDesc GetModuleOfType(MetadataType typeDef)
-            {
-                return _explicitScopeMixin.GetModuleOfType(typeDef);
             }
         }
     }

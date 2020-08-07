@@ -1,34 +1,21 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="Current">
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Compile Include="*.cs" />
+
     <ProjectReference Include="CpObj.ilproj" Condition="'$(OS)' == 'Windows_NT'" />
-    <!--A<IlcArg Include="-r:e:\github\corert\src\CoreRT.WebAssembly.Interop\bin\Debug\netstandard2.0\CoreRT.WebAssembly.Interop.dll" Condition="'$(OS)' == 'Windows_NT'" />-->
-    <IlcArg Include="-r:e:\github\corert\src\CoreRT.WebAssembly.Interop\bin\Debug\netstandard2.0\CoreRT.WebAssembly.Interop.dll" />
     <IlcArg Include="-r:$(IntermediateOutputPath)\CpObj.dll" Condition="'$(OS)' == 'Windows_NT'" />
     <ProjectReference Include="CkFinite.ilproj" Condition="'$(OS)' == 'Windows_NT'" />
-    <IlcArg Include="-r:$(IntermediateOutputPath)\CkFinite.dll" Condition="'$(OS)' == 'Windows_NT'" />	
+    <IlcArg Include="-r:$(IntermediateOutputPath)\CkFinite.dll" Condition="'$(OS)' == 'Windows_NT'" />
     <ProjectReference Include="ILHelpers.ilproj" Condition="'$(OS)' == 'Windows_NT'" />
     <IlcArg Include="-r:$(IntermediateOutputPath)\ILHelpers.dll" Condition="'$(OS)' == 'Windows_NT'" />
   </ItemGroup>
+
   <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
     <DefineConstants>TARGET_WINDOWS;$(DefineConstants)</DefineConstants>
   </PropertyGroup>
+
   <PropertyGroup>
-    <FileUpgradeFlags>
-    </FileUpgradeFlags>
-    <UpgradeBackupLocation>
-    </UpgradeBackupLocation>
-    <OldToolsVersion>Current</OldToolsVersion>
-    <ProjectGuid>{65F5AAD7-6D06-46FE-BE35-1E9C617B1CB9}</ProjectGuid>
+    <EmccExtraArgs>--js-library $(MSBuildProjectDirectory)\dotnet_support.js --pre-js $(MSBuildProjectDirectory)\Microsoft.JSInterop.js --post-js $(MSBuildProjectDirectory)\HelloWasm.js</EmccExtraArgs>
   </PropertyGroup>
   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), SimpleTest.targets))\SimpleTest.targets" />
-  <ItemGroup>
-    <PackageReference Include="Microsoft.JSInterop">
-    </PackageReference>
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="CoreRT.WebAssembly.Interop">
-      <HintPath>..\..\..\..\src\CoreRT.WebAssembly.Interop\bin\Debug\netstandard2.0\CoreRT.WebAssembly.Interop.dll</HintPath>
-    </Reference>
-  </ItemGroup>
 </Project>

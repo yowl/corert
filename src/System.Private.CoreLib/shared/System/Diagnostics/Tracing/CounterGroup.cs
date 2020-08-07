@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 #if ES_BUILD_STANDALONE
 using System;
@@ -102,8 +101,7 @@ namespace System.Diagnostics.Tracing
                 EnsureEventSourceIndexAvailable(eventSourceIndex);
                 Debug.Assert(s_counterGroups != null);
                 WeakReference<CounterGroup> weakRef = CounterGroup.s_counterGroups[eventSourceIndex];
-                CounterGroup? ret = null;
-                if (weakRef == null || !weakRef.TryGetTarget(out ret))
+                if (weakRef == null || !weakRef.TryGetTarget(out CounterGroup? ret))
                 {
                     ret = new CounterGroup(eventSource);
                     CounterGroup.s_counterGroups[eventSourceIndex] = new WeakReference<CounterGroup>(ret);

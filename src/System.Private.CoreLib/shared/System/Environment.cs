@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Collections;
 using System.Diagnostics;
@@ -142,10 +141,7 @@ namespace System
         {
             get
             {
-                // FX_PRODUCT_VERSION is expected to be set by the host
-                // Use AssemblyInformationalVersionAttribute as fallback if the exact product version is not specified by the host
-                string? versionString = (string?)AppContext.GetData("FX_PRODUCT_VERSION") ??
-                    typeof(object).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+                string? versionString = typeof(object).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
 
                 ReadOnlySpan<char> versionSpan = versionString.AsSpan();
 

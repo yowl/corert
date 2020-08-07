@@ -1,12 +1,12 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 using System.Reflection;
 
@@ -23,6 +23,11 @@ internal static class Program
     internal static bool Success;
     private static unsafe int Main(string[] args)
     {
+        var x = new StructWithObjRefs
+        {
+            C1 = null,
+            C2 = null,
+        };
         Success = true;
         PrintLine("Starting " + 1);
 
@@ -357,6 +362,8 @@ internal static class Program
 
         TestIntOverflows();
 
+        TestJavascriptCall();
+
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
         System.Diagnostics.Debugger.Break();
@@ -399,7 +406,252 @@ internal static class Program
             PrintString("GC Collection Count " + i.ToString() + " ");
             PrintLine(GC.CollectionCount(i).ToString());
         }
-        EndTest(true);
+        
+        if (!TestObjectRefInUncoveredShadowStackSlot())
+        {
+            FailTest("struct Child1 alive unexpectedly");
+        }
+            
+        if (!TestRhpAssignRefWithClassInStructGC())
+        {
+            FailTest();
+            return;
+        }
+
+        EndTest(TestGeneration2Rooting());
+    }
+
+    private static Parent aParent;
+    private static ParentOfStructWithObjRefs aParentOfStructWithObjRefs;
+    private static WeakReference childRef;
+
+    private static unsafe bool TestRhpAssignRefWithClassInStructGC()
+    {
+        bool result = true;
+
+        var parentRef = CreateParentWithStruct();
+        result &= BumpToGen(parentRef, 1);
+        result &= BumpToGen(parentRef, 2);
+
+        StoreChildInC1();
+        GC.Collect(1);
+        PrintLine("GC finished");
+
+        if (!childRef.IsAlive)
+        {
+            PrintLine("Child died unexpectedly");
+            result = false;
+        }
+
+        KillParentWithStruct();
+        GC.Collect();
+        if (childRef.IsAlive)
+        {
+            PrintLine("Child alive unexpectedly");
+            result = false;
+        }
+        if (parentRef.IsAlive)
+        {
+            PrintLine("Parent of struct Child1 alive unexpectedly");
+            result = false;
+        }
+        return result;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static bool BumpToGen(WeakReference reference, int expectedGeneration)
+    {
+        GC.Collect();
+        var target = reference.Target;
+        if (target == null)
+        {
+            PrintLine("WeakReference died unexpectedly");
+            return false;
+        }
+        if (GC.GetGeneration(target) is { } actualGeneration && actualGeneration != expectedGeneration)
+        {
+            PrintLine("WeakReference is in gen " + actualGeneration + " instead of " + expectedGeneration);
+            return false;
+        }
+        return true;
+    }
+
+    private static bool TestGeneration2Rooting()
+    {
+        var parent = CreateParent();
+        GC.Collect(); // parent moves to gen1
+        GC.Collect(); // parent moves to gen2
+        if (!CheckParentGeneration()) return false;
+
+        // store our children in the gen2 object
+        var child1 = StoreProperty();
+        var child2 = StoreField();
+
+        KillParent(); // even though we kill the parent, it should survive as we do not collect gen2
+        GC.Collect(1);
+
+        // the parent should have kept the children alive
+        bool parentAlive = parent.IsAlive;
+        bool child1Alive = child1.IsAlive;
+        bool child2Alive = child2.IsAlive;
+        if (!parentAlive)
+        {
+            PrintLine("Parent died unexpectedly");
+            return false;
+        }
+
+        if (!child1Alive)
+        {
+            PrintLine("Child1 died unexpectedly");
+            return false;
+        }
+
+        if (!child2Alive)
+        {
+            PrintLine("Child2 died unexpectedly");
+            return false;
+        }
+
+        // Test struct assignment keeps fields alive
+        var parentRef = CreateParentWithStruct();
+        GC.Collect(); // move parent to gen1
+        GC.Collect(); // move parent to gen2
+        StoreChildInC1(); // store ephemeral object in gen 2 object via struct assignment
+        KillParentWithStruct();
+        GC.Collect(1);
+
+        if (childRef.IsAlive)
+        {
+            PrintLine("Child1 gen:" + GC.GetGeneration(childRef.Target));
+        }
+
+        if (!childRef.IsAlive)
+        {
+            PrintLine("struct Child1 died unexpectedly");
+            return false;
+        }
+        if (!parentRef.IsAlive)
+        {
+            PrintLine("parent of struct Child1 died unexpectedly");
+            return false;
+        }
+
+        return true;
+    }
+
+    class ParentOfStructWithObjRefs
+    {
+        internal StructWithObjRefs StructWithObjRefs;
+    }
+
+    struct StructWithObjRefs
+    {
+        internal Child C1;
+        internal Child C2;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static WeakReference CreateParent()
+    {
+        var parent = new Parent();
+        aParent = parent;
+        return new WeakReference(parent);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static WeakReference CreateStruct()
+    {
+        var parent = new Parent();
+        aParent = parent;
+        return new WeakReference(parent);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static void KillParent()
+    {
+        aParent = null;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static bool CheckParentGeneration()
+    {
+        int actualGen = GC.GetGeneration(aParent);
+        if (actualGen != 2)
+        {
+            PrintLine("Parent Object is not in expected generation 2 but in " + actualGen);
+            return false;
+        }
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static WeakReference StoreProperty()
+    {
+        var child = new Child();
+        aParent.Child1 = child;
+        return new WeakReference(child);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static WeakReference StoreField()
+    {
+        var child = new Child();
+        aParent.Child2 = child;
+        return new WeakReference(child);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    unsafe static WeakReference CreateParentWithStruct()
+    {
+        var parent = new ParentOfStructWithObjRefs();
+        aParentOfStructWithObjRefs = parent;
+        return new WeakReference(parent);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static void KillParentWithStruct()
+    {
+        aParentOfStructWithObjRefs = null;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static unsafe void StoreChildInC1()
+    {
+        var child = new Child();
+        aParentOfStructWithObjRefs.StructWithObjRefs = new StructWithObjRefs
+        {
+            C1 = child,
+        };
+        childRef = new WeakReference(child);
+    }
+
+    public class Parent
+    {
+        public Child Child1 { get; set; }
+        public Child Child2;
+    }
+
+    public class Child
+    {
+    }
+
+    // This test is to catch where slots are allocated on the shadow stack uncovering object references that were there previously.
+    // If this happens in the call to GC.Collect, which at the time of writing allocate 12 bytes in the call, 3 slots, then any objects that were in those 
+    // 3 slots will not be collected as they will now be (back) in the range of bottom of stack -> top of stack.
+    private static unsafe bool TestObjectRefInUncoveredShadowStackSlot()
+    {
+        CreateObjectRefsInShadowStack();
+        GC.Collect();
+        return !childRef.IsAlive;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static unsafe void CreateObjectRefsInShadowStack()
+    {
+        var child = new Child();
+        Child c1, c2, c3;  // 3 more locals to cover give a bit more resiliency to the test, in case of slots being added or removed in the RhCollect calls
+        c1 = c2 = c3 = child;
+        childRef = new WeakReference(child);
     }
 
     private static unsafe void TestBoxUnboxDifferentSizes()
@@ -1403,6 +1655,8 @@ internal static class Program
         TestFilter();
 
         TestFilterNested();
+
+        TestCatchAndThrow();
     }
 
     private static void TestTryCatchNoException()
@@ -1613,6 +1867,32 @@ internal static class Program
         }
         PrintLine(exceptionFlowSequence);
         EndTest(exceptionFlowSequence == @"In middle catchRunning outer filterIn outer catchRunning inner filterIn inner catch");
+    }
+
+    private static void TestCatchAndThrow()
+    {
+        StartTest("Test catch and throw different exception");
+        int caught = 0;
+        try
+        {
+            try
+            {
+                throw new Exception("first");
+            }
+            catch
+            {
+                caught += 1;
+                throw new Exception("second");
+            }
+        }
+        catch(Exception e)
+        {
+            if(e.Message == "second")
+            {
+                caught += 10;
+            }
+        }
+        EndTest(caught == 11);
     }
 
     static bool Print(string s)
@@ -1916,7 +2196,7 @@ internal static class Program
         try
         {
             var f = c.F; //field access
-            PrintLine("NRE Field access failed");
+            PrintLine("NRE Field load access failed");
             success = false;
         }
         catch(NullReferenceException)
@@ -1928,8 +2208,35 @@ internal static class Program
         }
         try
         {
-            var f = c.ToString(); //method access
-            PrintLine("NRE method access failed");
+            c.F = 1;
+            PrintLine("NRE Field store access failed");
+            success = false;
+        }
+        catch (NullReferenceException)
+        {
+        }
+        catch (Exception)
+        {
+            success = false;
+        }
+        try
+        {
+            var f = c.ToString(); //virtual method access
+            PrintLine("NRE virtual method access failed");
+            success = false;
+        }
+        catch (NullReferenceException)
+        {
+        }
+        catch (Exception)
+        {
+            success = false;
+        }
+
+        try
+        {
+            c.NonVirtual(); //method access
+            PrintLine("NRE non virtual method access failed");
             success = false;
         }
         catch (NullReferenceException)
@@ -1989,6 +2296,15 @@ internal static class Program
         TestUnsignedIntAddOvf();
 
         TestUnsignedLongAddOvf();
+
+        TestSignedIntSubOvf();
+
+        TestSignedLongSubOvf();
+
+        TestUnsignedIntSubOvf();
+
+        TestUnsignedLongSubOvf();
+
     }
 
     private static void TestSignedLongAddOvf()
@@ -2008,7 +2324,7 @@ internal static class Program
         }
         if (!thrown)
         {
-            FailTest("exception not thrown for signed i64 addition of +ve number");
+            FailTest("exception not thrown for signed i64 addition of positive number");
             return;
         }
         thrown = false;
@@ -2024,7 +2340,7 @@ internal static class Program
         }
         if (!thrown)
         {
-            FailTest("exception not thrown for signed i64 addition of -ve number");
+            FailTest("exception not thrown for signed i64 addition of negative number");
             return;
         }
         EndTest(true);
@@ -2054,7 +2370,7 @@ internal static class Program
         }
         if (!thrown)
         {
-            FailTest("exception not thrown for signed i32 addition of +ve number");
+            FailTest("exception not thrown for signed i32 addition of positive number");
             return;
         }
 
@@ -2071,7 +2387,7 @@ internal static class Program
         }
         if (!thrown)
         {
-            FailTest("exception not thrown for signed i32 addition of -ve number");
+            FailTest("exception not thrown for signed i32 addition of negative number");
             return;
         }
         PassTest();
@@ -2101,7 +2417,7 @@ internal static class Program
         }
         if (!thrown)
         {
-            FailTest("exception not thrown for unsigned i32 addition of +ve number");
+            FailTest("exception not thrown for unsigned i32 addition of positive number");
             return;
         }
         PassTest();
@@ -2131,10 +2447,165 @@ internal static class Program
         }
         if (!thrown)
         {
-            FailTest("exception not thrown for unsigned i64 addition of +ve number");
+            FailTest("exception not thrown for unsigned i64 addition of positive number");
             return;
         }
         PassTest();
+    }
+
+    private static void TestSignedLongSubOvf()
+    {
+        StartTest("Test long sub overflows");
+        bool thrown;
+        long op64l = -2;
+        long op64r = long.MaxValue;
+        thrown = false;
+        try
+        {
+            long res = checked(op64l - op64r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for signed i64 substraction of positive number");
+            return;
+        }
+        thrown = false;
+        op64l = long.MaxValue; // subtract negative to overflow above the MaxValue
+        op64r = -1;
+        try
+        {
+            long res = checked(op64l - op64r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for signed i64 addition of negative number");
+            return;
+        }
+        EndTest(true);
+    }
+
+    private static void TestSignedIntSubOvf()
+    {
+        StartTest("Test int sub overflows");
+        bool thrown;
+        int op32l = 5;
+        int op32r = 2;
+        if (checked(op32l - op32r) != 3)
+        {
+            FailTest("No overflow failed"); // check not always throwing an exception
+            return;
+        }
+        op32l = -2;
+        op32r = int.MaxValue;
+        thrown = false;
+        try
+        {
+            int res = checked(op32l - op32r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for signed i32 subtraction of positive number");
+            return;
+        }
+
+        thrown = false;
+        op32l = int.MaxValue; // subtract negative to overflow above the MaxValue
+        op32r = -1;
+        try
+        {
+            int res = checked(op32l - op32r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for signed i32 subtraction of negative number");
+            return;
+        }
+        PassTest();
+    }
+
+    private static void TestUnsignedIntSubOvf()
+    {
+        StartTest("Test uint sub overflows");
+        bool thrown;
+        uint op32l = 5;
+        uint op32r = 2;
+        if (checked(op32l - op32r) != 3)
+        {
+            FailTest("No overflow failed"); // check not always throwing an exception
+            return;
+        }
+        op32l = 0;
+        op32r = 1;
+        thrown = false;
+        try
+        {
+            uint res = checked(op32l - op32r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for unsigned i32 subtraction of positive number");
+            return;
+        }
+        PassTest();
+    }
+
+    private static void TestUnsignedLongSubOvf()
+    {
+        StartTest("Test ulong sub overflows");
+        bool thrown;
+        ulong op64l = 5;
+        ulong op64r = 2;
+        if (checked(op64l - op64r) != 3)
+        {
+            FailTest("No overflow failed"); // check not always throwing an exception
+            return;
+        }
+        op64l = 0;
+        op64r = 1;
+        thrown = false;
+        try
+        {
+            ulong res = checked(op64l - op64r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for unsigned i64 addition of positive number");
+            return;
+        }
+        PassTest();
+    }
+
+    static void TestJavascriptCall()
+    {
+        StartTest("Test Javascript call");
+
+        IntPtr resultPtr = JSInterop.InternalCalls.InvokeJSUnmarshalled(out string exception, "Answer", IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+
+        EndTest(resultPtr.ToInt32() == 42);
     }
 
     static ushort ReadUInt16()
@@ -2164,9 +2635,24 @@ internal static class Program
     private static unsafe extern int printf(byte* str, byte* unused);
 }
 
+namespace JSInterop
+{
+    internal static class InternalCalls
+    {
+        [DllImport("*", EntryPoint = "corert_wasm_invoke_js_unmarshalled")]
+        private static extern IntPtr InvokeJSUnmarshalledInternal(string js, int length, IntPtr p1, IntPtr p2, IntPtr p3, out string exception);
+
+        public static IntPtr InvokeJSUnmarshalled(out string exception, string js, IntPtr p1, IntPtr p2, IntPtr p3)
+        {
+            return InvokeJSUnmarshalledInternal(js, js.Length, p1, p2, p3, out exception);
+        }
+    }
+}
+
 public class ClassForNre
 {
     public int F;
+    public void NonVirtual() { }
 }
 
 

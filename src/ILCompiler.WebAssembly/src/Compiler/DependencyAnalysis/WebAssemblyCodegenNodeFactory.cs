@@ -1,6 +1,5 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using ILCompiler.DependencyAnalysisFramework;
@@ -13,7 +12,7 @@ namespace ILCompiler.DependencyAnalysis
         private NodeCache<MethodDesc, WebAssemblyVTableSlotNode> _vTableSlotNodes;
 
         public WebAssemblyCodegenNodeFactory(CompilerTypeSystemContext context, CompilationModuleGroup compilationModuleGroup, MetadataManager metadataManager,
-            InteropStubManager interopStubManager, NameMangler nameMangler, VTableSliceProvider vtableSliceProvider, DictionaryLayoutProvider dictionaryLayoutProvider)
+            InteropStubManager interopStubManager, NameMangler nameMangler, VTableSliceProvider vtableSliceProvider, DictionaryLayoutProvider dictionaryLayoutProvider, PreinitializationManager preinitializationManager)
             : base(context, 
                   compilationModuleGroup, 
                   metadataManager, 
@@ -22,7 +21,8 @@ namespace ILCompiler.DependencyAnalysis
                   new LazyGenericsDisabledPolicy(), 
                   vtableSliceProvider, 
                   dictionaryLayoutProvider, 
-                  new ImportedNodeProviderThrowing())
+                  new ImportedNodeProviderThrowing(),
+                  preinitializationManager)
         {
             _vTableSlotNodes = new NodeCache<MethodDesc, WebAssemblyVTableSlotNode>(methodKey =>
             {
@@ -39,6 +39,10 @@ namespace ILCompiler.DependencyAnalysis
                 if (TypeSystemContext.IsSpecialUnboxingThunkTargetMethod(method))
                 {
                     return MethodEntrypoint(TypeSystemContext.GetRealSpecialUnboxingThunkTargetMethod(method));
+                }
+                if (method.IsArrayAddressMethod())
+                {
+                    return new WebAssemblyMethodBodyNode(((ArrayType)method.OwningType).GetArrayMethod(ArrayMethodKind.AddressWithHiddenArg));
                 }
             }
             if (CompilationModuleGroup.ContainsMethodBody(method, false))

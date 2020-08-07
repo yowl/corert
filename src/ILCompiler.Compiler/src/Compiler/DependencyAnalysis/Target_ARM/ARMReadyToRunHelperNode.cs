@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Diagnostics;
@@ -46,7 +45,7 @@ namespace ILCompiler.DependencyAnalysis
                 case ReadyToRunHelperId.GetNonGCStaticBase:
                     {
                         MetadataType target = (MetadataType)Target;
-                        bool hasLazyStaticConstructor = factory.TypeSystemContext.HasLazyStaticConstructor(target);
+                        bool hasLazyStaticConstructor = factory.PreinitializationManager.HasLazyStaticConstructor(target);
                         encoder.EmitMOV(encoder.TargetRegister.Result, factory.TypeNonGCStaticsSymbol(target));
 
                         if (!hasLazyStaticConstructor)
@@ -83,7 +82,7 @@ namespace ILCompiler.DependencyAnalysis
                         // Second arg: index of the type in the ThreadStatic section of the modules
                         encoder.EmitLDR(encoder.TargetRegister.Arg1, encoder.TargetRegister.Arg2, factory.Target.PointerSize);
 
-                        if (!factory.TypeSystemContext.HasLazyStaticConstructor(target))
+                        if (!factory.PreinitializationManager.HasLazyStaticConstructor(target))
                         {
                             encoder.EmitJMP(factory.HelperEntrypoint(HelperEntrypoint.GetThreadStaticBaseForType));
                         }
@@ -103,7 +102,7 @@ namespace ILCompiler.DependencyAnalysis
                         encoder.EmitMOV(encoder.TargetRegister.Result, factory.TypeGCStaticsSymbol(target));
                         encoder.EmitLDR(encoder.TargetRegister.Result, encoder.TargetRegister.Result);
                         encoder.EmitLDR(encoder.TargetRegister.Result, encoder.TargetRegister.Result);
-                        if (!factory.TypeSystemContext.HasLazyStaticConstructor(target))
+                        if (!factory.PreinitializationManager.HasLazyStaticConstructor(target))
                         {
                             encoder.EmitRET();
                         }

@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
 using System.Runtime;
@@ -365,7 +364,7 @@ namespace System
 
             byte* pValue = (byte*)&value;
             AdjustForEndianness(ref pValue, enumEEType);
-            return RuntimeImports.RhBox(enumEEType, pValue);
+            return RuntimeImports.RhBox(enumEEType, ref *pValue);
         }
         #endregion
     }

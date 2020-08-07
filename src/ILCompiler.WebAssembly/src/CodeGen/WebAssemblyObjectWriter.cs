@@ -1,6 +1,5 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Collections.Generic;
@@ -272,6 +271,14 @@ namespace ILCompiler.DependencyAnalysis
                 argv,
             },
             "returnValue");
+
+            LLVMValueRef RhpReversePInvokeReturn2 = Module.GetNamedFunction("RhpReversePInvokeReturn2");
+            LLVMTypeRef reversePInvokeFunctionType = LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(reversePInvokeFrameType, 0) }, false);
+            if (RhpReversePInvoke2.Handle == IntPtr.Zero)
+            {
+                RhpReversePInvokeReturn2 = Module.AddFunction("RhpReversePInvokeReturn2", reversePInvokeFunctionType);
+            }
+            builder.BuildCall(RhpReversePInvokeReturn2, new LLVMValueRef[] { reversePinvokeFrame }, "");
 
             builder.BuildRet(mainReturn);
             mainFunc.Linkage = LLVMLinkage.LLVMExternalLinkage;
@@ -955,7 +962,7 @@ namespace ILCompiler.DependencyAnalysis
                     {
                         MetadataType target = (MetadataType)node.Target;
             
-                        if (compilation.TypeSystemContext.HasLazyStaticConstructor(target))
+                        if (compilation.HasLazyStaticConstructor(target))
                         {
                             importer.OutputCodeForTriggerCctor(target, resVar);
                         }
@@ -970,7 +977,7 @@ namespace ILCompiler.DependencyAnalysis
 
                         resVar = builder.BuildLoad(builder.BuildLoad(ptrPtrPtr, "ind1"), "ind2");
             
-                        if (compilation.TypeSystemContext.HasLazyStaticConstructor(target))
+                        if (compilation.HasLazyStaticConstructor(target))
                         {
                             GenericLookupResult nonGcRegionLookup = factory.GenericLookup.TypeNonGCStaticBase(target);
                             var nonGcStaticsBase = OutputCodeForDictionaryLookup(builder, factory, node, nonGcRegionLookup, ctx, "lazyGep");
@@ -983,7 +990,7 @@ namespace ILCompiler.DependencyAnalysis
                     {
                         MetadataType target = (MetadataType)node.Target;
             
-                        if (compilation.TypeSystemContext.HasLazyStaticConstructor(target))
+                        if (compilation.HasLazyStaticConstructor(target))
                         {
                             GenericLookupResult nonGcRegionLookup = factory.GenericLookup.TypeNonGCStaticBase(target);
                             var threadStaticBase = OutputCodeForDictionaryLookup(builder, factory, node, nonGcRegionLookup, ctx, "tsGep");
@@ -1004,6 +1011,7 @@ namespace ILCompiler.DependencyAnalysis
             
                 // These are all simple: just get the thing from the dictionary and we're done
                 case ReadyToRunHelperId.TypeHandle:
+                case ReadyToRunHelperId.TypeHandleForCasting:
                 case ReadyToRunHelperId.MethodHandle:
                 case ReadyToRunHelperId.FieldHandle:
                 case ReadyToRunHelperId.MethodDictionary:

@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 // =+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
 //
@@ -699,12 +698,10 @@ namespace System.Threading.Tasks
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.scheduler);
             }
 
-            TaskCreationOptions creationOptions;
-            InternalTaskOptions internalOptions;
             CreationOptionsFromContinuationOptions(
                 continuationOptions,
-                out creationOptions,
-                out internalOptions);
+                out TaskCreationOptions creationOptions,
+                out InternalTaskOptions internalOptions);
 
             Task continuationTask = new ContinuationTaskFromResultTask<TResult>(
                 this, continuationAction, null,
@@ -892,12 +889,10 @@ namespace System.Threading.Tasks
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.scheduler);
             }
 
-            TaskCreationOptions creationOptions;
-            InternalTaskOptions internalOptions;
             CreationOptionsFromContinuationOptions(
                 continuationOptions,
-                out creationOptions,
-                out internalOptions);
+                out TaskCreationOptions creationOptions,
+                out InternalTaskOptions internalOptions);
 
             Task continuationTask = new ContinuationTaskFromResultTask<TResult>(
                 this, continuationAction, state,
@@ -1108,12 +1103,10 @@ namespace System.Threading.Tasks
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.scheduler);
             }
 
-            TaskCreationOptions creationOptions;
-            InternalTaskOptions internalOptions;
             CreationOptionsFromContinuationOptions(
                 continuationOptions,
-                out creationOptions,
-                out internalOptions);
+                out TaskCreationOptions creationOptions,
+                out InternalTaskOptions internalOptions);
 
             Task<TNewResult> continuationFuture = new ContinuationResultTaskFromResultTask<TResult, TNewResult>(
                 this, continuationFunction, null,
@@ -1331,12 +1324,10 @@ namespace System.Threading.Tasks
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.scheduler);
             }
 
-            TaskCreationOptions creationOptions;
-            InternalTaskOptions internalOptions;
             CreationOptionsFromContinuationOptions(
                 continuationOptions,
-                out creationOptions,
-                out internalOptions);
+                out TaskCreationOptions creationOptions,
+                out InternalTaskOptions internalOptions);
 
             Task<TNewResult> continuationFuture = new ContinuationResultTaskFromResultTask<TResult, TNewResult>(
                 this, continuationFunction, state,

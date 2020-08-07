@@ -1,6 +1,5 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
 using System.Collections.Generic;
@@ -27,7 +26,6 @@ namespace ILCompiler
 
         private TypeDesc[] _arrayOfTInterfaces;
         private ArrayOfTRuntimeInterfacesAlgorithm _arrayOfTRuntimeInterfacesAlgorithm;
-        private bool _supportsLazyCctors;
 
         public CompilerTypeSystemContext(TargetDetails details, SharedGenericsMode genericsMode, DelegateFeature delegateFeatures)
             : base(details)
@@ -40,12 +38,6 @@ namespace ILCompiler
             _delegateFeatures = delegateFeatures;
 
             GenericsConfig = new SharedGenericsConfiguration();
-        }
-
-        public override void SetSystemModule(ModuleDesc systemModule)
-        {
-            base.SetSystemModule(systemModule);
-            _supportsLazyCctors = systemModule.GetType("System.Runtime.CompilerServices", "ClassConstructorRunner", false) != null;
         }
 
         protected override RuntimeInterfacesAlgorithm GetRuntimeInterfacesAlgorithmForNonPointerArrayType(ArrayType type)

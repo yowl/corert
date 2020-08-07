@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Runtime;
@@ -18,7 +17,7 @@ namespace Internal.Runtime.CompilerHelpers
         /// Helper for array allocations via `newobj` IL instruction. Dimensions are passed in as block of integers.
         /// The content of the dimensions block may be modified by the helper.
         /// </summary>
-        private static unsafe Array NewObjArray(IntPtr pEEType, int nDimensions, int* pDimensions)
+        public static unsafe Array NewObjArray(IntPtr pEEType, int nDimensions, int* pDimensions)
         {
             EETypePtr eeType = new EETypePtr(pEEType);
             Debug.Assert(eeType.IsArray);

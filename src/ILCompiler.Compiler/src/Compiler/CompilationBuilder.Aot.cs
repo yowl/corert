@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using Internal.JitInterface;
 
@@ -8,6 +7,8 @@ namespace ILCompiler
 {
     partial class CompilationBuilder
     {
+        private PreinitializationManager _preinitializationManager;
+
         // These need to provide reasonable defaults so that the user can optionally skip
         // calling the Use/Configure methods and still get something reasonable back.
         protected MetadataManager _metadataManager;
@@ -80,9 +81,22 @@ namespace ILCompiler
             return this;
         }
 
+        public CompilationBuilder UsePreinitializationManager(PreinitializationManager manager)
+        {
+            _preinitializationManager = manager;
+            return this;
+        }
+
+        protected PreinitializationManager GetPreinitializationManager()
+        {
+            if (_preinitializationManager == null)
+                return new PreinitializationManager(_context, _compilationGroup, GetILProvider(), enableInterpreter: false);
+            return _preinitializationManager;
+        }
+
         public ILScannerBuilder GetILScannerBuilder(CompilationModuleGroup compilationGroup = null)
         {
-            return new ILScannerBuilder(_context, compilationGroup ?? _compilationGroup, _nameMangler, GetILProvider());
+            return new ILScannerBuilder(_context, compilationGroup ?? _compilationGroup, _nameMangler, GetILProvider(), GetPreinitializationManager());
         }
     }
 }

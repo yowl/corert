@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 #nullable enable
 using System.Diagnostics;
@@ -13,7 +12,7 @@ namespace System.Runtime.InteropServices
 {
     public static partial class NativeLibrary
     {
-        internal static IntPtr LoadByName(string libraryName, Assembly assembly, DllImportSearchPath? searchPath, bool throwOnError)
+        internal static IntPtr LoadLibraryByName(string libraryName, Assembly assembly, DllImportSearchPath? searchPath, bool throwOnError)
         {
             // First checks if a default dllImportSearchPathFlags was passed in, if so, use that value.
             // Otherwise checks if the assembly has the DefaultDllImportSearchPathsAttribute attribute. 

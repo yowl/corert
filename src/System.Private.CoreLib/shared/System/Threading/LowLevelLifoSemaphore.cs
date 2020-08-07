@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -15,8 +14,8 @@ namespace System.Threading
     {
         private CacheLineSeparatedCounts _separated;
 
-        private int _maximumSignalCount;
-        private int _spinCount;
+        private readonly int _maximumSignalCount;
+        private readonly int _spinCount;
 
         private const int SpinSleep0Threshold = 10;
 
@@ -27,7 +26,7 @@ namespace System.Threading
             Debug.Assert(maximumSignalCount > 0);
             Debug.Assert(spinCount >= 0);
 
-            _separated = new CacheLineSeparatedCounts();
+            _separated = default;
             _separated._counts._signalCount = (uint)initialSignalCount;
             _maximumSignalCount = maximumSignalCount;
             _spinCount = spinCount;
@@ -204,7 +203,7 @@ namespace System.Threading
                 {
                     // Unregister the waiter. The wait subsystem used above guarantees that a thread that wakes due to a timeout does
                     // not observe a signal to the object being waited upon.
-                    Counts toSubtract = new Counts();
+                    Counts toSubtract = default;
                     toSubtract._waiterCount++;
                     Counts newCounts = _separated._counts.Subtract(toSubtract);
                     Debug.Assert(newCounts._waiterCount != ushort.MaxValue); // Check for underflow
@@ -287,9 +286,9 @@ namespace System.Threading
         [StructLayout(LayoutKind.Sequential)]
         private struct CacheLineSeparatedCounts
         {
-            private Internal.PaddingFor32 _pad1;
+            private readonly Internal.PaddingFor32 _pad1;
             public Counts _counts;
-            private Internal.PaddingFor32 _pad2;
+            private readonly Internal.PaddingFor32 _pad2;
         }
     }
 }

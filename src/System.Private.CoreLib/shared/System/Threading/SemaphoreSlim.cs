@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -718,7 +717,7 @@ namespace System.Threading
                 // cancel, and we chain the caller's supplied token into it.
                 using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
-                    if (asyncWaiter == await TaskFactory.CommonCWAnyLogic(new Task[] { asyncWaiter, Task.Delay(millisecondsTimeout, cts.Token) }).ConfigureAwait(false))
+                    if (asyncWaiter == await Task.WhenAny(asyncWaiter, Task.Delay(millisecondsTimeout, cts.Token)).ConfigureAwait(false))
                     {
                         cts.Cancel(); // ensure that the Task.Delay task is cleaned up
                         return true; // successfully acquired
@@ -728,10 +727,10 @@ namespace System.Threading
             else // millisecondsTimeout == Timeout.Infinite
             {
                 // Wait until either the task is completed or cancellation is requested.
-                var cancellationTask = new Task();
+                var cancellationTask = new Task(null, TaskCreationOptions.RunContinuationsAsynchronously, promiseStyle: true);
                 using (cancellationToken.UnsafeRegister(s => ((Task)s!).TrySetResult(), cancellationTask))
                 {
-                    if (asyncWaiter == await TaskFactory.CommonCWAnyLogic(new Task[] { asyncWaiter, cancellationTask }).ConfigureAwait(false))
+                    if (asyncWaiter == await Task.WhenAny(asyncWaiter, cancellationTask).ConfigureAwait(false))
                     {
                         return true; // successfully acquired
                     }

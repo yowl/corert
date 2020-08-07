@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 ////////////////////////////////////////////////////////////////////////////
 //
@@ -819,6 +818,14 @@ namespace System.Globalization
             return new GregorianCalendar();
         }
 
+        internal static CultureInfo GetUserDefaultCulture() => GlobalizationMode.UseNls ?
+                                                                   NlsGetUserDefaultCulture() :
+                                                                   IcuGetUserDefaultCulture();
+
+        private static CultureInfo GetUserDefaultUICulture() => GlobalizationMode.UseNls ?
+                                                                    NlsGetUserDefaultUICulture() :
+                                                                    IcuGetUserDefaultUICulture();
+
         /// <summary>
         /// Return/set the default calendar used by this culture.
         /// This value can be overridden by regional option if this is a current culture.
@@ -1123,7 +1130,9 @@ namespace System.Globalization
 
             if (predefinedOnly)
             {
-                return GetPredefinedCultureInfo(name);
+                return GlobalizationMode.UseNls ?
+                    NlsGetPredefinedCultureInfo(name) :
+                    IcuGetPredefinedCultureInfo(name);
             }
 
             return GetCultureInfo(name);

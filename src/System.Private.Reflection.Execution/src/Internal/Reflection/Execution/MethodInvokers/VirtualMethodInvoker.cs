@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using global::System;
 using global::System.Threading;
@@ -72,6 +71,11 @@ namespace Internal.Reflection.Execution.MethodInvokers
                 methodToCallIsThisCall: true);
             System.Diagnostics.DebugAnnotations.PreviousCallContainsDebuggerStepInCode();
             return result;
+        }
+
+        internal IntPtr ResolveTarget(RuntimeTypeHandle type)
+        {
+            return OpenMethodResolver.ResolveMethod(MethodInvokeInfo.VirtualResolveData, type);
         }
 
         // On CoreCLR/Desktop, we do not attempt to resolve the target virtual method based on the type of the 'this' pointer.

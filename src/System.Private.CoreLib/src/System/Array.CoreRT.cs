@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Runtime;
 using System.Threading;
@@ -436,7 +435,7 @@ namespace System
                 ref object refDestinationArray = ref Unsafe.As<byte, object>(ref destinationArray.GetRawArrayData());
                 for (int i = 0; i < length; i++)
                 {
-                    object boxedValue = RuntimeImports.RhBox(sourceElementEEType, pElement);
+                    object boxedValue = RuntimeImports.RhBox(sourceElementEEType, ref *pElement);
                     Unsafe.Add(ref refDestinationArray, destinationIndex + i) = boxedValue;
                     pElement += sourceElementSize;
                 }
@@ -478,7 +477,7 @@ namespace System
                             throw new InvalidCastException(SR.InvalidCast_DownCastArrayElement);
                     }
 
-                    RuntimeImports.RhUnbox(boxedValue, pElement, destinationElementEEType);
+                    RuntimeImports.RhUnbox(boxedValue, ref *pElement, destinationElementEEType);
                     pElement += destinationElementSize;
                 }
             }
@@ -523,11 +522,11 @@ namespace System
                         pDestinationElement -= cbElementSize;
                     }
 
-                    object boxedValue = RuntimeImports.RhBox(sourceElementEEType, pSourceElement);
+                    object boxedValue = RuntimeImports.RhBox(sourceElementEEType, ref *pSourceElement);
                     if (reliable)
                         boxedElements[i] = boxedValue;
                     else
-                        RuntimeImports.RhUnbox(boxedValue, pDestinationElement, sourceElementEEType);
+                        RuntimeImports.RhUnbox(boxedValue, ref *pDestinationElement, sourceElementEEType);
 
                     if (!reverseCopy)
                     {

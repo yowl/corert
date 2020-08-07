@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 internal static partial class Interop
 {
@@ -39,5 +38,6 @@ internal static partial class Interop
         internal const string CompressionNative = "clrcompression.dll";
         internal const string CoreWinRT = "api-ms-win-core-winrt-l1-1-0.dll";
         internal const string MsQuic = "msquic.dll";
+        internal const string HostPolicy = "hostpolicy.dll";
     }
 }

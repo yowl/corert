@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -57,7 +56,7 @@ namespace ILCompiler.DependencyAnalysis
 
             result.Add(new DependencyListEntry(GetGCStaticEETypeNode(factory), "ThreadStatic EEType"));
 
-            if (factory.TypeSystemContext.HasEagerStaticConstructor(_type))
+            if (factory.PreinitializationManager.HasEagerStaticConstructor(_type))
             {
                 result.Add(new DependencyListEntry(factory.EagerCctorIndirection(_type.GetStaticConstructor()), "Eager .cctor"));
             }

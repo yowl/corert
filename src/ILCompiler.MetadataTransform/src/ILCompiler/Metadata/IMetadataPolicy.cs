@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using Internal.Metadata.NativeFormat.Writer;
 
@@ -45,11 +44,5 @@ namespace ILCompiler.Metadata
         bool IsBlocked(Cts.MetadataType typeDef);
 
         bool IsBlocked(Cts.MethodDesc methodDef);
-
-        /// <summary>
-        /// Return the Module that should be treated as defining the type. Typically implementations
-        /// will return typeDef.Module, but in some circumstances it may return a different value.
-        /// </summary>
-        Cts.ModuleDesc GetModuleOfType(Cts.MetadataType typeDef);
     }
 }

@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 /*============================================================
 **
@@ -14,7 +13,6 @@
 ===========================================================*/
 
 using System.Threading;
-using System.Runtime.CompilerServices;
 using System.Runtime.ConstrainedExecution;
 using System.Diagnostics;
 
@@ -235,10 +233,6 @@ namespace System.Runtime
                         if (!needPageFile)
                             continue;
 
-                        // Attempt to grow the OS's page file.  Note that we ignore
-                        // any allocation routines from the host intentionally.
-                        RuntimeHelpers.PrepareConstrainedRegions();
-
                         // This shouldn't overflow due to the if clauses above.
                         UIntPtr numBytes = new UIntPtr(segmentSize);
                         GrowPageFileIfNecessaryAndPossible(numBytes);
@@ -286,8 +280,6 @@ namespace System.Runtime
             if (LastKnownFreeAddressSpace < 0)
                 CheckForFreeAddressSpace(segmentSize, true);
 
-            RuntimeHelpers.PrepareConstrainedRegions();
-
             AddMemoryFailPointReservation((long)size);
             _mustSubtractReservation = true;
         }
@@ -317,8 +309,6 @@ namespace System.Runtime
             // within the GC heap.
             if (_mustSubtractReservation)
             {
-                RuntimeHelpers.PrepareConstrainedRegions();
-
                 AddMemoryFailPointReservation(-((long)_reservedMemory));
                 _mustSubtractReservation = false;
             }

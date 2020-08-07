@@ -1,6 +1,5 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -126,7 +125,7 @@ namespace ILCompiler.DependencyAnalysis
                 AddDependenciesForUniversalGVMSupport(factory, _type, ref dependencyList);
             }
 
-            if (factory.TypeSystemContext.HasLazyStaticConstructor(_type))
+            if (factory.PreinitializationManager.HasLazyStaticConstructor(_type))
             {
                 // The fact that we generated an EEType means that someone can call RuntimeHelpers.RunClassConstructor.
                 // We need to make sure this is possible.

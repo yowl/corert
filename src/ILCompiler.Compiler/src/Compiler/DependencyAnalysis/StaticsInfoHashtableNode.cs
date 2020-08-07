@@ -1,6 +1,5 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Diagnostics;
@@ -60,7 +59,7 @@ namespace ILCompiler.DependencyAnalysis
                     dependencies.Add(factory.Indirection(factory.TypeGCStaticsSymbol(metadataType)), "GC statics indirection for StaticsInfoHashtable");
                 }
 
-                if (metadataType.NonGCStaticFieldSize.AsInt > 0 || factory.TypeSystemContext.HasLazyStaticConstructor(type))
+                if (metadataType.NonGCStaticFieldSize.AsInt > 0 || factory.PreinitializationManager.HasLazyStaticConstructor(type))
                 {
                     // The entry in the StaticsInfoHashtable points at the beginning of the static fields data, rather than the cctor 
                     // context offset.
@@ -69,7 +68,7 @@ namespace ILCompiler.DependencyAnalysis
 
                 if (metadataType.ThreadGcStaticFieldSize.AsInt > 0)
                 {
-                    // TODO: TLS for CoreRT
+                    dependencies.Add(factory.Indirection(factory.TypeThreadStaticIndex(metadataType)), "Threadstatics indirection for StaticsInfoHashtable");
                 }
             }
         }
@@ -102,14 +101,15 @@ namespace ILCompiler.DependencyAnalysis
                     ISymbolNode gcStaticIndirection = factory.Indirection(factory.TypeGCStaticsSymbol(metadataType));
                     bag.AppendUnsigned(BagElementKind.GcStaticData, _nativeStaticsReferences.GetIndex(gcStaticIndirection));
                 }
-                if (metadataType.NonGCStaticFieldSize.AsInt > 0 || factory.TypeSystemContext.HasLazyStaticConstructor(type))
+                if (metadataType.NonGCStaticFieldSize.AsInt > 0 || factory.PreinitializationManager.HasLazyStaticConstructor(type))
                 {
                     ISymbolNode nonGCStaticIndirection = factory.Indirection(factory.TypeNonGCStaticsSymbol(metadataType));
                     bag.AppendUnsigned(BagElementKind.NonGcStaticData, _nativeStaticsReferences.GetIndex(nonGCStaticIndirection));
                 }
                 if (metadataType.ThreadGcStaticFieldSize.AsInt > 0)
                 {
-                    // TODO: TLS for CoreRT
+                    ISymbolNode threadStaticsIndirection = factory.Indirection(factory.TypeThreadStaticIndex(metadataType));
+                    bag.AppendUnsigned(BagElementKind.ThreadStaticIndex, _nativeStaticsReferences.GetIndex(threadStaticsIndirection));
                 }
 
                 if (bag.ElementsCount > 0)

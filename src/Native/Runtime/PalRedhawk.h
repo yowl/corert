@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 //
 // Provides declarations for external resources consumed by Redhawk. This comprises functionality
@@ -849,7 +848,9 @@ REDHAWK_PALIMPORT Int32 __cdecl _stricmp(const char *string1, const char *string
 #if defined(HOST_X86) || defined(HOST_AMD64)
 REDHAWK_PALIMPORT uint32_t REDHAWK_PALAPI getcpuid(uint32_t arg1, unsigned char result[16]);
 REDHAWK_PALIMPORT uint32_t REDHAWK_PALAPI getextcpuid(uint32_t arg1, uint32_t arg2, unsigned char result[16]);
-#endif // defined(HOST_X86) || defined(HOST_AMD64)	
+REDHAWK_PALIMPORT uint32_t REDHAWK_PALAPI xmmYmmStateSupport();
+REDHAWK_PALIMPORT bool REDHAWK_PALAPI PalIsAvxEnabled();
+#endif // defined(HOST_X86) || defined(HOST_AMD64)
 
 #include "PalRedhawkInline.h"
 

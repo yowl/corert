@@ -1,6 +1,5 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using System.Collections.Generic;
@@ -586,7 +585,7 @@ namespace ILCompiler
 
                         // Shared instance methods on generic valuetypes have a hidden parameter with the generic context.
                         // We add it to the signature so that we can refer to it from IL.
-                        parameters[0] = Context.GetWellKnownType(WellKnownType.Object).GetKnownField("m_pEEType").FieldType;
+                        parameters[0] = Context.GetWellKnownType(WellKnownType.IntPtr);
                         for (int i = 0; i < _methodRepresented.Signature.Length; i++)
                             parameters[i + 1] = _methodRepresented.Signature[i];
 

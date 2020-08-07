@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Collections;
 using System.Diagnostics;
@@ -355,7 +354,7 @@ namespace System
                 {
                     SERIALIZED_EXCEPTION_HEADER* pHeader = (SERIALIZED_EXCEPTION_HEADER*)pBuffer;
                     pHeader->HResult = _HResult;
-                    pHeader->ExceptionEEType = m_pEEType;
+                    pHeader->ExceptionEEType = (IntPtr)EEType;
                     pHeader->StackTraceElementCount = nStackTraceElements;
                     IntPtr* pStackTraceElements = (IntPtr*)(pBuffer + sizeof(SERIALIZED_EXCEPTION_HEADER));
                     for (int i = 0; i < nStackTraceElements; i++)

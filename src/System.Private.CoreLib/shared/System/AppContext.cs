@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -22,7 +21,7 @@ namespace System
         public static string BaseDirectory =>
             // The value of APP_CONTEXT_BASE_DIRECTORY key has to be a string and it is not allowed to be any other type.
             // Otherwise the caller will get invalid cast exception
-            (string?)GetData("APP_CONTEXT_BASE_DIRECTORY") ??
+            GetData("APP_CONTEXT_BASE_DIRECTORY") as string ??
             (s_defaultBaseDirectory ??= GetBaseDirectoryCore());
 
         public static string? TargetFrameworkName =>

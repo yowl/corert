@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
@@ -95,6 +94,11 @@ namespace System.Runtime.InteropServices
             return (IntPtr)(-1);
         }           
 
+        public static IntPtr GetIDispatchForObject(object o)
+        {
+            throw new PlatformNotSupportedException(SR.PlatformNotSupported_ComInterop);
+        }
+
         public static IntPtr GetIUnknownForObject(object o)
         {
             throw new PlatformNotSupportedException(SR.PlatformNotSupported_ComInterop);
@@ -151,7 +155,7 @@ namespace System.Runtime.InteropServices
             throw new PlatformNotSupportedException(SR.PlatformNotSupported_ComInterop);
         }
 
-        public static Type GetTypeFromCLSID(Guid clsid) 
+        public static Type? GetTypeFromCLSID(Guid clsid)
         {
             throw new PlatformNotSupportedException(SR.PlatformNotSupported_ComInterop);
         }

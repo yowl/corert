@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -222,9 +221,7 @@ namespace System.Collections.Concurrent
         public T[] ToArray()
         {
             // Snap the current contents for enumeration.
-            ConcurrentQueueSegment<T> head, tail;
-            int headHead, tailTail;
-            SnapForObservation(out head, out headHead, out tail, out tailTail);
+            SnapForObservation(out ConcurrentQueueSegment<T> head, out int headHead, out ConcurrentQueueSegment<T> tail, out int tailTail);
 
             // Count the number of items in that snapped set, and use it to allocate an
             // array of the right size.
@@ -450,9 +447,7 @@ namespace System.Collections.Concurrent
             }
 
             // Snap for enumeration
-            ConcurrentQueueSegment<T> head, tail;
-            int headHead, tailTail;
-            SnapForObservation(out head, out headHead, out tail, out tailTail);
+            SnapForObservation(out ConcurrentQueueSegment<T> head, out int headHead, out ConcurrentQueueSegment<T> tail, out int tailTail);
 
             // Get the number of items to be enumerated
             long count = GetCount(head, headHead, tail, tailTail);
@@ -484,9 +479,7 @@ namespace System.Collections.Concurrent
         /// </remarks>
         public IEnumerator<T> GetEnumerator()
         {
-            ConcurrentQueueSegment<T> head, tail;
-            int headHead, tailTail;
-            SnapForObservation(out head, out headHead, out tail, out tailTail);
+            SnapForObservation(out ConcurrentQueueSegment<T> head, out int headHead, out ConcurrentQueueSegment<T> tail, out int tailTail);
             return Enumerate(head, headHead, tail, tailTail);
         }
 

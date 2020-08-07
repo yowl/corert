@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 //
 // Exposes features of the Garbage Collector to managed code.
@@ -66,6 +65,55 @@ namespace System
         GCInduced = 2,
         AllocationExceeded = 3
     }
+
+    internal struct GCGenerationInfo
+    {
+        public long SizeBeforeBytes { get; }
+        public long FragmentationBeforeBytes { get; }
+        public long SizeAfterBytes { get; }
+        public long FragmentationAfterBytes { get; }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct GCMemoryInfoData
+    {
+        internal long _highMemoryLoadThresholdBytes;
+        internal long _totalAvailableMemoryBytes;
+        internal long _memoryLoadBytes;
+        internal long _heapSizeBytes;
+        internal long _fragmentedBytes;
+        internal long _totalCommittedBytes;
+        internal long _promotedBytes;
+        internal long _pinnedObjectsCount;
+        internal long _finalizationPendingCount;
+        internal long _index;
+        internal int _generation;
+        internal int _pauseTimePercentage;
+        internal bool _compacted;
+        internal bool _concurrent;
+
+        private GCGenerationInfo _generationInfo0;
+        private GCGenerationInfo _generationInfo1;
+        private GCGenerationInfo _generationInfo2;
+        private GCGenerationInfo _generationInfo3;
+        private GCGenerationInfo _generationInfo4;
+
+        internal ReadOnlySpan<GCGenerationInfo> GenerationInfoAsSpan => MemoryMarshal.CreateReadOnlySpan<GCGenerationInfo>(ref _generationInfo0, 5);
+
+        private TimeSpan _pauseDuration0;
+        private TimeSpan _pauseDuration1;
+
+        internal ReadOnlySpan<TimeSpan> PauseDurationsAsSpan => MemoryMarshal.CreateReadOnlySpan<TimeSpan>(ref _pauseDuration0, 2);
+    }
+
+    // TODO: deduplicate with shared CoreLib
+    public enum GCKind
+    {
+        Any = 0,          // any of the following kind
+        Ephemeral = 1,    // gen0 or gen1 GC
+        FullBlocking = 2, // blocking gen2 GC
+        Background = 3    // background GC (always gen2)
+    };
 
     public static class GC
     {
@@ -657,18 +705,13 @@ namespace System
 
         public static GCMemoryInfo GetGCMemoryInfo()
         {
-            RuntimeImports.RhGetMemoryInfo(out ulong highMemLoadThresholdBytes,
-                                           out ulong totalAvailableMemoryBytes,
-                                           out ulong lastRecordedMemLoadBytes,
-                                           out uint _,
-                                           out UIntPtr lastRecordedHeapSizeBytes,
-                                           out UIntPtr lastRecordedFragmentationBytes);
+            RuntimeImports.RhGetMemoryInfo(out GCMemoryInfoData data, GCKind.Any);
 
-            return new GCMemoryInfo(highMemoryLoadThresholdBytes: (long)highMemLoadThresholdBytes,
-                                    memoryLoadBytes: (long)lastRecordedMemLoadBytes,
-                                    totalAvailableMemoryBytes: (long)totalAvailableMemoryBytes,
-                                    heapSizeBytes: (long)(ulong)lastRecordedHeapSizeBytes,
-                                    fragmentedBytes: (long)(ulong)lastRecordedFragmentationBytes);
+            return new GCMemoryInfo(highMemoryLoadThresholdBytes: data._highMemoryLoadThresholdBytes,
+                                    memoryLoadBytes: data._memoryLoadBytes,
+                                    totalAvailableMemoryBytes: data._totalAvailableMemoryBytes,
+                                    heapSizeBytes: data._heapSizeBytes,
+                                    fragmentedBytes: data._fragmentedBytes);
         }
 
         internal static ulong GetSegmentSize()
@@ -676,37 +719,98 @@ namespace System
             return RuntimeImports.RhGetGCSegmentSize();
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] // forced to ensure no perf drop for small memory buffers (hot path)
-        internal static unsafe T[] AllocateUninitializedArray<T>(int length)
+        // keep in sync with GC_ALLOC_FLAGS in gcinterface.h
+        internal enum GC_ALLOC_FLAGS
         {
-            if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
-            {
-                return new T[length];
-            }
+            GC_ALLOC_NO_FLAGS = 0,
+            GC_ALLOC_ZEROING_OPTIONAL = 16,
+            GC_ALLOC_PINNED_OBJECT_HEAP = 64,
+        }
 
-            // for debug builds we always want to call AllocateNewArray to detect AllocateNewArray bugs
+        /// <summary>
+        /// Allocate an array while skipping zero-initialization if possible.
+        /// </summary>
+        /// <typeparam name="T">Specifies the type of the array element.</typeparam>
+        /// <param name="length">Specifies the length of the array.</param>
+        /// <param name="pinned">Specifies whether the allocated array must be pinned.</param>
+        /// <remarks>
+        /// If pinned is set to true, <typeparamref name="T"/> must not be a reference type or a type that contains object references.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] // forced to ensure no perf drop for small memory buffers (hot path)
+        public static unsafe T[] AllocateUninitializedArray<T>(int length, bool pinned = false)
+        {
+            if (!pinned)
+            {
+                if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
+                {
+                    return new T[length];
+                }
+
+                // for debug builds we always want to call AllocateNewArray to detect AllocateNewArray bugs
 #if !DEBUG
-            // small arrays are allocated using `new[]` as that is generally faster.
-            if (length < 2048 / Unsafe.SizeOf<T>())
-            {
-                return new T[length];
-            }
+                // small arrays are allocated using `new[]` as that is generally faster.
+                if (length < 2048 / Unsafe.SizeOf<T>())
+                {
+                    return new T[length];
+                }
 #endif
-            // kept outside of the small arrays hot path to have inlining without big size growth
-            return AllocateNewUninitializedArray(length);
-
-            T[] AllocateNewUninitializedArray(int length)
+            }
+            else if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
             {
+                ThrowHelper.ThrowInvalidTypeWithPointersNotSupported(typeof(T));
+            }
+
+            // kept outside of the small arrays hot path to have inlining without big size growth
+            return AllocateNewUninitializedArray(length, pinned);
+
+            static T[] AllocateNewUninitializedArray(int length, bool pinned)
+            {
+                GC_ALLOC_FLAGS flags = GC_ALLOC_FLAGS.GC_ALLOC_ZEROING_OPTIONAL;
+                if (pinned)
+                    flags |= GC_ALLOC_FLAGS.GC_ALLOC_PINNED_OBJECT_HEAP;
+
                 if (length < 0)
                     throw new OverflowException();
 
                 T[] array = null;
-                RuntimeImports.RhAllocateUninitializedArray(EETypePtr.EETypePtrOf<T[]>().RawValue, (uint)length, Unsafe.AsPointer(ref array));
+                RuntimeImports.RhAllocateNewArray(EETypePtr.EETypePtrOf<T[]>().RawValue, (uint)length, (uint)flags, Unsafe.AsPointer(ref array));
                 if (array == null)
                     throw new OutOfMemoryException();
 
                 return array;
             }
+        }
+
+        /// <summary>
+        /// Allocate an array.
+        /// </summary>
+        /// <typeparam name="T">Specifies the type of the array element.</typeparam>
+        /// <param name="length">Specifies the length of the array.</param>
+        /// <param name="pinned">Specifies whether the allocated array must be pinned.</param>
+        /// <remarks>
+        /// If pinned is set to true, <typeparamref name="T"/> must not be a reference type or a type that contains object references.
+        /// </remarks>
+        public static unsafe T[] AllocateArray<T>(int length, bool pinned = false)
+        {
+            GC_ALLOC_FLAGS flags = GC_ALLOC_FLAGS.GC_ALLOC_NO_FLAGS;
+
+            if (pinned)
+            {
+                if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
+                    ThrowHelper.ThrowInvalidTypeWithPointersNotSupported(typeof(T));
+
+                flags = GC_ALLOC_FLAGS.GC_ALLOC_PINNED_OBJECT_HEAP;
+            }
+
+            if (length < 0)
+                throw new OverflowException();
+
+            T[] array = null;
+            RuntimeImports.RhAllocateNewArray(EETypePtr.EETypePtrOf<T[]>().RawValue, (uint)length, (uint)flags, Unsafe.AsPointer(ref array));
+            if (array == null)
+                throw new OutOfMemoryException();
+
+            return array;
         }
     }
 }

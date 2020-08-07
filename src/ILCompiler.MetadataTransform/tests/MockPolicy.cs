@@ -1,6 +1,5 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System;
 using ILCompiler.Metadata;
@@ -60,13 +59,6 @@ namespace MetadataTransformTests
         public bool IsBlocked(MethodDesc method)
         {
             return IsBlocked((MetadataType)method.OwningType);
-        }
-
-        public ModuleDesc GetModuleOfType(MetadataType typeDef)
-        {
-            if (_moduleOfType != null)
-                return _moduleOfType(typeDef);
-            return typeDef.Module;
         }
     }
 }

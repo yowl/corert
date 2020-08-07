@@ -1,6 +1,5 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-// See the LICENSE file in the project root for more information.
 
 using System.IO;
 using System.Globalization;
@@ -88,7 +87,7 @@ namespace System.Resources
                 return false;
 
             // Check to see if the assembly is under PLATFORM_RESOURCE_ROOTS. If it is, then we should use satellite assembly lookup for it.
-            string? platformResourceRoots = (string?)AppContext.GetData("PLATFORM_RESOURCE_ROOTS");
+            string? platformResourceRoots = AppContext.GetData("PLATFORM_RESOURCE_ROOTS") as string;
             if (!string.IsNullOrEmpty(platformResourceRoots))
             {
                 string resourceAssemblyPath = resourcesAssembly.Location;
