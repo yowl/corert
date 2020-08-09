@@ -2289,6 +2289,8 @@ internal static class Program
 
     static void TestIntOverflows()
     {
+        TestCharInOvf();
+
         TestSignedIntAddOvf();
 
         TestSignedLongAddOvf();
@@ -2305,6 +2307,9 @@ internal static class Program
 
         TestUnsignedLongSubOvf();
 
+        TestUnsignedIntMulOvf();
+
+        TestUnsignedLongMulOvf();
     }
 
     private static void TestSignedLongAddOvf()
@@ -2344,6 +2349,21 @@ internal static class Program
             return;
         }
         EndTest(true);
+    }
+
+    private static void TestCharInOvf()
+    {
+        // Just checks the compiler can handle the char type
+        // This was failing for https://github.com/dotnet/corert/blob/f542d97f26e87f633310e67497fb01dad29987a5/src/System.Private.CoreLib/shared/System/Environment.Unix.cs#L111
+        StartTest("Test char add overflows");
+        char opChar = '1';
+        int op32r = 2;
+        if (checked(opChar + op32r) != 51)
+        {
+            FailTest("No overflow for char failed"); // check not always throwing an exception
+            return;
+        }
+        PassTest();
     }
 
     private static void TestSignedIntAddOvf()
@@ -2594,6 +2614,66 @@ internal static class Program
         if (!thrown)
         {
             FailTest("exception not thrown for unsigned i64 addition of positive number");
+            return;
+        }
+        PassTest();
+    }
+
+    private static void TestUnsignedIntMulOvf()
+    {
+        StartTest("Test uint multiple overflows");
+        bool thrown;
+        uint op32l = 10;
+        uint op32r = 20;
+        if (checked(op32l * op32r) != 200)
+        {
+            FailTest("No overflow failed"); // check not always throwing an exception
+            return;
+        }
+        op32l = 2;
+        op32r = (uint.MaxValue >> 1) + 1;
+        thrown = false;
+        try
+        {
+            uint res = checked(op32l * op32r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for unsigned i32 multiply of numbers");
+            return;
+        }
+        PassTest();
+    }
+
+    private static void TestUnsignedLongMulOvf()
+    {
+        StartTest("Test ulong multiple overflows");
+        bool thrown;
+        ulong op64l = 10;
+        ulong op64r = 20;
+        if (checked(op64l * op64r) != 200L)
+        {
+            FailTest("No overflow failed"); // check not always throwing an exception
+            return;
+        }
+        op64l = 2;
+        op64r = (ulong.MaxValue >> 1) + 1;
+        thrown = false;
+        try
+        {
+            ulong res = checked(op64l * op64r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for unsigned i64 multiply of numbers");
             return;
         }
         PassTest();
