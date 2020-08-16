@@ -37,7 +37,8 @@ namespace CoreRT.WebAssembly.Interop
         // not https://github.com/mono/WebAssembly.JSInterop/blob/9e65a41cf1043ce29c7d722bd3885648a653e734/src/WebAssembly.JSInterop/InternalCalls.cs#L15
         public static IntPtr InvokeJSUnmarshalled(out string exception, string js, IntPtr p1, IntPtr p2, IntPtr p3)
         {
-            return InvokeJSUnmarshalledInternal(js, js.Length, p1, p2 ,p3, out exception);
+            // convention : if the methodId is known, then js is null and p1 is the method id
+            return InvokeJSUnmarshalledInternal(js, js?.Length ?? 0, p1, p2 ,p3, out exception);
         }
     }
 }
