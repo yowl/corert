@@ -313,6 +313,10 @@ internal static class Program
 
         TestInitObjDouble();
 
+        TestDefaultCtorOf<ClassForMetaTests>(); // class with a default ctor
+
+
+
         TestTryCatch();
 
         StartTest("Non/GCStatics field access test");
@@ -2677,6 +2681,15 @@ internal static class Program
             return;
         }
         PassTest();
+    }
+
+    static void TestDefaultCtorOf<T>() where T: new()
+    {
+        StartTest("Test DefaultConstructorOf");
+
+        var o = new T();
+
+        EndTest(o.GetType().Name == "ClassForMetaTests");
     }
 
     static void TestJavascriptCall()
