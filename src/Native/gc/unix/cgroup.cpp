@@ -65,8 +65,11 @@ class CGroup
 public:
     static void Initialize()
     {
+        printf("FindCGroupVersion\n");
         s_cgroup_version = FindCGroupVersion();
+        printf("IsCGroup1MemorySubsystem\n");
         s_memory_cgroup_path = FindCGroupPath(&IsCGroup1MemorySubsystem);
+        printf("IsCGroup1CpuSubsystem\n");
         s_cpu_cgroup_path = FindCGroupPath(&IsCGroup1CpuSubsystem);
     }
 
@@ -167,6 +170,7 @@ private:
         char *hierarchy_root = nullptr;
         char *cgroup_path_relative_to_mount = nullptr;
         size_t common_path_prefix_len;
+        printf("FindCGroupPath\n");
 
         FindHierarchyMount(is_subsystem, &hierarchy_mount, &hierarchy_root);
         if (hierarchy_mount == nullptr || hierarchy_root == nullptr)

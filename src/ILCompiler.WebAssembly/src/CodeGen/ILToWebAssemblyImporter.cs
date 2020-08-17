@@ -136,6 +136,11 @@ namespace Internal.IL
                 _methodIL = methodIL;
             }
             _mangledName = mangledName;
+            if ((_mangledName.Contains("WebAssembly") && _mangledName.Contains("InvokeMethod"))
+                || _mangledName.Contains("corert_wasm_invoke_method"))
+            {
+
+            }
             _ilBytes = methodIL.GetILBytes();
             _locals = methodIL.GetLocals();
             _localSlots = new LLVMValueRef[_locals.Length];

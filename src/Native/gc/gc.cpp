@@ -3976,14 +3976,16 @@ BOOL gc_heap::reserve_initial_memory (size_t normal_size, size_t large_size, siz
 {
     BOOL reserve_success = FALSE;
 
+    printf("called once?\n");
     // should only be called once
     assert (memory_details.initial_memory == 0);
+    printf("called once no\n");
 
     // soh + loh + poh segments * num_heaps
     memory_details.initial_memory = new (nothrow) imemory_data[num_heaps * (total_generation_count - ephemeral_generation_count)]; 
     if (memory_details.initial_memory == 0)
     {
-        dprintf (2, ("failed to reserve %Id bytes for imemory_data", num_heaps * (total_generation_count - ephemeral_generation_count) * sizeof (imemory_data)));
+        printf ("failed to reserve %d bytes for imemory_data", num_heaps * (total_generation_count - ephemeral_generation_count) * sizeof (imemory_data));
         return FALSE;
     }
 
@@ -3996,6 +3998,7 @@ BOOL gc_heap::reserve_initial_memory (size_t normal_size, size_t large_size, siz
 
     memory_details.block_count = num_heaps;
 
+    printf("memory_details.current_block_normal\n");
     memory_details.current_block_normal = 0;
     memory_details.current_block_large = 0;
     memory_details.current_block_pinned = 0;
@@ -4006,31 +4009,38 @@ BOOL gc_heap::reserve_initial_memory (size_t normal_size, size_t large_size, siz
     if (((size_t)MAX_PTR - large_size) < normal_size)
     {
         // we are already overflowing with just one heap.
-        dprintf (2, ("0x%Ix + 0x%Ix already overflow", normal_size, large_size));
+        printf ("0x%x + 0x%x already overflow", normal_size, large_size);
         return FALSE;
     }
 
     if (((size_t)MAX_PTR / memory_details.block_count) < (normal_size + large_size + pinned_size))
     {
-        dprintf (2, ("(0x%Ix + 0x%Ix)*0x%Ix overflow", normal_size, large_size, memory_details.block_count));
+        printf ("(0x%x + 0x%x)*0x%x overflow", normal_size, large_size, memory_details.block_count);
         return FALSE;
     }
 
+    printf("temp_pinned_size\n");
     size_t temp_pinned_size = (separated_poh_p ? 0 : pinned_size);
     size_t separate_pinned_size = memory_details.block_count * pinned_size;
     size_t requestedMemory = memory_details.block_count * (normal_size + large_size + temp_pinned_size);
 
+    printf("virtual_alloc 1\n");
     uint8_t* allatonce_block = (uint8_t*)virtual_alloc (requestedMemory, use_large_pages_p);
+    printf("virtual_alloc 1a\n");
     uint8_t* separated_poh_block = nullptr;
+    printf("virtual_alloc 1b\n");
     if (allatonce_block && separated_poh_p)
     {
+    printf("virtual_alloc 2\n");
         separated_poh_block = (uint8_t*)virtual_alloc (separate_pinned_size, false);
         if (!separated_poh_block)
         {
+    printf("virtual_free 1\n");
             virtual_free (allatonce_block, requestedMemory);
             allatonce_block = nullptr;
         }
     }
+    printf("allatonce_block\n");
     if (allatonce_block)
     {
         if (separated_poh_p)
@@ -4137,6 +4147,7 @@ BOOL gc_heap::reserve_initial_memory (size_t normal_size, size_t large_size, siz
         }
     }
 
+    printf("reserve_success %d\n", reserve_success);
     return reserve_success;
 }
 
@@ -4208,14 +4219,17 @@ void* virtual_alloc (size_t size)
 
 void* virtual_alloc (size_t size, bool use_large_pages_p)
 {
+    printf("virtual alloc\n");
     size_t requested_size = size;
 
     if ((gc_heap::reserved_memory_limit - gc_heap::reserved_memory) < requested_size)
     {
+        printf("ask for more\n");
         gc_heap::reserved_memory_limit =
             GCScan::AskForMoreReservedMemory (gc_heap::reserved_memory_limit, requested_size);
         if ((gc_heap::reserved_memory_limit - gc_heap::reserved_memory) < requested_size)
         {
+            printf(" not enough :failed\n");
             return 0;
         }
     }
@@ -4228,9 +4242,11 @@ void* virtual_alloc (size_t size, bool use_large_pages_p)
     }
 #endif // !FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
 
+    printf("reserve use large %d\n", use_large_pages_p);
     void* prgmem = use_large_pages_p ?
         GCToOSInterface::VirtualReserveAndCommitLargePages(requested_size) :
         GCToOSInterface::VirtualReserve(requested_size, card_size * card_word_width, flags);
+    printf("reserve done\n");
     void *aligned_mem = prgmem;
 
     // We don't want (prgmem + size) to be right at the end of the address space
@@ -4257,9 +4273,11 @@ void* virtual_alloc (size_t size, bool use_large_pages_p)
         gc_heap::reserved_memory += requested_size;
     }
 
-    dprintf (2, ("Virtual Alloc size %Id: [%Ix, %Ix[",
-                 requested_size, (size_t)prgmem, (size_t)((uint8_t*)prgmem+requested_size)));
+    printf ("Virtual Alloc size %Id: [%Ix, %Ix[",
+                 requested_size, (size_t)prgmem, (size_t)((uint8_t*)prgmem+requested_size));
 
+
+    printf("virtual alloc end\n");
     return aligned_mem;
 }
 
@@ -9897,7 +9915,9 @@ HRESULT gc_heap::initialize_gc (size_t soh_segment_size,
 #endif //MULTIPLE_HEAPS
 )
 {
+    printf("initialize_gc\n");
 #ifdef TRACE_GC
+    printf("initialize_gc trace\n");
     if (GCConfig::GetLogEnabled())
     {
         gc_log = CreateLogFile(GCConfig::GetLogFile(), false);
@@ -9928,7 +9948,9 @@ HRESULT gc_heap::initialize_gc (size_t soh_segment_size,
     }
 #endif // TRACE_GC
 
+    printf("initialize_gc after trace\n");
 #ifdef GC_CONFIG_DRIVEN
+    printf("initialize_gc config driven\n");
     if (GCConfig::GetConfigLogEnabled())
     {
         gc_config_log = CreateLogFile(GCConfig::GetConfigLogFile(), true);
@@ -9969,6 +9991,7 @@ HRESULT gc_heap::initialize_gc (size_t soh_segment_size,
     }
 #endif //GC_CONFIG_DRIVEN
 
+    printf("initialize_gc after config driven\n");
     HRESULT hres = S_OK;
 
 #ifdef WRITE_WATCH
@@ -9988,6 +10011,7 @@ HRESULT gc_heap::initialize_gc (size_t soh_segment_size,
 #endif //BACKGROUND_GC
 #endif //WRITE_WATCH
 
+    printf("initialize_gc after write_watch\n");
 #ifdef BACKGROUND_GC
     // leave the first page to contain only segment info
     // because otherwise we could need to revisit the first page frequently in
@@ -9997,44 +10021,62 @@ HRESULT gc_heap::initialize_gc (size_t soh_segment_size,
     segment_info_size = Align (sizeof (heap_segment), get_alignment_constant (FALSE));
 #endif //BACKGROUND_GC
 
+    printf("initialize_gc after write_background_gc\n");
     reserved_memory = 0;
+    printf("initialize_gc initial_heap_size = soh_segment_size + loh_segment_size + poh_segment_size\n");
     size_t initial_heap_size = soh_segment_size + loh_segment_size + poh_segment_size;
+    printf("initialize_gc reserved_memory_limit = initial_heap_size * number_of_heaps\n");
 #ifdef MULTIPLE_HEAPS
     reserved_memory_limit = initial_heap_size * number_of_heaps;
+    printf("initialize_gc #else //MULTIPLE_HEAPS\n");
 #else //MULTIPLE_HEAPS
     reserved_memory_limit = initial_heap_size;
+    printf("initialize_gc int number_of_heaps = 1\n");
     int number_of_heaps = 1;
+    printf("initialize_gc #endif //MULTIPLE_HEAPS\n");
 #endif //MULTIPLE_HEAPS
 
     if (heap_hard_limit)
     {
+    printf("initialize_gc check_commit_cs.Initialize\n");
         check_commit_cs.Initialize();
     }
 
+    printf("initialize_gc use_large_pages_p && heap_hard_limit_oh\n");
     bool separated_poh_p = use_large_pages_p && heap_hard_limit_oh[0] && (GCConfig::GetGCHeapHardLimitPOH() == 0) && (GCConfig::GetGCHeapHardLimitPOHPercent() == 0);
+    printf("initialize_gc reserve_initial_memory\n");
     if (!reserve_initial_memory (soh_segment_size, loh_segment_size, poh_segment_size, number_of_heaps, use_large_pages_p, separated_poh_p))
+    {
+    printf("initialize_gc E_OUTOFMEMORY\n");
         return E_OUTOFMEMORY;
+    }
 
 #ifdef CARD_BUNDLE
     //check if we need to turn on card_bundles.
 #ifdef MULTIPLE_HEAPS
     // use INT64 arithmetic here because of possible overflow on 32p
+    printf("initialize_gc )MH_TH_CARD_BUNDLE*number_of_he\n");
     uint64_t th = (uint64_t)MH_TH_CARD_BUNDLE*number_of_heaps;
 #else
     // use INT64 arithmetic here because of possible overflow on 32p
+    printf("initialize_gc SH_TH_CARD_BUNDLE\n");
     uint64_t th = (uint64_t)SH_TH_CARD_BUNDLE;
 #endif //MULTIPLE_HEAPS
 
+    printf("initialize_gc can_use_write_watch_for_card_table\n");
     if (can_use_write_watch_for_card_table() && reserved_memory >= th)
     {
+    printf("initialize_gc settings.card_bundles = TRUE\n");
         settings.card_bundles = TRUE;
     }
     else
     {
+    printf("initialize_gc settings.card_bundles = FALSE\n");
         settings.card_bundles = FALSE;
     }
 #endif //CARD_BUNDLE
 
+    printf("initialize_gc after card bundle\n");
     settings.first_init();
 
     int latency_level_from_config = static_cast<int>(GCConfig::GetLatencyLevel());
@@ -10043,6 +10085,7 @@ HRESULT gc_heap::initialize_gc (size_t soh_segment_size,
         gc_heap::latency_level = static_cast<gc_latency_level>(latency_level_from_config);
     }
 
+    printf("initialize_gc before init\n");
     init_static_data();
 
     g_gc_card_table = make_card_table (g_gc_lowest_address, g_gc_highest_address);
@@ -10103,6 +10146,7 @@ HRESULT gc_heap::initialize_gc (size_t soh_segment_size,
         hres = E_FAIL;
     }
 
+    printf("initialize_gc end %d\n", hres);
     return hres;
 }
 
@@ -31263,7 +31307,9 @@ void gc_heap::set_static_data()
 // Initialize the values that are not const.
 void gc_heap::init_static_data()
 {
+    printf("init_static_data\n");
     size_t gen0_min_size = get_gen0_min_size();
+    printf("init_static_data 2\n");
 
     size_t gen0_max_size =
 #ifdef MULTIPLE_HEAPS
@@ -35140,7 +35186,10 @@ HRESULT GCHeap::Init(size_t hn)
 #else
     UNREFERENCED_PARAMETER(hn);
     if (!gc_heap::make_gc_heap())
+    {
+        printf("out of memory - could not call make_gc_heap\n");
         hres = E_OUTOFMEMORY;
+    }
 #endif //MULTIPLE_HEAPS
 
     // Failed.
@@ -35156,11 +35205,13 @@ HRESULT GCHeap::Initialize()
     qpf_ms = 1000.0 / (double)qpf;
     qpf_us = 1000.0 * 1000.0 / (double)qpf;
 
+    printf("GCHeap::Initialize\n");
     g_gc_pFreeObjectMethodTable = GCToEEInterface::GetFreeObjectMethodTable();
     g_num_processors = GCToOSInterface::GetTotalProcessorCount();
     assert(g_num_processors != 0);
 
     gc_heap::total_physical_mem = (size_t)GCConfig::GetGCTotalPhysicalMemory();
+    printf("total mem %ld\n",  gc_heap::total_physical_mem);
     if (gc_heap::total_physical_mem != 0)
     {
         gc_heap::is_restricted_physical_mem = true;
@@ -35360,6 +35411,7 @@ HRESULT GCHeap::Initialize()
             }
 
             seg_size = aligned_seg_size;
+        printf("seg_size heap_hard_limit_oh %d\n", seg_size);
             gc_heap::soh_segment_size = seg_size;
             large_seg_size = aligned_large_seg_size;
             pin_seg_size = aligned_pin_seg_size;
@@ -35367,6 +35419,7 @@ HRESULT GCHeap::Initialize()
         else
         {
             seg_size = gc_heap::get_segment_size_hard_limit (&nhp, (nhp_from_config == 0));
+        printf("seg_size get_segment_size_hard_limit else %d\n", seg_size);
             gc_heap::soh_segment_size = seg_size;
             large_seg_size = gc_heap::use_large_pages_p ? seg_size : seg_size * 2;
             pin_seg_size = large_seg_size;
@@ -35377,6 +35430,7 @@ HRESULT GCHeap::Initialize()
     else
     {
         seg_size = get_valid_segment_size();
+        printf("seg_size get_valid_seg %d\n", seg_size);
         gc_heap::soh_segment_size = seg_size;
         large_seg_size = get_valid_segment_size (TRUE);
         pin_seg_size = large_seg_size;
@@ -35542,7 +35596,9 @@ HRESULT GCHeap::Initialize()
     }
 #endif //HEAP_BALANCE_INSTRUMENTATION
 #else
+    printf("GCHEAP::Initialize Init\n");
     hr = Init (0);
+    printf("GCHEAP::Initialize Init %d\n", hr);
 #endif //MULTIPLE_HEAPS
 
     if (hr == S_OK)
@@ -35552,6 +35608,7 @@ HRESULT GCHeap::Initialize()
         GCToEEInterface::DiagUpdateGenerationBounds();
     }
 
+    printf("GCHeap::Initialize hr %d\n", hr);
     return hr;
 };
 
@@ -37684,8 +37741,10 @@ size_t GCHeap::GetValidSegmentSize(bool large_seg)
 
 size_t gc_heap::get_gen0_min_size()
 {
+    printf("get_gen0_min_size start\n");
     size_t gen0size = static_cast<size_t>(GCConfig::GetGen0Size());
     bool is_config_invalid = ((gen0size == 0) || !g_theGCHeap->IsValidGen0MaxSize(gen0size));
+    printf("get_gen0_min_size invalid %d\n", is_config_invalid);
     if (is_config_invalid)
     {
 #ifdef SERVER_GC
@@ -37702,16 +37761,17 @@ size_t gc_heap::get_gen0_min_size()
 
         int n_heaps = gc_heap::n_heaps;
 #else //SERVER_GC
+        printf("not server GC\n");
         size_t trueSize = GCToOSInterface::GetCacheSizePerLogicalCpu(TRUE);
         gen0size = max((4*trueSize/5),(256*1024));
         trueSize = max(trueSize, (256*1024));
         int n_heaps = 1;
 #endif //SERVER_GC
 
-        dprintf (1, ("gen0size: %Id * %d = %Id, physical mem: %Id / 6 = %Id",
+        printf ("gen0size: %d * %d = %d, physical mem: %ld / 6 = %ld\n",
                 gen0size, n_heaps, (gen0size * n_heaps),
                 gc_heap::total_physical_mem,
-                gc_heap::total_physical_mem / 6));
+                gc_heap::total_physical_mem / 6) ;
 
         // if the total min GC across heaps will exceed 1/6th of available memory,
         // then reduce the min GC size until it either fits or has been reduced to cache size.
@@ -37727,7 +37787,9 @@ size_t gc_heap::get_gen0_min_size()
     }
 
     size_t seg_size = gc_heap::soh_segment_size;
+    printf("getn_gen0 %d\n", seg_size);
     assert (seg_size);
+    printf("getn_gen0 %d ok\n", seg_size);
 
     // Generation 0 must never be more than 1/2 the segment size.
     if (gen0size >= (seg_size / 2))

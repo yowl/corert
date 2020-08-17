@@ -208,12 +208,14 @@ void GCScan::GcRuntimeStructuresValid (BOOL bValid)
     WRAPPER_NO_CONTRACT;
     if (!bValid)
     {
+        printf("structures false %d\n", (int)m_GcStructuresInvalidCnt);
         int32_t result;
         result = Interlocked::Increment (&m_GcStructuresInvalidCnt);
         _ASSERTE (result > 0);
     }
     else
     {
+        printf("structures true %d\n", (int)m_GcStructuresInvalidCnt);
         int32_t result;
         result = Interlocked::Decrement (&m_GcStructuresInvalidCnt);
         _ASSERTE (result >= 0);

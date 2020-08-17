@@ -1,6 +1,7 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.JSInterop;
@@ -200,5 +201,13 @@ namespace WebAssembly
         public static int SystemNative_SchedGetAffinity(int a, int b) { return 0; }
         [UnmanagedCallersOnly(EntryPoint = "InitializeModules", CallingConvention = CallingConvention.Cdecl)]
         public static int SystemNative_SchedSetAffinity(int a, int b) { return 0; }
+
+        // CoreRT implementation of https://github.com/vargaz/mono/blob/be4037c2a3e70fdc6517e6aa0adb41981323639d/sdks/wasm/src/driver.c#L426
+        [UnmanagedCallersOnly(EntryPoint = "corert_wasm_invoke_method", CallingConvention = CallingConvention.Cdecl)]
+        public static int InvokeMethod(IntPtr method, IntPtr this_arg, IntPtr methodParams, IntPtr out_exc)
+        {
+            throw new Exception("NYI");
+        }
+
     }
 }

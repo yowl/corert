@@ -663,7 +663,7 @@ namespace System.Runtime
 #if TARGET_UNIX
         [MethodImpl(MethodImplOptions.InternalCall)]
         [RuntimeImport(RuntimeLibrary, "RhSetThreadExitCallback")]
-        internal static extern void RhSetThreadExitCallback(IntPtr pCallback);
+        internal static extern int RhSetThreadExitCallback(IntPtr pCallback);
 #endif
 
         // Functions involved in thunks from managed to managed functions (Universal transition transitions 
