@@ -136,11 +136,6 @@ namespace Internal.IL
                 _methodIL = methodIL;
             }
             _mangledName = mangledName;
-            if ((_mangledName.Contains("WebAssembly") && _mangledName.Contains("InvokeMethod"))
-                || _mangledName.Contains("corert_wasm_invoke_method"))
-            {
-
-            }
             _ilBytes = methodIL.GetILBytes();
             _locals = methodIL.GetLocals();
             _localSlots = new LLVMValueRef[_locals.Length];
@@ -3165,7 +3160,7 @@ namespace Internal.IL
             // Save the top of the shadow stack in case the callee reverse P/Invokes
             LLVMValueRef stackFrameSize = BuildConstInt32(GetTotalParameterOffset() + GetTotalLocalOffset());
             _builder.BuildStore(_builder.BuildGEP(_currentFunclet.GetParam(0), new LLVMValueRef[] { stackFrameSize }, "shadowStackTop"),
-                Module.GetNamedGlobal("t_pShadowStackTop"));
+                ShadowStackTop);
 
             LLVMValueRef pInvokeTransitionFrame = default;
             LLVMTypeRef pInvokeFunctionType = default;
