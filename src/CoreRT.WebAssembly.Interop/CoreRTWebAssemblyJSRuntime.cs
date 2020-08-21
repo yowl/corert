@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Runtime;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.JSInterop;
@@ -209,5 +211,39 @@ namespace WebAssembly
             throw new Exception("NYI");
         }
 
+        // CoreRT implementation of https://github.com/vargaz/mono/blob/be4037c2a3e70fdc6517e6aa0adb41981323639d/sdks/wasm/src/driver.c#L426
+        [UnmanagedCallersOnly(EntryPoint = "uno_windows_ui_core_coredispatcher_dispatchercallback",
+            CallingConvention = CallingConvention.Cdecl)]
+        public static int DispatcherCallbackPublic()
+        {
+            DispatcherLLVM();
+            return 0;
+        }
+        
+        [RuntimeImport("UnoThunk", "UnoDispatcherCallbackLLVM")]
+        [MethodImpl(MethodImplOptions.ForwardRef)]
+        public static extern void DispatcherLLVM();
+    }
+}
+
+namespace System.Runtime
+{
+    // Exposed in Internal.CompilerServices only
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor, Inherited = false)]
+    public sealed class RuntimeImportAttribute : Attribute
+    {
+        public string DllName { get; }
+        public string EntryPoint { get; }
+
+        public RuntimeImportAttribute(string entry)
+        {
+            EntryPoint = entry;
+        }
+
+        public RuntimeImportAttribute(string dllName, string entry)
+        {
+            EntryPoint = entry;
+            DllName = dllName;
+        }
     }
 }
