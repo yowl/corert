@@ -239,8 +239,34 @@ COOP_PINVOKE_HELPER(Object *, RhpNewFastAlign8, (EEType* pEEType))
 
 COOP_PINVOKE_HELPER(Object*, RhpNewFastMisalign, (EEType* pEEType))
 {
+    Thread* pCurThread = ThreadStore::GetCurrentThread();
+    gc_alloc_context* acontext = pCurThread->GetAllocContext();
+    Object* pObject;
+
     size_t size = pEEType->get_BaseSize();
-    Object* pObject = (Object*)RhpGcAlloc(pEEType, GC_ALLOC_ALIGN8_BIAS, size, NULL);
+    size = (size + (sizeof(UIntNative) - 1)) & ~(sizeof(UIntNative) - 1);
+
+    UInt8* result = acontext->alloc_ptr;
+
+    int requiresPadding = (((uint32_t)result) & 7) != 4;
+    if (requiresPadding) size += 12;
+    UInt8* advance = result + size;
+    if (advance <= acontext->alloc_limit)
+    {
+        acontext->alloc_ptr = advance;
+        if (requiresPadding)
+        {
+            Object* dummy = (Object*)result;
+            dummy->set_EEType(g_pFreeObjectEEType);
+            result += 12;
+        }
+        pObject = (Object*)result;
+        pObject->set_EEType(pEEType);
+
+        return pObject;
+    }
+
+    pObject = (Object*)RhpGcAlloc(pEEType, GC_ALLOC_ALIGN8 | GC_ALLOC_ALIGN8_BIAS, size, NULL);
     if (pObject == nullptr)
     {
         ASSERT_UNCONDITIONALLY("NYI");  // TODO: Throw OOM
@@ -250,6 +276,7 @@ COOP_PINVOKE_HELPER(Object*, RhpNewFastMisalign, (EEType* pEEType))
     if (size >= RH_LARGE_OBJECT_SIZE)
         RhpPublishObject(pObject, size);
 
+    printf("fast misalign %d for type %d with size %d\n", (size_t)pObject, (size_t)pEEType, size);
     return pObject;
 }
 
@@ -307,6 +334,7 @@ COOP_PINVOKE_HELPER(Array *, RhpNewArrayAlign8, (EEType * pArrayEEType, int numE
         pObject = (Array*)result;
         pObject->set_EEType(pArrayEEType);
         pObject->InitArrayLength((UInt32)numElements);
+        printf("allocating array at 8 from alloc limit %d\n", (size_t)pObject);
         return pObject;
     }
 
@@ -321,6 +349,7 @@ COOP_PINVOKE_HELPER(Array *, RhpNewArrayAlign8, (EEType * pArrayEEType, int numE
     if (size >= RH_LARGE_OBJECT_SIZE)
         RhpPublishObject(pObject, size);
 
+    printf("allocating array at 8 %d\n", (size_t)pObject);
     return pObject;
 }
 #endif // defined(HOST_ARM) || defined(HOST_WASM)

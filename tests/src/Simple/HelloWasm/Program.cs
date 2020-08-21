@@ -410,6 +410,11 @@ internal static class Program
             return;
         }
 
+        if(!TestLotsOfStructs())
+        {
+            FailTest("TestLotsOfStructs returned false");
+        }
+
         EndTest(TestGeneration2Rooting());
     }
 
@@ -448,6 +453,63 @@ internal static class Program
             result = false;
         }
         return result;
+    }
+
+    private class DependencyPropertyDetails
+    {
+        private readonly List<object> _bindings = new List<object>();
+
+        internal bool BindingsCanGetCount()
+        {
+            return _bindings.Count == 0;
+        }
+    }
+
+    private struct PropertyEntry
+    {
+        public PropertyEntry(int id, DependencyPropertyDetails details)
+        {
+            Id = id;
+            Details = details;
+        }
+
+        public int Id;
+        public DependencyPropertyDetails Details;
+    }
+
+    // test that nested classes in classes references via structs are not collected
+    private static bool TestLotsOfStructs()
+    {
+        for(var i = 1; i < 20; i++)
+        {
+            PrintLine("TestLotsOfStructs outer iteration " + i.ToString());
+            object[] details = new object[10000];
+            for (var j = 0; j < 10000; j++)
+            {
+                details[j] = CreatePropertyEntry();
+            }
+            GC.Collect();
+            for (var j = 0; j < 10000; j++)
+            {
+                if (!((PropertyEntry)details[j]).Details.BindingsCanGetCount()) return false;
+            }
+            PrintLine("First GC ok");
+            GC.Collect();
+            for (var j = 0; j < 10000; j++)
+            {
+                if (!((PropertyEntry)details[j]).Details.BindingsCanGetCount()) return false;
+            }
+            PrintLine("Second GC ok");
+        }
+        PrintLine("TestLotsOfStructs - all attempts to get Count() succeeded");
+
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static PropertyEntry CreatePropertyEntry()
+    {
+        return new PropertyEntry(0, new DependencyPropertyDetails());
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
