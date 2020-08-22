@@ -239,6 +239,7 @@ COOP_PINVOKE_HELPER(Object *, RhpNewFastAlign8, (EEType* pEEType))
 
 COOP_PINVOKE_HELPER(Object*, RhpNewFastMisalign, (EEType* pEEType))
 {
+    printf("RhpNewFastMisalign\n");
     Thread* pCurThread = ThreadStore::GetCurrentThread();
     gc_alloc_context* acontext = pCurThread->GetAllocContext();
     Object* pObject;

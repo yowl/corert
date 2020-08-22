@@ -480,26 +480,26 @@ internal static class Program
     // test that nested classes in classes references via structs are not collected
     private static bool TestLotsOfStructs()
     {
-        for(var i = 1; i < 20; i++)
+        for(var i = 1; i < 200; i++)
         {
             PrintLine("TestLotsOfStructs outer iteration " + i.ToString());
-            object[] details = new object[10000];
-            for (var j = 0; j < 10000; j++)
+            object[] details = new object[2000];
+            for (var j = 0; j < 1000; j++)
             {
-                details[j] = CreatePropertyEntry();
+                details[j] = CreatePropertyEntry(j);
             }
             GC.Collect();
-            for (var j = 0; j < 10000; j++)
+            for (var j = 0; j < 1000; j++)
             {
-                if (!((PropertyEntry)details[j]).Details.BindingsCanGetCount()) return false;
+                details[1000 + j] = CreatePropertyEntry(j + 1000);
             }
-            PrintLine("First GC ok");
             GC.Collect();
-            for (var j = 0; j < 10000; j++)
+
+            for (var j = 0; j < 2000; j++)
             {
-                if (!((PropertyEntry)details[j]).Details.BindingsCanGetCount()) return false;
+                if (!((PropertyEntry)details[j]).Details.BindingsCanGetCount() || ((PropertyEntry)details[j]).Id != j) return false;
             }
-            PrintLine("Second GC ok");
+            PrintLine("ints ok");
         }
         PrintLine("TestLotsOfStructs - all attempts to get Count() succeeded");
 
@@ -507,9 +507,9 @@ internal static class Program
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static PropertyEntry CreatePropertyEntry()
+    private static PropertyEntry CreatePropertyEntry(int i)
     {
-        return new PropertyEntry(0, new DependencyPropertyDetails());
+        return new PropertyEntry(i, new DependencyPropertyDetails());
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -568,11 +568,22 @@ internal static class Program
 
         // Test struct assignment keeps fields alive
         var parentRef = CreateParentWithStruct();
+        CreateCrap();
         GC.Collect(); // move parent to gen1
+        if(!CheckParentOfStructWithObjRefsGeneration(1))
+        {
+            PrintLine("parent should be in gen 1 but is not\n");
+            return false;
+        }
         GC.Collect(); // move parent to gen2
+        if (!CheckParentOfStructWithObjRefsGeneration(2))
+        {
+            PrintLine("parent should be in gen 2 but is not\n");
+            return false;
+        }
         StoreChildInC1(); // store ephemeral object in gen 2 object via struct assignment
         KillParentWithStruct();
-        GC.Collect(1);
+        GC.Collect(1); // parent is in gen 2 so should not be collected
 
         if (childRef.IsAlive)
         {
@@ -591,6 +602,25 @@ internal static class Program
         }
 
         return true;
+    }
+
+    static void CreateCrap()
+    {
+        List<object> a = new List<object>();
+        List<object> a2 = new List<object>();
+        List<object> a3 = new List<object>();
+        List<object> a4 = new List<object>();
+        List<object> a5 = new List<object>();
+        a.Add(new object());
+        a.Add(new object());
+        a.Add(new object());
+        a.Add(new object());
+        a.Add(new object());
+        a.Add(new object());
+        a.Add(new object());
+        a.Add(new object());
+        a.Add(new object());
+        a.Add(new object());
     }
 
     class ParentOfStructWithObjRefs
@@ -677,6 +707,18 @@ internal static class Program
             C1 = child,
         };
         childRef = new WeakReference(child);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static bool CheckParentOfStructWithObjRefsGeneration(int expected)
+    {
+        int actualGen = GC.GetGeneration(aParentOfStructWithObjRefs);
+        if (actualGen != expected)
+        {
+            PrintLine("aParentOfStructWithObjRefs Object is not in expected generation " + expected + " but in " + actualGen);
+            return false;
+        }
+        return true;
     }
 
     public class Parent
