@@ -4,9 +4,70 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-
+using System.Runtime.InteropServices;
 namespace System.Collections.Generic
 {
+    internal class X
+    {
+        [DllImport("*")]
+        internal static unsafe extern int printf(byte* str, byte* unused);
+        private static unsafe void PrintString(string s)
+        {
+            int length = s.Length;
+            fixed (char* curChar = s)
+            {
+                for (int i = 0; i < length; i++)
+                {
+                    TwoByteStr curCharStr = new TwoByteStr();
+                    curCharStr.first = (byte)(*(curChar + i));
+                    printf((byte*)&curCharStr, null);
+                }
+            }
+        }
+
+        internal static void PrintLine(string s)
+        {
+            PrintString(s);
+            PrintString("\n");
+        }
+
+        //public unsafe static void PrintLong(long l)
+        //{
+        //    PrintByte((byte)((l >> 56) & 0xff));
+        //    PrintByte((byte)((l >> 48) & 0xff));
+        //    PrintByte((byte)((l >> 40) & 0xff));
+        //    PrintByte((byte)((l >> 32) & 0xff));
+        //    PrintByte((byte)((l >> 24) & 0xff));
+        //    PrintByte((byte)((l >> 16) & 0xff));
+        //    PrintByte((byte)((l >> 8) & 0xff));
+        //    PrintByte((byte)(l & 0xff));
+        //    PrintString("\n");
+        //}
+
+        public unsafe static void PrintUint(int s)
+        {
+            byte[] intBytes = BitConverter.GetBytes(s);
+            for (var i = 0; i < 4; i++)
+            {
+                TwoByteStr curCharStr = new TwoByteStr();
+                var nib = (intBytes[3 - i] & 0xf0) >> 4;
+                curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
+                printf((byte*)&curCharStr, null);
+                nib = (intBytes[3 - i] & 0xf);
+                curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
+                printf((byte*)&curCharStr, null);
+            }
+            PrintString("\n");
+        }
+
+        public struct TwoByteStr
+        {
+            public byte first;
+            public byte second;
+        }
+
+    }
+
     /*============================================================
     **
     ** Class:  LowLevelDictionary<TKey, TValue>
@@ -34,6 +95,11 @@ namespace System.Collections.Generic
 
         public LowLevelDictionary(int capacity)
         {
+            int i = 0;
+            if(i == 1)
+            {
+                X.PrintUint(1);
+            }
             Clear(capacity);
         }
 

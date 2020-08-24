@@ -4325,7 +4325,8 @@ static size_t get_valid_segment_size (BOOL large_seg=FALSE)
     seg_size = round_down_power2 (seg_size);
 #endif // HOST_64BIT
 
-    return (seg_size);
+//    return (seg_size);
+    return 104857600 * 2;
 }
 
 void
@@ -37789,7 +37790,7 @@ size_t gc_heap::get_gen0_min_size()
     size_t seg_size = gc_heap::soh_segment_size;
     printf("getn_gen0 %d\n", seg_size);
     assert (seg_size);
-    printf("getn_gen0 %d ok\n", seg_size);
+    printf("getn_gen0 seg_size %d ok gen0size %d\n", seg_size, gen0size);
 
     // Generation 0 must never be more than 1/2 the segment size.
     if (gen0size >= (seg_size / 2))
@@ -37813,6 +37814,7 @@ size_t gc_heap::get_gen0_min_size()
 
     gen0size = Align (gen0size);
 
+    printf("gen0size %d\n", gen0size);
     return gen0size;
 }
 

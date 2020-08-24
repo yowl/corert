@@ -177,6 +177,10 @@ namespace ILCompiler.DependencyAnalysis
                 nodeData.Fill(Module, _nodeFactory);
             }
 
+            //if(!this.)
+            //{
+
+            //}
             EmitNativeMain(context);
 
             EmitDebugMetadata(context);
@@ -226,6 +230,11 @@ namespace ILCompiler.DependencyAnalysis
 
         private void EmitNativeMain(LLVMContextRef context)
         {
+            LLVMValueRef managedMain = Module.GetNamedFunction("StartupCodeMain");
+            if (managedMain.Handle == IntPtr.Zero)
+            {
+                return; // --nativelib
+            }
             LLVMValueRef shadowStackTop = Module.GetNamedGlobal("t_pShadowStackTop");
 
             LLVMBuilderRef builder = context.CreateBuilder();
@@ -233,11 +242,6 @@ namespace ILCompiler.DependencyAnalysis
             var mainFunc = Module.AddFunction("__managed__Main", mainSignature);
             var mainEntryBlock = mainFunc.AppendBasicBlock("entry");
             builder.PositionAtEnd(mainEntryBlock);
-            LLVMValueRef managedMain = Module.GetNamedFunction("StartupCodeMain");
-            if (managedMain.Handle == IntPtr.Zero)
-            {
-                throw new Exception("Main not found");
-            }
 
             LLVMTypeRef reversePInvokeFrameType = LLVMTypeRef.CreateStruct(new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }, false);
             LLVMValueRef reversePinvokeFrame = builder.BuildAlloca(reversePInvokeFrameType, "ReversePInvokeFrame");

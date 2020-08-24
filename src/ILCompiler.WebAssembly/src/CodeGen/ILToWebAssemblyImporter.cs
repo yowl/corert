@@ -4919,6 +4919,27 @@ namespace Internal.IL
             _stack.Push(new AddressExpressionEntry(StackValueKind.ByRef, $"FieldAddress_{field.Name}", fieldAddress, field.FieldType.MakeByRefType()));
         }
 
+        void PrintInt32(LLVMValueRef ptr)
+        {
+            int offset = GetTotalParameterOffset() + GetTotalLocalOffset();
+            LLVMValueRef shadowStack = _builder.BuildGEP(_currentFunclet.GetParam(0),
+                new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)offset, false), },
+                String.Empty);
+            _builder.BuildCall(
+                GetOrCreateLLVMFunction("S_P_CoreLib_System_Collections_Generic_X__PrintUint",
+                    LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new[]
+                        {
+                            LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0),
+                            LLVMTypeRef.Int32
+                        },
+                        false)),
+                new LLVMValueRef[]
+                {
+                    CastIfNecessary(_builder, shadowStack, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)),
+                    ptr
+                }, string.Empty);
+        }
+
         private void ImportStoreField(int token, bool isStatic)
         {
             FieldDesc runtimeDeterminedField = (FieldDesc)_methodIL.GetObject(token);
@@ -4926,6 +4947,13 @@ namespace Internal.IL
             StackEntry valueEntry = _stack.Pop();
 
             LLVMValueRef fieldAddress = GetFieldAddress(runtimeDeterminedField, field, isStatic);
+            if (_mangledName == "Uno_UI_Windows_UI_Xaml_DependencyPropertyDetails___ctor" && field.Name == "_bindings")
+            {
+                PrintInt32(BuildConstInt32(32));
+                PrintInt32(_builder.BuildPtrToInt(fieldAddress, LLVMTypeRef.Int32));
+                PrintInt32(BuildConstInt32(33));
+                PrintInt32(valueEntry.ValueAsInt32(_builder, false));
+            }
             CastingStore(fieldAddress, valueEntry, field.FieldType, true);
         }
 
