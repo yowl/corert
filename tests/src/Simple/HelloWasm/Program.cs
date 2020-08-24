@@ -360,6 +360,8 @@ internal static class Program
 
         TestJavascriptCall();
 
+        TestMarshalUtf8();
+
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
         System.Diagnostics.Debugger.Break();
@@ -2614,6 +2616,22 @@ internal static class Program
         return 0x828f;
     }
 
+    [DllImport("*")]
+    extern static bool NativeAcceptArray([MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)] string[] utf8Strings);
+
+    [System.Runtime.InteropServices.UnmanagedCallersOnly(EntryPoint = "NativeAcceptArray")]
+    private static bool _NativeAcceptArray([MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)] string [] marshalledUtf8s)
+    {
+        // just testing the marshalled
+        return marshalledUtf8s[0] == "a";
+    }
+
+    static void TestMarshalUtf8()
+    {
+        StartTest("TestMarshalUtf8");
+        EndTest(NativeAcceptArray(new[] { "a" }));
+    }
+
     // there's no actual implementation for this we just want the reverse delegate created
     [DllImport("*")]
     internal static extern bool SomeExternalUmanagedFunction(DelegateToCallFromUnmanaged callback);
@@ -3034,6 +3052,7 @@ class FieldStatics
         return X == 17 && Y == 347 && S1 == "first string" && S2 == "a different string";
     }
 }
+
 
 namespace System.Runtime.InteropServices
 {
