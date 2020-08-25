@@ -237,51 +237,6 @@ COOP_PINVOKE_HELPER(Object *, RhpNewFastAlign8, (EEType* pEEType))
     return pObject;
 }
 
-COOP_PINVOKE_HELPER(Object *, RhpNewFastAlign8, (EEType* pEEType))
-{
-    ASSERT(pEEType->RequiresAlign8());
-    ASSERT(!pEEType->HasFinalizer());
-
-    Thread* pCurThread = ThreadStore::GetCurrentThread();
-    gc_alloc_context* acontext = pCurThread->GetAllocContext();
-    Object* pObject;
-
-    size_t size = pEEType->get_BaseSize();
-    size = (size + (sizeof(UIntNative) - 1)) & ~(sizeof(UIntNative) - 1);
-
-    UInt8* result = acontext->alloc_ptr;
-
-    int requiresPadding = ((uint32_t)result) & 7;
-    if (requiresPadding) size += 12;
-    UInt8* advance = result + size;
-    if (advance <= acontext->alloc_limit)
-    {
-        acontext->alloc_ptr = advance;
-        if (requiresPadding)
-        {
-            Object* dummy = (Object*)result;
-            dummy->set_EEType(g_pFreeObjectEEType);
-            result += 12;
-        }
-        pObject = (Object*)result;
-        pObject->set_EEType(pEEType);
-
-        return pObject;
-    }
-
-    pObject = (Object*)RhpGcAlloc(pEEType, GC_ALLOC_ALIGN8, size, NULL);
-    if (pObject == nullptr)
-    {
-        ASSERT_UNCONDITIONALLY("NYI");  // TODO: Throw OOM
-    }
-    pObject->set_EEType(pEEType);
-
-    if (size >= RH_LARGE_OBJECT_SIZE)
-        RhpPublishObject(pObject, size);
-
-    return pObject;
-}
-
 COOP_PINVOKE_HELPER(Object*, RhpNewFastMisalign, (EEType* pEEType))
 {
     Thread* pCurThread = ThreadStore::GetCurrentThread();
