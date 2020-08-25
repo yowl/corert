@@ -819,12 +819,6 @@ namespace Internal.IL
             PushLoadExpression(GetStackValueKind(type), (argument ? "arg" : "loc") + index + "_", typedLoadLocation, type);
         }
 
-        private LLVMValueRef LoadTemp(int index)
-        {
-            LLVMValueRef address = LoadVarAddress(index, LocalVarKind.Temp, out TypeDesc type);
-            return _builder.BuildLoad(CastToPointerToTypeDesc(address, type, $"Temp{index}_"), $"LdTemp{index}_");
-        }
-
         internal LLVMValueRef LoadTemp(int index, LLVMTypeRef asType)
         {
             LLVMValueRef address = LoadVarAddress(index, LocalVarKind.Temp, out TypeDesc type);
@@ -2961,7 +2955,8 @@ namespace Internal.IL
                 BuildFinallyFunclet(Module);
             }
 
-            var exPtr = landingPadBuilder.BuildExtractValue(pad, 0, "ex");
+            // __cxa_begin catch to get the c++ exception object, must be paired with __cxa_end_catch (http://libcxxabi.llvm.org/spec.html)
+            var exPtr = landingPadBuilder.BuildCall(GetCxaBeginCatchFunction(), new LLVMValueRef[] { landingPadBuilder.BuildExtractValue(pad, 0, "ex") });
 
             // unwrap managed, cast to 32bit pointer from 8bit personality signature pointer
             var ex32Ptr = landingPadBuilder.BuildPointerCast(exPtr, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int32, 0));
@@ -3013,6 +3008,8 @@ namespace Internal.IL
             landingPadBuilder.BuildCondBr(noCatch, secondPassBlock, foundCatchBlock);
 
             landingPadBuilder.PositionAtEnd(foundCatchBlock);
+            // finished with the c++ exception
+            landingPadBuilder.BuildCall(GetCxaEndCatchFunction(), new LLVMValueRef[] { });
 
             LLVMValueRef[] callCatchArgs = new LLVMValueRef[]
                                   {
@@ -3084,6 +3081,27 @@ namespace Internal.IL
             landingPadBuilder.Dispose();
 
             return landingPad;
+        }
+
+        LLVMValueRef GetCxaBeginCatchFunction()
+        {
+            if (CxaBeginCatchFunction == default)
+            {
+                // takes the exception structure and returns the c++ exception, defined by emscripten
+                CxaBeginCatchFunction = Module.AddFunction("__cxa_begin_catch", LLVMTypeRef.CreateFunction(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), 
+                    new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)}, false));
+            }
+            return CxaBeginCatchFunction;
+        }
+
+        LLVMValueRef GetCxaEndCatchFunction()
+        {
+            if (CxaEndCatchFunction == default)
+            {
+                // takes the exception structure and returns the c++ exception, defined by emscripten
+                CxaEndCatchFunction = Module.AddFunction("__cxa_end_catch", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { }, false));
+            }
+            return CxaEndCatchFunction;
         }
 
         private void AddMethodReference(MethodDesc method)
@@ -3868,8 +3886,8 @@ namespace Internal.IL
                         break;
 
                     case ILOpcode.add_ovf:
-                        Debug.Assert(type.Category == TypeFlags.Int32 || type.Category == TypeFlags.Int64 || type.Category == TypeFlags.Char);
-                        if (type.Category == TypeFlags.Int32 || type.Category == TypeFlags.Char)
+                        Debug.Assert(CanPerformSignedOverflowOperations(op1.Kind));
+                        if (Is32BitStackValue(op1.Kind))
                         {
                             BuildAddOverflowChecksForSize(ref AddOvf32Function, left, right, LLVMTypeRef.Int32, BuildConstInt32(int.MaxValue), BuildConstInt32(int.MinValue), true);
                         }
@@ -3881,8 +3899,8 @@ namespace Internal.IL
                         result = _builder.BuildAdd(left, right, "add");
                         break;
                     case ILOpcode.add_ovf_un:
-                        Debug.Assert(type.Category == TypeFlags.UInt32 || type.Category == TypeFlags.Int32 || type.Category == TypeFlags.UInt64 || type.Category == TypeFlags.Int64 || type.Category == TypeFlags.Pointer || type.Category == TypeFlags.UIntPtr);
-                        if (type.Category == TypeFlags.UInt32 || type.Category == TypeFlags.Int32 || type.Category == TypeFlags.Pointer || type.Category == TypeFlags.UIntPtr)
+                        Debug.Assert(CanPerformUnsignedOverflowOperations(op1.Kind));
+                        if (Is32BitStackValue(op1.Kind))
                         {
                             BuildAddOverflowChecksForSize(ref AddOvfUn32Function, left, right, LLVMTypeRef.Int32, BuildConstUInt32(uint.MaxValue), BuildConstInt32(0), false);
                         }
@@ -3894,8 +3912,8 @@ namespace Internal.IL
                         result = _builder.BuildAdd(left, right, "add");
                         break;
                     case ILOpcode.sub_ovf:
-                        Debug.Assert(type.Category == TypeFlags.Int32 || type.Category == TypeFlags.Int64 || type.Category == TypeFlags.Char);
-                        if (type.Category == TypeFlags.Int32  || type.Category == TypeFlags.Char)
+                        Debug.Assert(CanPerformSignedOverflowOperations(op1.Kind));
+                        if (Is32BitStackValue(op1.Kind))
                         {
                             BuildSubOverflowChecksForSize(ref SubOvf32Function, left, right, LLVMTypeRef.Int32, BuildConstInt32(int.MaxValue), BuildConstInt32(int.MinValue), true);
                         }
@@ -3907,8 +3925,8 @@ namespace Internal.IL
                         result = _builder.BuildSub(left, right, "sub");
                         break;
                     case ILOpcode.sub_ovf_un:
-                        Debug.Assert(type.Category == TypeFlags.UInt32 || type.Category == TypeFlags.Int32 || type.Category == TypeFlags.UInt64 || type.Category == TypeFlags.Int64 || type.Category == TypeFlags.Pointer || type.Category == TypeFlags.UIntPtr);
-                        if (type.Category == TypeFlags.UInt32 || type.Category == TypeFlags.Int32 || type.Category == TypeFlags.Pointer || type.Category == TypeFlags.UIntPtr)
+                        Debug.Assert(CanPerformUnsignedOverflowOperations(op1.Kind));
+                        if (Is32BitStackValue(op1.Kind))
                         {
                             BuildSubOverflowChecksForSize(ref SubOvfUn32Function, left, right, LLVMTypeRef.Int32, BuildConstUInt32(uint.MaxValue), BuildConstInt32(0), false);
                         }
@@ -3950,6 +3968,21 @@ namespace Internal.IL
             PushExpression(kind, "binop", result, type);
         }
 
+        bool CanPerformSignedOverflowOperations(StackValueKind kind)
+        {
+            return kind == StackValueKind.Int32 || kind == StackValueKind.Int64;
+        }
+
+        bool CanPerformUnsignedOverflowOperations(StackValueKind kind)
+        {
+            return CanPerformSignedOverflowOperations(kind) || kind == StackValueKind.ByRef ||
+                   kind == StackValueKind.ObjRef || kind == StackValueKind.NativeInt;
+        }
+
+        bool Is32BitStackValue(StackValueKind kind)
+        {
+            return kind == StackValueKind.Int32 || kind == StackValueKind.ByRef ||  kind == StackValueKind.ObjRef || kind == StackValueKind.NativeInt;
+        }
 
         LLVMValueRef StartOverflowCheckFunction(LLVMTypeRef sizeTypeRef, bool signed,
             string throwFuncName, out LLVMValueRef leftOp, out LLVMValueRef rightOp, out LLVMBuilderRef builder, out LLVMBasicBlockRef elseBlock,
