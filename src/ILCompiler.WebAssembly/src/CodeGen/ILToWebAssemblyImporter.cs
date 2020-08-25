@@ -4942,6 +4942,12 @@ namespace Internal.IL
             FieldDesc canonFieldDesc = (FieldDesc)_canonMethodIL.GetObject(token);
             LLVMValueRef fieldAddress = GetFieldAddress(field, canonFieldDesc, isStatic);
 
+            if (_mangledName.Contains("Uno_UI_Windows_UI_Xaml_DependencyPropertyDetails__SetSourceValue") &&
+                field.Name == "_bindings")
+            {
+                PrintInt32(BuildConstInt32(16));
+                PrintInt32(_builder.BuildPtrToInt(fieldAddress, LLVMTypeRef.Int32));
+            }
             PushLoadExpression(GetStackValueKind(canonFieldDesc.FieldType), $"Field_{field.Name}", fieldAddress, canonFieldDesc.FieldType);
         }
 
