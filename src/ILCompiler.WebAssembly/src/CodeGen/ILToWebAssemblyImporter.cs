@@ -758,11 +758,12 @@ namespace Internal.IL
                 }
 
                 DebugMetadata debugMetadata;
-                if (!_compilation.DebugMetadataMap.TryGetValue(curSequencePoint.Document, out debugMetadata))
+                string fullPath = curSequencePoint.Document;
+                if (!_compilation.DebugMetadataMap.TryGetValue(fullPath, out debugMetadata))
                 {
-                    string fullPath = curSequencePoint.Document;
                     string fileName = Path.GetFileName(fullPath);
                     string directory = Path.GetDirectoryName(fullPath) ?? String.Empty;
+                    directory = directory.Substring(10).Replace('\\', '/');
                     LLVMMetadataRef fileMetadata = _compilation.DIBuilder.CreateFile(fileName, directory);
 
                     // todo: get the right value for isOptimized
@@ -771,7 +772,7 @@ namespace Internal.IL
                     Module.AddNamedMetadataOperand("llvm.dbg.cu", compileUnitMetadata);
 
                     debugMetadata = new DebugMetadata(fileMetadata, compileUnitMetadata);
-                    _compilation.DebugMetadataMap[fileName] = debugMetadata;
+                    _compilation.DebugMetadataMap[fullPath] = debugMetadata;
                 }
 
                 if (_debugFunction.Handle == IntPtr.Zero)
