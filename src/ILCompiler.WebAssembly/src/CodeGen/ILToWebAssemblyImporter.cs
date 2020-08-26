@@ -2551,7 +2551,7 @@ namespace Internal.IL
                             _dependencies.Add(methodNode);
 
                             MethodDesc ctor = methodNode.Method;
-                            PushExpression(StackValueKind.Int32, "eeType", LLVMFunctionForMethod(ctor, ctor, null, false, null, ctor, out bool _, out LLVMValueRef _, out LLVMValueRef _), GetWellKnownType(WellKnownType.IntPtr));
+                            PushExpression(StackValueKind.Int32, "ctor", LLVMFunctionForMethod(ctor, ctor, null, false, null, ctor, out bool _, out LLVMValueRef _, out LLVMValueRef _), GetWellKnownType(WellKnownType.IntPtr));
                         }
 
                         return true;
@@ -3081,6 +3081,26 @@ namespace Internal.IL
             landingPadBuilder.Dispose();
 
             return landingPad;
+        }
+
+        LLVMValueRef GetCxaBeginCatchFunction()
+        {
+            if (CxaBeginCatchFunction == default)
+            {
+                // takes the exception structure and returns the c++ exception, defined by emscripten
+                CxaBeginCatchFunction = Module.AddFunction("__cxa_begin_catch", LLVMTypeRef.CreateFunction(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), 
+                    new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)}, false));
+            }
+            return CxaBeginCatchFunction;
+        }
+
+        LLVMValueRef GetCxaEndCatchFunction()
+        {
+            if (CxaEndCatchFunction == default)
+            {
+                CxaEndCatchFunction = Module.AddFunction("__cxa_end_catch", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { }, false));
+            }
+            return CxaEndCatchFunction;
         }
 
         LLVMValueRef GetCxaBeginCatchFunction()
