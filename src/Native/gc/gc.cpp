@@ -3435,6 +3435,10 @@ void gc_heap::seg_mapping_table_remove_segment (heap_segment* seg)
     dprintf (1, ("removing seg %Ix(%d)-%Ix(%d)",
         seg, begin_index, heap_segment_reserved (seg), end_index));
 
+    if(end_entry->boundary != (uint8_t*)seg_end)
+    {
+        printf("(end_entry->boundary %d  seg_end %d\n", end_entry->boundary, (uint8_t*)seg_end);
+    }
     assert (end_entry->boundary == (uint8_t*)seg_end);
     end_entry->boundary = 0;
 

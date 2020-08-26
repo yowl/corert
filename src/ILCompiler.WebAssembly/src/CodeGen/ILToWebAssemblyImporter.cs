@@ -3103,27 +3103,6 @@ namespace Internal.IL
             return CxaEndCatchFunction;
         }
 
-        LLVMValueRef GetCxaBeginCatchFunction()
-        {
-            if (CxaBeginCatchFunction == default)
-            {
-                // takes the exception structure and returns the c++ exception, defined by emscripten
-                CxaBeginCatchFunction = Module.AddFunction("__cxa_begin_catch", LLVMTypeRef.CreateFunction(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), 
-                    new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)}, false));
-            }
-            return CxaBeginCatchFunction;
-        }
-
-        LLVMValueRef GetCxaEndCatchFunction()
-        {
-            if (CxaEndCatchFunction == default)
-            {
-                // takes the exception structure and returns the c++ exception, defined by emscripten
-                CxaEndCatchFunction = Module.AddFunction("__cxa_end_catch", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { }, false));
-            }
-            return CxaEndCatchFunction;
-        }
-
         private void AddMethodReference(MethodDesc method)
         {
             _dependencies.Add(_compilation.NodeFactory.MethodEntrypoint(method));
