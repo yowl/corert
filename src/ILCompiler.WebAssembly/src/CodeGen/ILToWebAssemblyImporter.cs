@@ -324,15 +324,31 @@ namespace Internal.IL
             }
 
             string[] localNames = new string[_locals.Length];
+            LLVMMetadataRef[] debugVars = new LLVMMetadataRef[_locals.Length];
+            LLVMMetadataRef diLocation = default;
             if (_debugInformation != null)
             {
-                foreach (ILLocalVariable localDebugInfo in _debugInformation.GetLocalVariables() ?? Enumerable.Empty<ILLocalVariable>())
+                ILSequencePoint curSequencePoint = GetSequencePoint(_currentOffset);
+
+                // LLVM can't process empty string file names
+                bool canScopeVariables = !string.IsNullOrWhiteSpace(curSequencePoint.Document);
+                if (canScopeVariables)
                 {
-                    // Check whether the slot still exists as the compiler may remove it for intrinsics
-                    int slot = localDebugInfo.Slot;
-                    if (slot < localNames.Length)
+                    DebugMetadata debugMetadata = GetOrCreateDebugMetadata(curSequencePoint);
+                    diLocation = CreateDebugFunctionAndDiLocation(debugMetadata, curSequencePoint);
+                    foreach (ILLocalVariable localDebugInfo in _debugInformation.GetLocalVariables() ?? Enumerable.Empty<ILLocalVariable>())
                     {
-                        localNames[localDebugInfo.Slot] = localDebugInfo.Name;
+                        // Check whether the slot still exists as the compiler may remove it for intrinsics
+                        int slot = localDebugInfo.Slot;
+                        if (slot < localNames.Length)
+                        {
+                            localNames[localDebugInfo.Slot] = localDebugInfo.Name;
+                        }
+                        if (!localDebugInfo.CompilerGenerated)
+                        {
+                            debugVars[localDebugInfo.Slot] = LLVMSharpInterop.DIBuilderCreateAutoVariable(_compilation.DIBuilder, _debugFunction, localDebugInfo.Name, debugMetadata.File,
+                                (uint)curSequencePoint.LineNumber, GetDIType(_locals[localDebugInfo.Slot].Type), 0, /* TODO */ LLVMDIFlags.LLVMDIFlagZero, /* TODO */32);
+                        }
                     }
                 }
             }
@@ -341,7 +357,7 @@ namespace Internal.IL
             {
                 if (CanStoreVariableOnStack(_locals[i].Type))
                 {
-                    string localName = String.Empty;
+                    string localName = string.Empty;
                     if (localNames[i] != null)
                     {
                         localName = localNames[i] + "_";
@@ -350,6 +366,12 @@ namespace Internal.IL
                     localName += $"local{i}_";
 
                     LLVMValueRef localStackSlot = prologBuilder.BuildAlloca(GetLLVMTypeForTypeDesc(_locals[i].Type), localName);
+                    LLVMMetadataRef debugVar = debugVars[i];
+                    if (debugVar.Handle != IntPtr.Zero)
+                    {
+                        var call = LLVMSharpInterop.DIBuilderInsertDeclareAtEnd(_compilation.DIBuilder, localStackSlot, debugVar, LLVMSharpInterop.DIBuilderCreateExpression(_compilation.DIBuilder, IntPtr.Zero, 0), diLocation, prologBlock);
+                        LLVMSharpInterop.InstructionSetDebugLoc(call, diLocation); // is this required as its passed above?
+                    }
                     _localSlots[i] = localStackSlot;
                 }
             }
@@ -434,6 +456,17 @@ namespace Internal.IL
             _builder.PositionAtEnd(block0);
         }
 
+        private static LLVMMetadataRef m = default;
+        private LLVMMetadataRef GetDIType(TypeDesc type)
+        {
+            //TODO cache
+            if (m.Handle == IntPtr.Zero)
+            {
+                m = LLVMSharpInterop.DIBuilderCreateBasicType(_compilation.DIBuilder, type.ToString(), (uint)type.GetElementSize().AsInt, 0, LLVMDIFlags.LLVMDIFlagZero);
+            }
+            return m;
+        }
+
         private LLVMValueRef CreateLLVMFunction(string mangledName, MethodSignature signature, bool hasHiddenParameter)
         {
             return Module.AddFunction(mangledName, GetLLVMSignatureForMethod(signature, hasHiddenParameter));
@@ -482,7 +515,10 @@ namespace Internal.IL
                 var funcletArgs = new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }; 
                 LLVMTypeRef universalFuncletSignature = LLVMTypeRef.CreateFunction(returnType, funcletArgs, false);
                 funclet = Module.AddFunction(funcletName, universalFuncletSignature);
-
+                if (_debugFunction.Handle != IntPtr.Zero)
+                {
+                    LLVMSharpInterop.DISetSubProgram(funclet, _debugFunction);
+                }
                 _exceptionFunclets.Add(funclet);
             }
 
