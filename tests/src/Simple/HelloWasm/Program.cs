@@ -2,13 +2,12 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Linq;
-using System.Linq.Expressions;
 using System.Threading;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Diagnostics;
 
 #if TARGET_WINDOWS
 using CpObj;
@@ -33,10 +32,9 @@ internal static class Program
 
         TestBox();
 
-        TestSByteExtend();
+        TestSByteExtend(); 
         TestMetaData();
 
-        TestJsInterop();
         TestGC();
 
         Add(1, 2);
@@ -313,10 +311,6 @@ internal static class Program
 
         TestInitObjDouble();
 
-        TestDefaultCtorOf<ClassForMetaTests>(); // class with a default ctor
-
-
-
         TestTryCatch();
 
         StartTest("Non/GCStatics field access test");
@@ -331,17 +325,16 @@ internal static class Program
 
         TestSByteExtend();
 
+        TestSharedDelegate();
+
         TestUlongUintMultiply();
 
         TestBoxSingle();
 
-        TestInitializeArray();
+        TestGvmCallInIf(new GenDerived<string>(), "hello");
 
         TestStoreFromGenericMethod();
 
-        TestGvmCallInIf(new GenDerived<string>(), "hello");
-
-        TestLdTokenMethod();
         TestConstrainedValueTypeCallVirt();
 
         TestBoxToGenericTypeFromDirectMethod();
@@ -366,6 +359,8 @@ internal static class Program
 
         TestIntOverflows();
 
+        TestStackTrace();
+
         TestJavascriptCall();
 
         TestDefaultConstructorOf();
@@ -378,10 +373,6 @@ internal static class Program
         return Success ? 100 : -1;
     }
 
-    private static void TestJsInterop()
-    {
-    }
-    
     private static void TestGC()
     {
         StartTest("GC");
@@ -1345,7 +1336,7 @@ internal static class Program
         return result;
     }
 
-    class GenBase<A>
+    class GenBase<A> 
     {
         public virtual string GMethod1<T>(T t1, T t2) { return "GenBase<" + typeof(A) + ">.GMethod1<" + typeof(T) + ">(" + t1 + "," + t2 + ")"; }
     }
@@ -1388,21 +1379,7 @@ internal static class Program
         var dict = new Dictionary<KeyValuePair<string, string>, string>();
         var notContainsKey = dict.ContainsKey(new KeyValuePair<string, string>());
 
-        // just testing can store the returned struct
-        new GenClassThatStoresGenReturn<string>(new Dictionary<string, string>());
-        
         EndTest(!notContainsKey);
-    }
-
-    private class GenClassThatStoresGenReturn<TKey>
-    {
-        private Dictionary<TKey, string>.ValueCollection.Enumerator _enumerator;
-
-        internal GenClassThatStoresGenReturn(Dictionary<TKey, string> table)
-        {
-            // testing the return value from the generic method can be stored in the field
-            _enumerator = table.Values.GetEnumerator();
-        }
     }
 
     private static void TestBoxToGenericTypeFromDirectMethod()
@@ -1663,6 +1640,8 @@ internal static class Program
         TestFilterNested();
 
         TestCatchAndThrow();
+
+        TestRethrow();
     }
 
     private static void TestTryCatchNoException()
@@ -1873,6 +1852,32 @@ internal static class Program
         }
         PrintLine(exceptionFlowSequence);
         EndTest(exceptionFlowSequence == @"In middle catchRunning outer filterIn outer catchRunning inner filterIn inner catch");
+    }
+
+    private static void TestRethrow()
+    {
+        StartTest("Test rethrow");
+        int caught = 0;
+        try
+        {
+            try
+            {
+                throw new Exception("first");
+            }
+            catch
+            {
+                caught++;
+                throw;
+            }
+        }
+        catch(Exception e)
+        {
+            if (e.Message == "first")
+            {
+                caught++;
+            }
+        }
+        EndTest(caught == 2);
     }
 
     private static void TestCatchAndThrow()
@@ -2100,7 +2105,22 @@ internal static class Program
         }
 
         StartTest("Negative SByte br");
-        EndTest(ILHelpers.ILHelpersTest.BneSbyteExtend());
+        if (s == -1) // this only creates the bne opcode, which it is testing, in Release mode.
+        {
+            PassTest();
+        }
+        else
+        {
+            FailTest();
+        }
+    }
+
+    public static void TestSharedDelegate()
+    {
+        StartTest("Shared Delegate");
+        var shouldBeFalse = SampleClassWithGenericDelegate.CallDelegate(new object[0]);
+        var shouldBeTrue = SampleClassWithGenericDelegate.CallDelegate(new object[1]);
+        EndTest(!shouldBeFalse && shouldBeTrue);
     }
 
     internal static void TestUlongUintMultiply()
@@ -2150,16 +2170,6 @@ internal static class Program
 
         PassTest();
     }
-
-    static void TestSystemNative_GetSystemTimeAsTicks()
-    {
-        StartTest("TestSystemNative_GetSystemTimeAsTicks");
-
-        DateTime d = DateTime.UtcNow;
-        PrintLine(d.ToString("dd/MM/yy HH:mm:ss"));
-
-        EndTest(d.Year >= 2020);
-}
 
     static void TestImplicitUShortToUInt()
     {
@@ -2316,6 +2326,10 @@ internal static class Program
         TestUnsignedIntMulOvf();
 
         TestUnsignedLongMulOvf();
+
+        TestSignedIntMulOvf();
+
+        TestSignedLongMulOvf();
     }
 
     private static void TestSignedLongAddOvf()
@@ -2627,7 +2641,7 @@ internal static class Program
 
     private static void TestUnsignedIntMulOvf()
     {
-        StartTest("Test uint multiple overflows");
+        StartTest("Test uint multiply overflows");
         bool thrown;
         uint op32l = 10;
         uint op32r = 20;
@@ -2652,12 +2666,28 @@ internal static class Program
             FailTest("exception not thrown for unsigned i32 multiply of numbers");
             return;
         }
+        op32l = 0;
+        op32r = 0; // check does a division so make sure this case is handled
+        thrown = false;
+        try
+        {
+            uint res = checked(op32l * op32r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (thrown)
+        {
+            FailTest("exception not thrown for unsigned i32 multiply of zeros");
+            return;
+        }
         PassTest();
     }
 
     private static void TestUnsignedLongMulOvf()
     {
-        StartTest("Test ulong multiple overflows");
+        StartTest("Test ulong multiply overflows");
         bool thrown;
         ulong op64l = 10;
         ulong op64r = 20;
@@ -2682,16 +2712,159 @@ internal static class Program
             FailTest("exception not thrown for unsigned i64 multiply of numbers");
             return;
         }
+        op64l = 0;
+        op64r = 0; // check does a division so make sure this case is handled
+        thrown = false;
+        try
+        {
+            ulong res = checked(op64l * op64r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (thrown)
+        {
+            FailTest("exception not thrown for unsigned i64 multiply of zeros");
+            return;
+        }
         PassTest();
     }
 
-    static void TestDefaultCtorOf<T>() where T: new()
+    private static void TestSignedIntMulOvf()
     {
-        StartTest("Test DefaultConstructorOf");
+        StartTest("Test int multiply overflows");
+        bool thrown;
+        int op32l = 10;
+        int op32r = -20;
+        if (checked(op32l * op32r) != -200)
+        {
+            FailTest("No overflow failed"); // check not always throwing an exception
+            return;
+        }
+        op32l = 2;
+        op32r = (int.MaxValue >> 1) + 1;
+        thrown = false;
+        try
+        {
+            int res = checked(op32l * op32r);
+            PrintLine("should have overflow but was " + res.ToString());
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for signed i32 multiply overflow");
+            return;
+        }
+        op32l = 2;
+        op32r = (int.MinValue >> 1) - 1;
+        thrown = false;
+        try
+        {
+            int res = checked(op32l * op32r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for signed i32 multiply underflow");
+            return;
+        }
+        op32l = 0;
+        op32r = 0; // check does a division so make sure this case is handled
+        thrown = false;
+        try
+        {
+            int res = checked(op32l * op32r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (thrown)
+        {
+            FailTest("exception not thrown for signed i32 multiply of zeros");
+            return;
+        }
 
-        var o = new T();
+        PassTest();
+    }
 
-        EndTest(o.GetType().Name == "ClassForMetaTests");
+    private static void TestSignedLongMulOvf()
+    {
+        StartTest("Test long multiply overflows");
+        bool thrown;
+        long op64l = 10;
+        long op64r = -20;
+        if (checked(op64l * op64r) != -200)
+        {
+            FailTest("No overflow failed"); // check not always throwing an exception
+            return;
+        }
+        op64l = 2;
+        op64r = (long.MaxValue >> 1) + 1;
+        thrown = false;
+        try
+        {
+            long res = checked(op64l * op64r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for signed i64 multiply overflow");
+            return;
+        }
+        op64l = 2;
+        op64r = (long.MinValue >> 1) - 1;
+        thrown = false;
+        try
+        {
+            long res = checked(op64l * op64r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (!thrown)
+        {
+            FailTest("exception not thrown for signed i64 multiply underflow");
+            return;
+        }
+        op64l = 0;
+        op64r = 0; // check does a division so make sure this case is handled
+        thrown = false;
+        try
+        {
+            long res = checked(op64l * op64r);
+        }
+        catch (OverflowException)
+        {
+            thrown = true;
+        }
+        if (thrown)
+        {
+            FailTest("exception not thrown for signed i64 multiply of zeros");
+            return;
+        }
+        PassTest();
+    }
+
+    private static unsafe void TestStackTrace()
+    {
+        StartTest("Test StackTrace");
+#if DEBUG
+        EndTest(new StackTrace().ToString().Contains("TestStackTrace"));
+#else
+        EndTest(new StackTrace().ToString().Contains("wasm-function"));
+#endif
     }
 
     static void TestJavascriptCall()
@@ -2714,17 +2887,6 @@ internal static class Program
     {
         // something with MSB set
         return 0x828f;
-    }
-
-    static void TestLdTokenMethod()
-    {
-        StartTest("Test ldtoken method");
-        var methodBase = (MethodBase)ILHelpers.ILHelpersTest.LdMethodToken();
-
-        var r1 = (int)methodBase.Invoke(null, new object[] { 1 });
-        var r2 = (int)methodBase.Invoke(null, new object[] { 2 });
-
-        EndTest(r1 == 1 && r2 == 2);
     }
 
     // there's no actual implementation for this we just want the reverse delegate created
