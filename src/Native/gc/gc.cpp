@@ -3435,10 +3435,6 @@ void gc_heap::seg_mapping_table_remove_segment (heap_segment* seg)
     dprintf (1, ("removing seg %Ix(%d)-%Ix(%d)",
         seg, begin_index, heap_segment_reserved (seg), end_index));
 
-    if(end_entry->boundary != (uint8_t*)seg_end)
-    {
-        printf("(end_entry->boundary %d  seg_end %d\n", end_entry->boundary, (uint8_t*)seg_end);
-    }
     assert (end_entry->boundary == (uint8_t*)seg_end);
     end_entry->boundary = 0;
 
@@ -4329,8 +4325,7 @@ static size_t get_valid_segment_size (BOOL large_seg=FALSE)
     seg_size = round_down_power2 (seg_size);
 #endif // HOST_64BIT
 
-//    return (seg_size);
-    return 104857600 * 2;
+    return (seg_size);
 }
 
 void
@@ -37794,7 +37789,7 @@ size_t gc_heap::get_gen0_min_size()
     size_t seg_size = gc_heap::soh_segment_size;
     printf("getn_gen0 %d\n", seg_size);
     assert (seg_size);
-    printf("getn_gen0 seg_size %d ok gen0size %d\n", seg_size, gen0size);
+    printf("getn_gen0 %d ok\n", seg_size);
 
     // Generation 0 must never be more than 1/2 the segment size.
     if (gen0size >= (seg_size / 2))
@@ -37818,7 +37813,6 @@ size_t gc_heap::get_gen0_min_size()
 
     gen0size = Align (gen0size);
 
-    printf("gen0size %d\n", gen0size);
     return gen0size;
 }
 
