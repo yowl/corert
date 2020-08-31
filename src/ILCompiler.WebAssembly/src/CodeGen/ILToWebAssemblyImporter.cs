@@ -325,6 +325,10 @@ namespace Internal.IL
             string[] localNames = new string[_locals.Length];
             LLVMMetadataRef[] debugVars = new LLVMMetadataRef[_locals.Length];
             LLVMMetadataRef diLocation = default;
+            if(_mangledName == "Uno_Windows_UI_Core_CoreDispatcher__DispatchItems")
+            {
+
+            }
             if (_debugInformation != null)
             {
                 ILSequencePoint curSequencePoint = GetSequencePoint(_currentOffset);
@@ -514,10 +518,10 @@ namespace Internal.IL
                 var funcletArgs = new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }; 
                 LLVMTypeRef universalFuncletSignature = LLVMTypeRef.CreateFunction(returnType, funcletArgs, false);
                 funclet = Module.AddFunction(funcletName, universalFuncletSignature);
-                if (_debugFunction.Handle != IntPtr.Zero)
-                {
-                    LLVMSharpInterop.DISetSubProgram(funclet, _debugFunction);
-                }
+                //if (_debugFunction.Handle != IntPtr.Zero)
+                //{
+                //    LLVMSharpInterop.DISetSubProgram(funclet, _debugFunction);
+                //}
                 _exceptionFunclets.Add(funclet);
             }
 
@@ -3990,17 +3994,6 @@ namespace Internal.IL
                         }
                         break;
                     case ILOpcode.mul_ovf_un:
-                        Debug.Assert(type.Category == TypeFlags.UInt32 || type.Category == TypeFlags.Int32 || type.Category == TypeFlags.UInt64 || type.Category == TypeFlags.Int64 || type.Category == TypeFlags.Pointer || type.Category == TypeFlags.UIntPtr);
-                        if (type.Category == TypeFlags.UInt32 || type.Category == TypeFlags.Int32 || type.Category == TypeFlags.Pointer || type.Category == TypeFlags.UIntPtr)
-                        {
-                            BuildMulOverflowChecksForSize(ref MulOvfUn32Function, left, right, LLVMTypeRef.Int32, BuildConstUInt32(uint.MaxValue), BuildConstInt32(0), false);
-                        }
-                        else
-                        {
-                            BuildMulOverflowChecksForSize(ref MulOvfUn64Function, left, right, LLVMTypeRef.Int64, BuildConstUInt64(ulong.MaxValue), BuildConstInt64(0), false);
-                        }
-                        result = _builder.BuildMul(left, right, "mul");
-                        break;
                         Debug.Assert(CanPerformUnsignedOverflowOperations(op1.Kind));
                         if (Is32BitStackValue(op1.Kind))
                         {
@@ -4063,22 +4056,6 @@ namespace Internal.IL
         }
 
         bool CanPerformSignedOverflowOperations(StackValueKind kind)
-            string throwFuncName, out LLVMValueRef leftOp, out LLVMValueRef rightOp, out LLVMBuilderRef builder, 
-            out LLVMBasicBlockRef ovfBlock, out LLVMBasicBlockRef noOvfBlock)
-        {
-            LLVMValueRef llvmCheckFunction = Module.AddFunction(throwFuncName,
-                LLVMTypeRef.CreateFunction(LLVMTypeRef.Void,
-                    new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), sizeTypeRef, sizeTypeRef }, false));
-            leftOp = llvmCheckFunction.GetParam(1);
-            rightOp = llvmCheckFunction.GetParam(2);
-            builder = Context.CreateBuilder();
-            var block = llvmCheckFunction.AppendBasicBlock("Block");
-            builder.PositionAtEnd(block);
-            ovfBlock = llvmCheckFunction.AppendBasicBlock("ovfBlock");
-            noOvfBlock = llvmCheckFunction.AppendBasicBlock("noOvfBlock");
-            return llvmCheckFunction;
-        }
-
         {
             return kind == StackValueKind.Int32 || kind == StackValueKind.Int64;
         }
