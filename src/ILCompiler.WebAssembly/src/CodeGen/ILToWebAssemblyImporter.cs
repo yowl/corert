@@ -1878,6 +1878,7 @@ namespace Internal.IL
             TypeDesc localConstrainedType = _constrainedType;
             _constrainedType = null;
 
+            bool call = true;
             if (opcode == ILOpcode.newobj)
             {
                 TypeDesc newType = callee.OwningType;
@@ -1956,9 +1957,28 @@ namespace Internal.IL
                             MetadataType metadataType = (MetadataType)typeToAlloc;
                             newObjResult = AllocateObject(new LoadExpressionEntry(StackValueKind.ValueType, "eeType", GetEETypePointerForTypeDesc(metadataType, true), GetWellKnownType(WellKnownType.IntPtr)), typeToAlloc);
                         }
+                        if (_mangledName == "HelloWasm_Program__TestFilterNested")
+                        {
+                            if (aPtr.Handle != IntPtr.Zero)
+                            {
+                                int offset = GetTotalParameterOffset() + GetTotalLocalOffset();
+                                LLVMValueRef shadowStack = _builder.BuildGEP(_currentFunclet.GetParam(0),
+                                    new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)offset + 100, false), },
+                                    String.Empty);
+                                PrintInt32(BuildConstInt32(64), shadowStack);
 
+                                PrintInt32(_builder.BuildPtrToInt(aPtr, LLVMTypeRef.Int32), shadowStack);
+                                var lenAddr = _builder.BuildGEP(aPtr, new[] { BuildConstInt32(4) });
+                                var len = CastIfNecessaryAndLoad(_builder, lenAddr, GetWellKnownType(WellKnownType.Int32), "len");
+                                PrintInt32(BuildConstInt32(65), shadowStack);
+                                PrintInt32(len, shadowStack); 
+                                PrintInt32(BuildConstInt32(66), shadowStack);
+                                PrintInt32(newObjResult.ValueAsInt32(_builder, false), shadowStack);
+                                //call = false;
+                            }
+                        }
                         //one for the real result and one to be consumed by ctor
-                        _stack.InsertAt(newObjResult, _stack.Top - callee.Signature.Length);
+                        if(call) _stack.InsertAt(newObjResult, _stack.Top - callee.Signature.Length);
                         _stack.InsertAt(newObjResult, _stack.Top - callee.Signature.Length);
                     }
                 }
@@ -2064,8 +2084,7 @@ namespace Internal.IL
                     PushExpression(StackValueKind.NativeInt, "thunk", GetOrCreateLLVMFunction(_compilation.NodeFactory.NameMangler.GetMangledMethodName(delegateInfo.Thunk.Method).ToString(), delegateInfo.Thunk.Method.Signature, false));
                 }
             }
-
-            HandleCall(callee, callee.Signature, runtimeDeterminedMethod, opcode, localConstrainedType);
+            if(call)  HandleCall(callee, callee.Signature, runtimeDeterminedMethod, opcode, localConstrainedType);
         }
 
         private LLVMValueRef LLVMFunctionForMethod(MethodDesc callee, MethodDesc canonMethod, StackEntry thisPointer, bool isCallVirt,
@@ -3000,7 +3019,7 @@ namespace Internal.IL
 
             landingPadBuilder.PositionAtEnd(foundCatchBlock);
             // finished with the c++ exception
-            landingPadBuilder.BuildCall(GetCxaEndCatchFunction(), new LLVMValueRef[] { });
+//            landingPadBuilder.BuildCall(GetCxaEndCatchFunction(), new LLVMValueRef[] { });
 
             LLVMValueRef[] callCatchArgs = new LLVMValueRef[]
                                   {
@@ -4416,6 +4435,18 @@ namespace Internal.IL
 
         void ThrowOrRethrow(StackEntry exceptionObject)
         {
+            int offset = GetTotalParameterOffset() + GetTotalLocalOffset();
+            LLVMValueRef shadowStack = _builder.BuildGEP(_currentFunclet.GetParam(0),
+                new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)offset, false) },
+                String.Empty);
+            LLVMValueRef exSlot = _builder.BuildBitCast(shadowStack, LLVMTypeRef.CreatePointer(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), 0));
+            _builder.BuildStore(exceptionObject.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), exSlot);
+            LLVMValueRef[] llvmArgs = new LLVMValueRef[] { shadowStack };
+            MetadataType helperType = _compilation.TypeSystemContext.SystemModule.GetKnownType("System", "Exception");
+            MethodDesc helperMethod = helperType.GetKnownMethod("DispatchExWasm", null);
+            LLVMValueRef fn = LLVMFunctionForMethod(helperMethod, helperMethod, null, false, null, null, out bool hasHiddenParam, out LLVMValueRef dictPtrPtrStore, out LLVMValueRef fatFunctionPtr);
+            _builder.BuildCall(fn, llvmArgs, string.Empty);
+
             if (RhpThrowEx.Handle.Equals(IntPtr.Zero))
             {
                 RhpThrowEx = Module.AddFunction("RhpThrowEx", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }, false));
@@ -4480,26 +4511,26 @@ namespace Internal.IL
 
         private void ThrowIfNull(LLVMValueRef entry)
         {
-            if (NullRefFunction.Handle == IntPtr.Zero)
-            {
-                NullRefFunction = Module.AddFunction("corert.throwifnull", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }, false));
-                var builder = Context.CreateBuilder();
-                var block = NullRefFunction.AppendBasicBlock("Block");
-                var throwBlock = NullRefFunction.AppendBasicBlock("ThrowBlock");
-                var retBlock = NullRefFunction.AppendBasicBlock("RetBlock");
-                builder.PositionAtEnd(block);
-                builder.BuildCondBr(builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, NullRefFunction.GetParam(1), LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)), "nullCheck"),
-                    throwBlock, retBlock);
-                builder.PositionAtEnd(throwBlock);
-                
-                ThrowException(builder, "ThrowHelpers", "ThrowNullReferenceException", NullRefFunction);
-
-                builder.PositionAtEnd(retBlock);
-                builder.BuildRetVoid();
-            }
-
-            LLVMBasicBlockRef nextInstrBlock = default;
-            CallOrInvoke(false, _builder, GetCurrentTryRegion(), NullRefFunction, new LLVMValueRef[] { GetShadowStack(), entry }, ref nextInstrBlock);
+            // if (NullRefFunction.Handle == IntPtr.Zero)
+            // {
+            //     NullRefFunction = Module.AddFunction("corert.throwifnull", LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }, false));
+            //     var builder = Context.CreateBuilder();
+            //     var block = NullRefFunction.AppendBasicBlock("Block");
+            //     var throwBlock = NullRefFunction.AppendBasicBlock("ThrowBlock");
+            //     var retBlock = NullRefFunction.AppendBasicBlock("RetBlock");
+            //     builder.PositionAtEnd(block);
+            //     builder.BuildCondBr(builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, NullRefFunction.GetParam(1), LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)), "nullCheck"),
+            //         throwBlock, retBlock);
+            //     builder.PositionAtEnd(throwBlock);
+            //     
+            //     ThrowException(builder, "ThrowHelpers", "ThrowNullReferenceException", NullRefFunction);
+            //
+            //     builder.PositionAtEnd(retBlock);
+            //     builder.BuildRetVoid();
+            // }
+            //
+            // LLVMBasicBlockRef nextInstrBlock = default;
+            // CallOrInvoke(false, _builder, GetCurrentTryRegion(), NullRefFunction, new LLVMValueRef[] { GetShadowStack(), entry }, ref nextInstrBlock);
         }
 
         private void ThrowCkFinite(LLVMValueRef value, int size, ref LLVMValueRef llvmCheckFunction)
@@ -4969,22 +5000,46 @@ namespace Internal.IL
             TypeDesc runtimeDeterminedArrayType = runtimeDeterminedType.MakeArrayType();
             var sizeOfArray = _stack.Pop();
             StackEntry[] arguments;
-            var eeTypeDesc = _compilation.TypeSystemContext.SystemModule.GetKnownType("Internal.Runtime", "EEType").MakePointerType();
+            var eeTypeDesc = _compilation.TypeSystemContext.SystemModule.GetKnownType("Internal.Runtime", "EEType")
+                .MakePointerType();
             if (runtimeDeterminedArrayType.IsRuntimeDeterminedSubtype)
             {
                 var lookedUpType = CallGenericHelper(ReadyToRunHelperId.TypeHandle, runtimeDeterminedArrayType);
-                arguments = new StackEntry[] { new ExpressionEntry(StackValueKind.ValueType, "eeType", lookedUpType, eeTypeDesc), sizeOfArray };
+                arguments = new StackEntry[]
+                {
+                    new ExpressionEntry(StackValueKind.ValueType, "eeType", lookedUpType, eeTypeDesc), sizeOfArray
+                };
             }
             else
             {
-                arguments = new StackEntry[] { new LoadExpressionEntry(StackValueKind.ValueType, "eeType", GetEETypePointerForTypeDesc(runtimeDeterminedArrayType, true), eeTypeDesc), sizeOfArray };
+                arguments = new StackEntry[]
+                {
+                    new LoadExpressionEntry(StackValueKind.ValueType, "eeType",
+                        GetEETypePointerForTypeDesc(runtimeDeterminedArrayType, true), eeTypeDesc),
+                    sizeOfArray
+                };
             }
             var helper = GetNewArrayHelperForType(runtimeDeterminedArrayType);
-            PushNonNull(CallRuntime(_compilation.TypeSystemContext, InternalCalls, helper, arguments, runtimeDeterminedArrayType));
+            var res = CallRuntime(_compilation.TypeSystemContext, InternalCalls, helper, arguments,
+                runtimeDeterminedArrayType);
+            PushNonNull(res);
+            if (_mangledName == "HelloWasm_Program__TestFilterNested")
+            {
+                // PrintInt32(BuildConstInt32(64));
+                aPtr = res.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder);
+                
+                // PrintInt32(_builder.BuildPtrToInt(aPtr, LLVMTypeRef.Int32));
+                // var lenAddr = _builder.BuildGEP(aPtr, new[] { BuildConstInt32(4) });
+                // var len = CastIfNecessaryAndLoad(_builder, lenAddr, GetWellKnownType(WellKnownType.Int32), "len");
+                // PrintInt32(BuildConstInt32(65));
+                // PrintInt32(len); // prints 3 and "fixes" it 
+            }
         }
 
+        LLVMValueRef aPtr = default;
+
         //TODO: copy of the same method in JitHelper.cs but that is internal
-        public static string GetNewArrayHelperForType(TypeDesc type)
+            public static string GetNewArrayHelperForType(TypeDesc type)
         {
             if (type.RequiresAlign8())
                 return "RhpNewArrayAlign8";
@@ -5052,6 +5107,44 @@ namespace Internal.IL
             PushLoadExpression(GetStackValueKind(nullSafeElementType), $"{arrayReference.Name()}Element", GetElementAddress(index.ValueAsInt32(_builder, true), arrayReference.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), nullSafeElementType), nullSafeElementType);
         }
 
+
+        void PrintInt32(LLVMValueRef ptr)
+        {
+            int offset = GetTotalParameterOffset() + GetTotalLocalOffset();
+            LLVMValueRef shadowStack = _builder.BuildGEP(_currentFunclet.GetParam(0),
+                new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)offset, false), },
+                String.Empty);
+            _builder.BuildCall(
+                GetOrCreateLLVMFunction("S_P_TypeLoader_System_Collections_Generic_X__PrintUint",
+                    LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new[]
+                        {
+                            LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0),
+                            LLVMTypeRef.Int32
+                        },
+                        false)),
+                new LLVMValueRef[]
+                {
+                    CastIfNecessary(_builder, shadowStack, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)),
+                    ptr
+                }, string.Empty);
+        }
+
+        void PrintInt32(LLVMValueRef ptr, LLVMValueRef shadowStack)
+        {
+            _builder.BuildCall(
+                GetOrCreateLLVMFunction("S_P_TypeLoader_System_Collections_Generic_X__PrintUint",
+                    LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new[]
+                        {
+                            LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0),
+                            LLVMTypeRef.Int32
+                        },
+                        false)),
+                new LLVMValueRef[]
+                {
+                    CastIfNecessary(_builder, shadowStack, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)),
+                    ptr
+                }, string.Empty);
+        }
         private void ImportStoreElement(int token)
         {
             ImportStoreElement(ResolveTypeToken(token));
@@ -5063,8 +5156,27 @@ namespace Internal.IL
             StackEntry index = _stack.Pop();
             StackEntry arrayReference = _stack.Pop();
             var nullSafeElementType = elementType ?? GetWellKnownType(WellKnownType.Object);
+
+            LLVMValueRef lenAddr = default;
+            if (_mangledName == "HelloWasm_Program__TestFilterNested")
+            {
+                var aPtr = arrayReference.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder);
+                PrintInt32(BuildConstInt32(32));
+                PrintInt32(_builder.BuildPtrToInt(aPtr, LLVMTypeRef.Int32));
+                lenAddr = _builder.BuildGEP(aPtr, new[] {BuildConstInt32(4)});
+                var len = CastIfNecessaryAndLoad(_builder, lenAddr, GetWellKnownType(WellKnownType.Int32), "len");
+                PrintInt32(BuildConstInt32(33));
+                PrintInt32(len);
+            }
             LLVMValueRef elementAddress = GetElementAddress(index.ValueAsInt32(_builder, true), arrayReference.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), nullSafeElementType);
             CastingStore(elementAddress, value, nullSafeElementType, true);
+
+            if (_mangledName == "HelloWasm_Program__TestFilterNested")
+            {
+                var len2 = CastIfNecessaryAndLoad(_builder, lenAddr, GetWellKnownType(WellKnownType.Int32), "len");
+                PrintInt32(BuildConstInt32(34));
+                PrintInt32(len2);
+            }
         }
 
         private void ImportLoadLength()

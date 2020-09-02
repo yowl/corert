@@ -1824,32 +1824,41 @@ internal static class Program
     private static void TestFilterNested()
     {
         StartTest("TestFilterNested");
-        foreach (var exception in new Exception[]
-            {new ArgumentException(), new Exception(), new NullReferenceException()})
-        {
-            try
-            {
-                try
-                {
-                    try
-                    {
-                        throw exception;
-                    }
-                    catch (NullReferenceException) when (Print("inner"))
-                    {
-                        exceptionFlowSequence += "In inner catch";
-                    }
-                }
-                catch (ArgumentException)
-                {
-                    exceptionFlowSequence += "In middle catch";
-                }
-            }
-            catch (Exception) when (Print("outer"))
-            {
-                exceptionFlowSequence += "In outer catch";
-            }
-        }
+        //var a = new Exception[] {new ArgumentException(), new Exception(), new NullReferenceException()};
+        var a = new Exception[] { new ArgumentException(), null, null};
+
+        PrintLine(a.Length.ToString());
+        PrintLine("for");
+        //foreach (var exception in a)
+        //{
+        //    PrintLine("for");
+        //try
+        //{
+        //    try
+        //    {
+        //        try
+        //        {
+        //            PrintLine("throwing");
+        //            throw exception;
+        //        }
+        //        catch (NullReferenceException)// when (Print("inner"))
+        //        {
+        //            PrintLine("catch 1");
+        //            exceptionFlowSequence += "In inner catch";
+        //        }
+        //    }
+        //    catch (ArgumentException)
+        //    {
+        //        PrintLine("catch 2");
+        //        exceptionFlowSequence += "In middle catch";
+        //    }
+        //}
+        //catch (Exception)// when (Print("outer"))
+        //{
+        //    PrintLine("catch 3");
+        //    exceptionFlowSequence += "In outer catch";
+        //}
+        //}
         PrintLine(exceptionFlowSequence);
         EndTest(exceptionFlowSequence == @"In middle catchRunning outer filterIn outer catchRunning inner filterIn inner catch");
     }
@@ -1909,6 +1918,7 @@ internal static class Program
     static bool Print(string s)
     {
         exceptionFlowSequence += $"Running {s} filter";
+        PrintLine(s);
         return true;
     }
     

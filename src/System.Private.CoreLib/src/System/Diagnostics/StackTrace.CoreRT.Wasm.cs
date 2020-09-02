@@ -18,9 +18,10 @@ namespace System.Diagnostics
         {
             var backtraceBuffer = new byte[8192];
             int callstackLen;
-            // skip these 2:
+            // skip these 3:
             // at S_P_CoreLib_System_Diagnostics_StackTrace__InitializeForCurrentThread (wasm-function[12314]:275)
             // at S_P_CoreLib_System_Diagnostics_StackTrace___ctor_0(wasm-function[12724]:118)
+            // at S_P_CoreLib_System_Exception__DispatchExWasm(wasm-function[2360]:39)
             skipFrames += 2; // METHODS_TO_SKIP is a constant so just change here
 
             fixed (byte* curChar = backtraceBuffer)

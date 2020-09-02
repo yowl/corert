@@ -155,6 +155,8 @@ COOP_PINVOKE_HELPER(Array *, RhpNewArray, (EEType * pArrayEEType, int numElement
         pObject = (Array *)result;
         pObject->set_EEType(pArrayEEType);
         pObject->InitArrayLength((UInt32)numElements);
+//        printf("array base size %d component size %d size %d\n",  (size_t)pArrayEEType->get_BaseSize(), (size_t)pArrayEEType->get_ComponentSize(), size);
+ //       printf("array numElements %d pObject %p\n", numElements, pObject);
         return pObject;
     }
 
