@@ -1103,6 +1103,29 @@ namespace Internal.IL
                 new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, offset, false) },
                 String.Empty);
             var typedStoreLocation = CastIfNecessary(builder, storeLocation, LLVMTypeRef.CreatePointer(valueType, 0), "TypedStore" + (name ?? ""));
+            if (_mangledName == "S_P_CoreLib_System_SystemException___ctor")
+            {
+                PrintArrayLength(513);
+
+                int offset2 = GetTotalParameterOffset() + GetTotalLocalOffset();
+                    LLVMValueRef shadowStack = _builder.BuildGEP(_currentFunclet.GetParam(0),
+                        new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)offset2 + 100, false), },
+                        String.Empty);
+                    PrintInt32(BuildConstInt32(256), shadowStack);
+                    PrintInt32(_builder.BuildPtrToInt(typedStoreLocation, LLVMTypeRef.Int32), shadowStack);
+                    PrintArrayLength(514);
+
+            }
+            // if (_mangledName == "S_P_CoreLib_System_Exception___ctor_0")
+            // {
+            //     int offset2 = GetTotalParameterOffset() + GetTotalLocalOffset();
+            //     LLVMValueRef shadowStack = _builder.BuildGEP(_currentFunclet.GetParam(0),
+            //         new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)offset2 + 100, false), },
+            //         String.Empty);
+            //     PrintInt32(BuildConstInt32(258), shadowStack);
+            //     PrintInt32(_builder.BuildPtrToInt(typedStoreLocation, LLVMTypeRef.Int32), shadowStack);
+            // }
+
             builder.BuildStore(typedToStore, typedStoreLocation);
         }
 
@@ -1123,6 +1146,16 @@ namespace Internal.IL
 
         private void CastingStore(LLVMValueRef address, StackEntry value, TypeDesc targetType, bool withGCBarrier, string targetName = null)
         {
+            if (_mangledName == "S_P_CoreLib_System_Exception___ctor_0")
+            {
+                    LLVMValueRef shadowStack2 = _builder.BuildGEP(GetShadowStack(),
+                        new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)1000, false), },
+                        String.Empty);
+                    PrintInt32(BuildConstInt32(257), shadowStack2);
+                    PrintInt32(_builder.BuildPtrToInt(address, LLVMTypeRef.Int32), shadowStack2);
+                    PrintArrayLength(514);
+            }
+
             if (withGCBarrier && targetType.IsGCPointer)
             {
                 CallRuntime(_method.Context, "InternalCalls", "RhpAssignRef", new StackEntry[]
@@ -1968,12 +2001,17 @@ namespace Internal.IL
                                 PrintInt32(BuildConstInt32(64), shadowStack);
 
                                 PrintInt32(_builder.BuildPtrToInt(aPtr, LLVMTypeRef.Int32), shadowStack);
+
+                                var add = ArrayLocation;
+                                _builder.BuildStore(aPtr, add);
                                 var lenAddr = _builder.BuildGEP(aPtr, new[] { BuildConstInt32(4) });
                                 var len = CastIfNecessaryAndLoad(_builder, lenAddr, GetWellKnownType(WellKnownType.Int32), "len");
                                 PrintInt32(BuildConstInt32(65), shadowStack);
                                 PrintInt32(len, shadowStack); 
                                 PrintInt32(BuildConstInt32(66), shadowStack);
                                 PrintInt32(newObjResult.ValueAsInt32(_builder, false), shadowStack);
+                                PrintInt32(BuildConstInt32(67), shadowStack);
+                                PrintInt32(_builder.BuildPtrToInt(shadowStack, LLVMTypeRef.Int32), shadowStack);
                                 //call = false;
                             }
                         }
@@ -2084,7 +2122,177 @@ namespace Internal.IL
                     PushExpression(StackValueKind.NativeInt, "thunk", GetOrCreateLLVMFunction(_compilation.NodeFactory.NameMangler.GetMangledMethodName(delegateInfo.Thunk.Method).ToString(), delegateInfo.Thunk.Method.Signature, false));
                 }
             }
-            if(call)  HandleCall(callee, callee.Signature, runtimeDeterminedMethod, opcode, localConstrainedType);
+            if (_mangledName == "S_P_CoreLib_System_SystemException___ctor")
+            {
+                PrintArrayLength(514);
+            }
+            if (_mangledName == "S_P_CoreLib_System_Exception___ctor")
+            {
+                PrintArrayLength(512);
+                //call = false;
+            }
+            if (_mangledName == "S_P_CoreLib_System_SR__GetResourceString_0")
+            {
+                PrintArrayLength(515 + methodIx++);
+                //call = false;
+            }
+
+            if (_mangledName == "S_P_CoreLib_System_SR__InternalGetResourceString")
+            {
+                PrintArrayLength(128 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_CoreLib_System_Resources_ResourceManager__GetString_0")
+            {
+                PrintArrayLength(144 + methodIx++);
+                //call = false;
+            }
+
+            else if (_mangledName == "S_P_CoreLib_System_Resources_ResourceManager__InternalGetResourceSet")
+            {
+                PrintArrayLength(160 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_CoreLib_System_Resources_ManifestBasedResourceGroveler__GrovelForResourceSet")
+            {
+                PrintArrayLength(208 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_CoreLib_System_Resources_ManifestBasedResourceGroveler__CreateResourceSet")
+            {
+                PrintArrayLength(592 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_CoreLib_System_Resources_RuntimeResourceSet___ctor_0")
+            {
+                PrintArrayLength(640 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_CoreLib_System_Collections_Generic_Dictionary_2<System___Canon__S_P_CoreLib_System_Resources_ResourceLocator>___ctor_1")
+            {
+                PrintArrayLength(656 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_CoreLib_System_Collections_Generic_Dictionary_2<System___Canon__S_P_CoreLib_System_Resources_ResourceLocator>___ctor_2")
+            {
+                PrintArrayLength(672 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_CoreLib_System_Collections_Generic_EqualityComparer_1<System___Canon>__get_Default")
+            {
+                PrintArrayLength(688 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_CoreLib_System_Collections_Generic_EqualityComparer_1<System___Canon>__Create")
+            {
+                PrintArrayLength(694 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_CoreLib_Internal_IntrinsicSupport_EqualityComparerHelpers__GetComparer")
+            {
+                PrintArrayLength(710 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_Runtime_TypeLoader_TypeLoaderEnvironment__TryGetConstructedGenericTypeForComponents")
+            {
+                PrintArrayLength(726 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_Runtime_TypeLoader_TypeBuilder__TryBuildGenericType")
+            {
+                PrintArrayLength(742 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_Runtime_TypeLoader_TypeBuilder__BuildType")
+            {
+                PrintArrayLength(758 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_Runtime_TypeLoader_TypeBuilder__PrepareType")
+            {
+                PrintArrayLength(774 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_Runtime_TypeLoader_TypeBuilder__PrepareRuntimeInterfaces")
+            {
+                PrintArrayLength(848 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_TypeSystem_TypeDesc__get_RuntimeInterfaces")
+            {
+                PrintArrayLength(864 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_TypeSystem_TypeDesc__InitializeRuntimeInterfaces")
+            {
+                PrintArrayLength(880 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_TypeSystem_MetadataRuntimeInterfacesAlgorithm__ComputeRuntimeInterfaces")
+            {
+                PrintArrayLength(896 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_TypeSystem_BaseTypeRuntimeInterfacesAlgorithm__ComputeRuntimeInterfaces")
+            {
+                PrintArrayLength(928 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_Runtime_TypeLoader_NativeLayoutInterfacesAlgorithm__ComputeRuntimeInterfaces")
+            {
+                PrintArrayLength(960 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_Runtime_TypeLoader_NoMetadataRuntimeInterfacesAlgorithm__ComputeRuntimeInterfaces")
+            {
+                PrintArrayLength(992 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_TypeSystem_TypeSystemContext__ResolveRuntimeTypeHandle")
+            {
+                PrintArrayLength(1024 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_TypeSystem_TypeSystemContext__GetSignatureVariable")
+            {
+                PrintArrayLength(1072 + methodIx++);
+                //call = false;
+            }
+
+
+
+            if (call)  HandleCall(callee, callee.Signature, runtimeDeterminedMethod, opcode, localConstrainedType);
+            if (_mangledName == "S_P_CoreLib_System_Resources_ResourceManager__InternalGetResourceSet")
+            {
+                PrintArrayLength(160 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_Runtime_TypeLoader_NoMetadataRuntimeInterfacesAlgorithm__ComputeRuntimeInterfaces")
+            {
+                PrintArrayLength(992 + methodIx++);
+                //call = false;
+            }
+            else if (_mangledName == "S_P_TypeLoader_Internal_TypeSystem_TypeSystemContext__ResolveRuntimeTypeHandle")
+            {
+                PrintArrayLength(1024 + methodIx++);
+                //call = false;
+            }
+        }
+
+        int methodIx = 0;
+        void PrintArrayLength(int loc)
+        {
+            int offset = GetTotalParameterOffset() + GetTotalLocalOffset();
+            LLVMValueRef shadowStack = _builder.BuildGEP(_currentFunclet.GetParam(0),
+                new LLVMValueRef[] {LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint) offset + 100, false),},
+                String.Empty);
+
+            var add = ArrayLocation;
+            var arrayPtr = _builder.BuildLoad(add, "arrayPtr");
+            var lenAddr = _builder.BuildGEP(arrayPtr, new[] {BuildConstInt32(4)});
+            var len = CastIfNecessaryAndLoad(_builder, lenAddr, GetWellKnownType(WellKnownType.Int32), "len");
+            PrintInt32(BuildConstInt32(loc), shadowStack);
+            PrintInt32(len, shadowStack);
         }
 
         private LLVMValueRef LLVMFunctionForMethod(MethodDesc callee, MethodDesc canonMethod, StackEntry thisPointer, bool isCallVirt,
@@ -2801,6 +3009,7 @@ namespace Internal.IL
                     // The previous argument might have left this type unaligned, so pad if necessary
                     argOffset = PadOffset(argType, argOffset);
 
+ 
                     ImportStoreHelper(argValue, valueType, castShadowStack, (uint)argOffset, builder: builder);
 
                     argOffset += argType.GetElementSize().AsInt;
@@ -2937,6 +3146,7 @@ namespace Internal.IL
             pad.IsCleanup = true; // always enter this clause regardless of exception type - do our own exception type matching
             if (RhpCallCatchFunclet.Handle.Equals(IntPtr.Zero))
             {
+                //extern "C" uint32_t RhpCallCatchFunclet(void * exceptionObj, void* pHandlerIP, void* pvRegDisplay, void *exInfo)
                 RhpCallCatchFunclet = GetOrCreateLLVMFunction("RhpCallCatchFunclet", LLVMTypeRef.CreateFunction(LLVMTypeRef.Int32, new []
                                                                                                                                 {
                                                                                                                                     LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0),
@@ -2969,7 +3179,7 @@ namespace Internal.IL
             var exPtr = landingPadBuilder.BuildCall(GetCxaBeginCatchFunction(), new LLVMValueRef[] { landingPadBuilder.BuildExtractValue(pad, 0, "ex") });
 
             // unwrap managed, cast to 32bit pointer from 8bit personality signature pointer
-            var ex32Ptr = landingPadBuilder.BuildPointerCast(exPtr, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int32, 0));
+            var ex32Ptr = landingPadBuilder.BuildPointerCast(exPtr, LLVMTypeRef.CreatePointer(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), 0));
             var plus4 = landingPadBuilder.BuildGEP(ex32Ptr, new LLVMValueRef[] {BuildConstInt32(1)}, "offset");
 
             var managedPtr = landingPadBuilder.BuildLoad(plus4, "managedEx");
@@ -2994,7 +3204,7 @@ namespace Internal.IL
             // put the exception in the spilled slot, exception slot is at 0
             var addressValue = CastIfNecessary(landingPadBuilder, LoadVarAddress(_spilledExpressions[0].LocalIndex,
                     LocalVarKind.Temp, out TypeDesc unused, builder:landingPadBuilder),
-                LLVMTypeRef.CreatePointer(LLVMTypeRef.Int32, 0));
+                LLVMTypeRef.CreatePointer(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), 0));
             landingPadBuilder.BuildStore(managedPtr, addressValue);
 
             var arguments = new StackEntry[] { new ExpressionEntry(StackValueKind.ObjRef, "managedPtr", managedPtr),
@@ -3019,11 +3229,11 @@ namespace Internal.IL
 
             landingPadBuilder.PositionAtEnd(foundCatchBlock);
             // finished with the c++ exception
-//            landingPadBuilder.BuildCall(GetCxaEndCatchFunction(), new LLVMValueRef[] { });
+            landingPadBuilder.BuildCall(GetCxaEndCatchFunction(), new LLVMValueRef[] { });
 
             LLVMValueRef[] callCatchArgs = new LLVMValueRef[]
                                   {
-                                      LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)),
+                                      managedPtr,
                                       CastIfNecessary(landingPadBuilder, handlerFunc, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)), /* catch funclet address */
                                       _currentFunclet.GetParam(0),
                                       LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0))
@@ -3242,6 +3452,7 @@ namespace Internal.IL
         }
 
         static LLVMValueRef s_shadowStackTop = default(LLVMValueRef);
+        static LLVMValueRef s_arrayLocation = default(LLVMValueRef);
 
         LLVMValueRef ShadowStackTop
         {
@@ -3255,6 +3466,21 @@ namespace Internal.IL
                     s_shadowStackTop.ThreadLocalMode = LLVMThreadLocalMode.LLVMLocalDynamicTLSModel;
                 }
                 return s_shadowStackTop;
+            }
+        }
+
+        LLVMValueRef ArrayLocation
+        {
+            get
+            {
+                if (s_arrayLocation.Handle.Equals(IntPtr.Zero))
+                {
+                    s_arrayLocation = Module.AddGlobal(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), "t_arrayLocation");
+                    s_arrayLocation.Linkage = LLVMLinkage.LLVMExternalLinkage;
+                    s_arrayLocation.Initializer = LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0));
+                    s_arrayLocation.ThreadLocalMode = LLVMThreadLocalMode.LLVMLocalDynamicTLSModel;
+                }
+                return s_arrayLocation;
             }
         }
 
@@ -3768,7 +3994,8 @@ namespace Internal.IL
                 typedValue = value.ValueAsInt32(_builder, false);
                 requireWriteBarrier = (value is ExpressionEntry) && !((ExpressionEntry)value).RawLLVMValue.IsNull && value.Type.IsGCPointer;
             }
-            if (requireWriteBarrier)
+
+            if (requireWriteBarrier && _mangledName != "S_P_CoreLib_System_Exception___ctor_0")
             {
                 CallRuntime(_method.Context, "InternalCalls", "RhpAssignRef", new StackEntry[]
                 {
@@ -5020,9 +5247,20 @@ namespace Internal.IL
                 };
             }
             var helper = GetNewArrayHelperForType(runtimeDeterminedArrayType);
+            if (_mangledName == "S_P_TypeLoader_Internal_TypeSystem_TypeSystemContext__ResolveRuntimeTypeHandle")
+            {
+                PrintArrayLength(1024 + methodIx++);
+            }
             var res = CallRuntime(_compilation.TypeSystemContext, InternalCalls, helper, arguments,
                 runtimeDeterminedArrayType);
-            PushNonNull(res);
+            int spillIndex = _spilledExpressions.Count;
+            SpilledExpressionEntry spillEntry = new SpilledExpressionEntry(StackValueKind.ObjRef, "newarray" + _currentOffset, runtimeDeterminedArrayType, spillIndex, this);
+            _spilledExpressions.Add(spillEntry);
+            LLVMValueRef addrOfValueType = LoadVarAddress(spillIndex, LocalVarKind.Temp, out TypeDesc unused);
+            var typedAddress = CastIfNecessary(_builder, addrOfValueType, LLVMTypeRef.CreatePointer(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), 0));
+            _builder.BuildStore(res.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), typedAddress);
+
+            PushNonNull(spillEntry);
             if (_mangledName == "HelloWasm_Program__TestFilterNested")
             {
                 // PrintInt32(BuildConstInt32(64));
@@ -5034,9 +5272,13 @@ namespace Internal.IL
                 // PrintInt32(BuildConstInt32(65));
                 // PrintInt32(len); // prints 3 and "fixes" it 
             }
+            else if (_mangledName == "S_P_TypeLoader_Internal_TypeSystem_TypeSystemContext__ResolveRuntimeTypeHandle")
+            {
+                PrintArrayLength(1024 + methodIx++);
+            }
         }
 
-        LLVMValueRef aPtr = default;
+            LLVMValueRef aPtr = default;
 
         //TODO: copy of the same method in JitHelper.cs but that is internal
             public static string GetNewArrayHelperForType(TypeDesc type)

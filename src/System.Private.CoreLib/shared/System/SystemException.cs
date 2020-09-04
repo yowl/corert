@@ -12,7 +12,7 @@ namespace System
         public SystemException()
             : base(SR.Arg_SystemException)
         {
-            HResult = HResults.COR_E_SYSTEM;
+//            HResult = HResults.COR_E_SYSTEM;
         }
 
         public SystemException(string? message)
