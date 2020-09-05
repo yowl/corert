@@ -518,10 +518,10 @@ namespace Internal.IL
                 var funcletArgs = new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }; 
                 LLVMTypeRef universalFuncletSignature = LLVMTypeRef.CreateFunction(returnType, funcletArgs, false);
                 funclet = Module.AddFunction(funcletName, universalFuncletSignature);
-                //if (_debugFunction.Handle != IntPtr.Zero)
-                //{
-                //    LLVMSharpInterop.DISetSubProgram(funclet, _debugFunction);
-                //}
+                // if (_debugFunction.Handle != IntPtr.Zero)
+                // {
+                //     LLVMSharpInterop.DISetSubProgram(funclet, _debugFunction);
+                // }
                 _exceptionFunclets.Add(funclet);
             }
 
@@ -831,6 +831,10 @@ namespace Internal.IL
         DebugMetadata GetOrCreateDebugMetadata(ILSequencePoint curSequencePoint)
         {
             DebugMetadata debugMetadata;
+            if (_mangledName.StartsWith("Uno_UI_Windows"))
+            {
+
+            }
             if (!_compilation.DebugMetadataMap.TryGetValue(curSequencePoint.Document, out debugMetadata))
             {
                 string fullPath = curSequencePoint.Document;
@@ -4895,6 +4899,7 @@ namespace Internal.IL
                                                                          });
         }
 
+        int methodIx = 0;
         private void ImportLoadField(int token, bool isStatic)
         {
             FieldDesc field = (FieldDesc)_methodIL.GetObject(token);
@@ -4904,8 +4909,9 @@ namespace Internal.IL
             if (_mangledName.Contains("Uno_UI_Windows_UI_Xaml_DependencyPropertyDetails__SetSourceValue") &&
                 field.Name == "_bindings")
             {
-                PrintInt32(BuildConstInt32(16));
+                PrintInt32(BuildConstInt32(16 + methodIx++));
                 PrintInt32(_builder.BuildPtrToInt(fieldAddress, LLVMTypeRef.Int32));
+                PrintInt32(_builder.BuildLoad(_builder.BuildPointerCast(fieldAddress, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int32, 0))));
             }
             PushLoadExpression(GetStackValueKind(canonFieldDesc.FieldType), $"Field_{field.Name}", fieldAddress, canonFieldDesc.FieldType);
         }
@@ -5093,7 +5099,15 @@ namespace Internal.IL
                 arguments = new StackEntry[] { new LoadExpressionEntry(StackValueKind.ValueType, "eeType", GetEETypePointerForTypeDesc(runtimeDeterminedArrayType, true), eeTypeDesc), sizeOfArray };
             }
             var helper = GetNewArrayHelperForType(runtimeDeterminedArrayType);
-            PushNonNull(CallRuntime(_compilation.TypeSystemContext, InternalCalls, helper, arguments, runtimeDeterminedArrayType));
+            var res = CallRuntime(_compilation.TypeSystemContext, InternalCalls, helper, arguments, runtimeDeterminedArrayType);
+            int spillIndex = _spilledExpressions.Count;
+            SpilledExpressionEntry spillEntry = new SpilledExpressionEntry(StackValueKind.ObjRef, "newarray" + _currentOffset, runtimeDeterminedArrayType, spillIndex, this);
+            _spilledExpressions.Add(spillEntry);
+            LLVMValueRef addrOfValueType = LoadVarAddress(spillIndex, LocalVarKind.Temp, out TypeDesc unused);
+            var typedAddress = CastIfNecessary(_builder, addrOfValueType, LLVMTypeRef.CreatePointer(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), 0));
+            _builder.BuildStore(res.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), typedAddress);
+
+            PushNonNull(spillEntry);
         }
 
         //TODO: copy of the same method in JitHelper.cs but that is internal
