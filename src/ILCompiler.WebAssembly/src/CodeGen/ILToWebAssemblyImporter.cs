@@ -2145,7 +2145,6 @@ namespace Internal.IL
             dictPtrPtrStore = default(LLVMValueRef);
             fatFunctionPtr = default(LLVMValueRef);
 
-            string canonMethodName = _compilation.NameMangler.GetMangledMethodName(canonMethod).ToString();
             TypeDesc owningType = callee.OwningType;
             bool delegateInvoke = owningType.IsDelegate && callee.Name == "Invoke";
             // Sealed methods must not be called virtually due to sealed vTables, so call them directly, but not delegate Invoke
@@ -2156,7 +2155,8 @@ namespace Internal.IL
                     hasHiddenParam = canonMethod.RequiresInstArg() || canonMethod.IsArrayAddressMethod();
                 }
                 AddMethodReference(canonMethod);
-                return GetOrCreateLLVMFunction(canonMethodName, canonMethod.Signature, hasHiddenParam);
+                string physicalName = _compilation.NodeFactory.MethodEntrypoint(canonMethod).GetMangledName(_compilation.NameMangler);
+                return GetOrCreateLLVMFunction(physicalName, canonMethod.Signature, hasHiddenParam);
             }
 
             LLVMValueRef thisRef = default;
@@ -2227,6 +2227,7 @@ namespace Internal.IL
 
             hasHiddenParam = canonMethod.RequiresInstArg();
             AddMethodReference(canonMethod);
+            string canonMethodName = _compilation.NodeFactory.MethodEntrypoint(canonMethod).GetMangledName(_compilation.NameMangler);
             return GetOrCreateLLVMFunction(canonMethodName, canonMethod.Signature, hasHiddenParam);
         }
 
