@@ -1,5 +1,4 @@
-﻿using System;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 namespace CoreRT.WebAssembly.Interop
 {
@@ -16,29 +15,8 @@ namespace CoreRT.WebAssembly.Interop
 
 
 
-        //Uno compatibility
-        [DllImport("*", EntryPoint = "corert_wasm_invoke_js")]
-        private static extern string InvokeJSInternal(string js, int length, out int exception);
-        
-        public static string InvokeJS(string js, out int exception)
-        {
-            return InvokeJSInternal(js, js.Length, out exception);
-        }
-
         //        [DllImport("*", EntryPoint = "mono_wasm_invoke_js_marshalled")]
         //        private static extern string InvokeJSUnmarshalledInternal(out int exception, string js, int p1, int p2, int p3);
 
-        //Uno compatibility
-        [DllImport("*", EntryPoint = "corert_wasm_invoke_js_unmarshalled")]
-        private static extern IntPtr InvokeJSUnmarshalledInternal(string js, int length, IntPtr p1, IntPtr p2, IntPtr p3, out string exception);
-
-
-        // to match https://github.com/unoplatform/uno/blob/024eebddd33ac0dfa6b6d8ea0871d5c6effc9f12/src/Uno.Foundation/Runtime.wasm.cs#L41
-        // not https://github.com/mono/WebAssembly.JSInterop/blob/9e65a41cf1043ce29c7d722bd3885648a653e734/src/WebAssembly.JSInterop/InternalCalls.cs#L15
-        public static IntPtr InvokeJSUnmarshalled(out string exception, string js, IntPtr p1, IntPtr p2, IntPtr p3)
-        {
-            // convention : if the methodId is known, then js is null and p1 is the method id
-            return InvokeJSUnmarshalledInternal(js, js?.Length ?? 0, p1, p2 ,p3, out exception);
-        }
     }
 }
