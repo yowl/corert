@@ -1912,28 +1912,18 @@ namespace Internal.IL
                 }
             }
 
+            // Hard coded InternalCall mappings for mono interoperability
             if (callee.IsInternalCall)
             {
-                if (callee.Name == "InvokeJS")
+                var metadataType = callee.OwningType as MetadataType;
+                // See https://github.com/dotnet/runtime/blob/9ba9a300a08170c8170ea52981810f41fad68cf0/src/mono/wasm/runtime/driver.c#L400-L407
+                // Mono have these InternalCall methods in different namespaces but just mapping them to CoreRT.WebAssembly.MonoBridge.
+                if (metadataType != null && (metadataType.Namespace == "WebAssembly.JSInterop" && metadataType.Name == "InternalCalls" || metadataType.Namespace == "WebAssembly" && metadataType.Name == "Runtime"))
                 {
                     var coreRtJsInternalCallsType = _compilation.TypeSystemContext
-                        .GetModuleForSimpleName("CoreRT.WebAssembly.Interop")
-                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
-                    callee = coreRtJsInternalCallsType.GetMethod("InvokeJS", null);
-                }
-                else if (callee.Name == "InvokeJSMarshalled")
-                {
-                    var coreRtJsInternalCallsType = _compilation.TypeSystemContext
-                        .GetModuleForSimpleName("CoreRT.WebAssembly.Interop")
-                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
-                    callee = coreRtJsInternalCallsType.GetMethod("InvokeJSMarshalled", null);
-                }
-                else if (callee.Name == "InvokeJSUnmarshalled")
-                {
-                    var coreRtJsInternalCallsType = _compilation.TypeSystemContext
-                        .GetModuleForSimpleName("CoreRT.WebAssembly.Interop")
-                        .GetKnownType("CoreRT.WebAssembly.Interop", "InternalCalls");
-                    callee = coreRtJsInternalCallsType.GetMethod("InvokeJSUnmarshalled", null);
+                        .GetModuleForSimpleName("CoreRT.WebAssembly.MonoBridge")
+                        .GetKnownType("CoreRT.WebAssembly.MonoBridge", "InternalCalls");
+                    callee = coreRtJsInternalCallsType.GetMethod(callee.Name, callee.Signature);
                 }
             }
 
