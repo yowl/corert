@@ -145,6 +145,11 @@ else()
     enable_language(ASM)
 endif(WIN32)
 
+if(CLR_CMAKE_PLATFORM_ARCH_WASM)
+    set(CMAKE_VERBOSE_MAKEFILE ON)
+    add_compile_options(-s USE_PTHREADS=1)
+endif(CLR_CMAKE_PLATFORM_ARCH_WASM)
+
 # Build a list of compiler definitions by putting -D in front of each define.
 function(get_compile_definitions DefinitionName)
     # Get the current list of definitions

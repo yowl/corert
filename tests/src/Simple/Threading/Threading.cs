@@ -6,7 +6,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
-
+#if CODEGEN_WASM
+using System.Runtime.InteropServices;
+using Console=Runner.Console;
+#endif
 // TODO: Move these tests to CoreFX once they can be run on CoreRT
 
 internal static class Runner
@@ -119,6 +122,73 @@ internal static class Runner
 
         return Pass;
     }
+
+#if CODEGEN_WASM
+    internal class Console
+    {
+        private static unsafe void PrintString(string s)
+        {
+            int length = s.Length;
+            fixed (char* curChar = s)
+            {
+                for (int i = 0; i < length; i++)
+                {
+                    TwoByteStr curCharStr = new TwoByteStr();
+                    curCharStr.first = (byte)(*(curChar + i));
+                    printf((byte*)&curCharStr, null);
+                }
+            }
+        }
+
+        internal static void Write(int i)
+        {
+            PrintString(i.ToString());
+        }
+
+        internal static void Write(string s)
+        {
+            PrintString(s);
+        }
+
+        internal static void Write(string format, object p)
+        {
+            PrintString(string.Format(format, p));
+        }
+
+        internal static void WriteLine(int i)
+        {
+            WriteLine(i.ToString());
+        }
+
+        internal static void WriteLine(string s)
+        {
+            PrintString(s);
+            PrintString("\n");
+        }
+
+        internal static void WriteLine(string format, string p)
+        {
+            PrintString(string.Format(format, p));
+            PrintString("\n");
+        }
+
+        internal static void WriteLine(string format, object arg1, object arg2)
+        {
+            PrintString(string.Format(format, arg1, arg2));
+            PrintString("\n");
+        }
+
+    }
+
+    struct TwoByteStr
+    {
+        public byte first;
+        public byte second;
+    }
+
+    [DllImport("*")]
+    private static unsafe extern int printf(byte* str, byte* unused);
+#endif
 }
 
 internal static class WaitSubsystemTests

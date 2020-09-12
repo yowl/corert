@@ -3,5 +3,9 @@
     <Compile Include="*.cs" />
   </ItemGroup>
 
+  <PropertyGroup Condition="'$(NativeCodeGen)' == 'wasm'">
+    <EmccExtraArgs>-s USE_PTHREADS=1 -s PROXY_TO_PTHREAD=1</EmccExtraArgs>
+  </PropertyGroup>
+
   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), SimpleTest.targets))\SimpleTest.targets" />
 </Project>

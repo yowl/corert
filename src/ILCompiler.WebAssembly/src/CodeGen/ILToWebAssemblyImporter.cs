@@ -3234,7 +3234,7 @@ namespace Internal.IL
                     s_shadowStackTop = Module.AddGlobal(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), "t_pShadowStackTop");
                     s_shadowStackTop.Linkage = LLVMLinkage.LLVMExternalLinkage;
                     s_shadowStackTop.Initializer = LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0));
-                    s_shadowStackTop.ThreadLocalMode = LLVMThreadLocalMode.LLVMLocalDynamicTLSModel;
+                    s_shadowStackTop.ThreadLocalMode = LLVMThreadLocalMode.LLVMLocalExecTLSModel;
                 }
                 return s_shadowStackTop;
             }
