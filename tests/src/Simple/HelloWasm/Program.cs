@@ -8,6 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Diagnostics;
+using System.Collections.Specialized;
 
 #if TARGET_WINDOWS
 using CpObj;
@@ -366,6 +367,16 @@ internal static class Program
         TestDefaultConstructorOf();
 
         TestStructUnboxOverload();
+
+
+        var e = new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, new string[] { "1" });
+        if (e.NewItems != null) 
+        {
+            foreach (string newItems in e.NewItems)
+            {
+            }
+        }
+
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");

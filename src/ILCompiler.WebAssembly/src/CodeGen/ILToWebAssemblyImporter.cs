@@ -2622,8 +2622,12 @@ namespace Internal.IL
         // if the call is done via `invoke` then we need the try/then block passed back in case the calling code takes the result from a phi.
         private LLVMBasicBlockRef HandleCall(MethodDesc callee, MethodSignature signature, MethodDesc runtimeDeterminedMethod, ILOpcode opcode = ILOpcode.call, TypeDesc constrainedType = null, LLVMValueRef calliTarget = default(LLVMValueRef), LLVMValueRef hiddenRef = default(LLVMValueRef))
         {
-            bool resolvedConstraint = false; 
+            bool resolvedConstraint = false;
 
+            if (_mangledName.EndsWith("GetArrayEEType"))
+            {
+
+            }
             var parameterCount = signature.Length + (signature.IsStatic ? 0 : 1);
             // The last argument is the top of the stack. We need to reverse them and store starting at the first argument
             StackEntry[] argumentValues = new StackEntry[parameterCount];
@@ -4890,20 +4894,12 @@ namespace Internal.IL
                                                                          });
         }
 
-        int methodIx = 0;
         private void ImportLoadField(int token, bool isStatic)
         {
             FieldDesc field = (FieldDesc)_methodIL.GetObject(token);
             FieldDesc canonFieldDesc = (FieldDesc)_canonMethodIL.GetObject(token);
             LLVMValueRef fieldAddress = GetFieldAddress(field, canonFieldDesc, isStatic);
 
-            if (_mangledName.Contains("Uno_UI_Windows_UI_Xaml_DependencyPropertyDetails__SetSourceValue") &&
-                field.Name == "_bindings")
-            {
-                PrintInt32(BuildConstInt32(16 + methodIx++));
-                PrintInt32(_builder.BuildPtrToInt(fieldAddress, LLVMTypeRef.Int32));
-                PrintInt32(_builder.BuildLoad(_builder.BuildPointerCast(fieldAddress, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int32, 0))));
-            }
             PushLoadExpression(GetStackValueKind(canonFieldDesc.FieldType), $"Field_{field.Name}", fieldAddress, canonFieldDesc.FieldType);
         }
 
@@ -4942,13 +4938,6 @@ namespace Internal.IL
             StackEntry valueEntry = _stack.Pop();
 
             LLVMValueRef fieldAddress = GetFieldAddress(runtimeDeterminedField, field, isStatic);
-            if (_mangledName == "Uno_UI_Windows_UI_Xaml_DependencyPropertyDetails___ctor" && field.Name == "_bindings")
-            {
-                PrintInt32(BuildConstInt32(32));
-                PrintInt32(_builder.BuildPtrToInt(fieldAddress, LLVMTypeRef.Int32));
-                PrintInt32(BuildConstInt32(33));
-                PrintInt32(valueEntry.ValueAsInt32(_builder, false));
-            }
             CastingStore(fieldAddress, valueEntry, field.FieldType, true);
         }
 

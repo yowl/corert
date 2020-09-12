@@ -17919,6 +17919,7 @@ uint8_t* gc_heap::find_object (uint8_t* interior)
 #else
             assert (interior < heap_segment_allocated (seg));
 #endif
+                                             assert(size(heap_segment_mem(seg)) != 0);
             uint8_t* o = find_first_object (interior, heap_segment_mem (seg));
             return o;
         }
@@ -19420,6 +19421,7 @@ uint8_t* gc_heap::background_first_overflow (uint8_t* min_add,
                 }
                 else
                 {
+                    assert(size(heap_segment_mem(seg)) != 0);
                     o = find_first_object (min_add, heap_segment_mem (seg));
                     return o;
                 }
@@ -26880,6 +26882,7 @@ void gc_heap::revisit_written_page (uint8_t* page,
         }
         else
         {
+                    assert(size(last_object) != 0);
             o = find_first_object (start_address, last_object);
             // We can visit the same object again, but on a different page.
             assert (o >= last_object);
@@ -28965,6 +28968,7 @@ uint8_t* gc_heap::find_first_object (uint8_t* start, uint8_t* first_object)
     if ((brick == brick_of (first_object) || (start <= first_object)))
     {
         o = first_object;
+        assert(size(o) != 0);
     }
     else
     {
@@ -28985,11 +28989,28 @@ uint8_t* gc_heap::find_first_object (uint8_t* start, uint8_t* first_object)
             prev_brick = (brick_entry + prev_brick);
 
         }
+        if(prev_brick < min_brick){
+            printf("prev_brick %d < min_brick %d\n", prev_brick, min_brick);
+            o = first_object;
+        }
+        else
+        {
+            printf("brick address(prev_brick) %d brick_entry %d\n", brick_address(prev_brick), brick_entry);
+                      o = brick_address (prev_brick) + brick_entry - 1;
+        }
+
+        /*
         o = ((prev_brick < min_brick) ? first_object :
                       brick_address (prev_brick) + brick_entry - 1);
+                      */
         assert (o <= start);
+        assert(size(o) != 0);
     }
 
+    if(Align (size (o)) < Align (min_obj_size))
+    {
+        printf("size o problem %d min size %d, o %p\n", size(o), Align(min_obj_size), o);
+    }
     assert (Align (size (o)) >= Align (min_obj_size));
     uint8_t*  next_o = o + Align (size (o));
     size_t curr_cl = (size_t)next_o / brick_size;
@@ -29625,6 +29646,7 @@ void gc_heap::mark_through_cards_for_segments (card_fn fn, BOOL relocating CARD_
         {
             uint8_t* o = last_object;
 
+            assert(size(last_object) != 0);
             o = find_first_object (start_address, last_object);
             // Never visit an object twice.
             assert (o >= last_object);
@@ -29712,6 +29734,7 @@ void gc_heap::mark_through_cards_for_segments (card_fn fn, BOOL relocating CARD_
                         }
                         else if (foundp && (start_address < limit))
                         {
+                            assert(size(o) != 0);
                             cont_o = find_first_object (start_address, o);
                             goto end_object;
                         }
@@ -29759,6 +29782,7 @@ go_through_refs:
                                          }
                                          else if (foundp && (start_address < limit))
                                          {
+                                             assert(size(o) != 0);
                                              cont_o = find_first_object (start_address, o);
                                              goto end_object;
                                          }

@@ -5,19 +5,96 @@ using System;
 using System.Diagnostics;
 using System.Runtime;
 using System.Runtime.InteropServices;
+using Internal.Runtime.CompilerServices;
 
 namespace Internal.Runtime
 {
+    internal class X
+    {
+        [DllImport("*")]
+        internal static unsafe extern int printf(byte* str, byte* unused);
+        private static unsafe void PrintString(string s)
+        {
+            int length = s.Length;
+            fixed (char* curChar = s)
+            {
+                for (int i = 0; i < length; i++)
+                {
+                    TwoByteStr curCharStr = new TwoByteStr();
+                    curCharStr.first = (byte)(*(curChar + i));
+                    printf((byte*)&curCharStr, null);
+                }
+            }
+        }
+
+        internal static void PrintLine(string s)
+        {
+            PrintString(s);
+            PrintString("\n");
+        }
+
+        //public unsafe static void PrintLong(long l)
+        //{
+        //    PrintByte((byte)((l >> 56) & 0xff));
+        //    PrintByte((byte)((l >> 48) & 0xff));
+        //    PrintByte((byte)((l >> 40) & 0xff));
+        //    PrintByte((byte)((l >> 32) & 0xff));
+        //    PrintByte((byte)((l >> 24) & 0xff));
+        //    PrintByte((byte)((l >> 16) & 0xff));
+        //    PrintByte((byte)((l >> 8) & 0xff));
+        //    PrintByte((byte)(l & 0xff));
+        //    PrintString("\n");
+        //}
+
+        public unsafe static void PrintUint(int s)
+        {
+            byte[] intBytes = GetBytes(s);
+            for (var i = 0; i < 4; i++)
+            {
+                TwoByteStr curCharStr = new TwoByteStr();
+                var nib = (intBytes[3 - i] & 0xf0) >> 4;
+                curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
+                printf((byte*)&curCharStr, null);
+                nib = (intBytes[3 - i] & 0xf);
+                curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
+                printf((byte*)&curCharStr, null);
+            }
+            PrintString("\n");
+        }
+
+        public static byte[] GetBytes(int value)
+        {
+            byte[] bytes = new byte[sizeof(int)];
+            Unsafe.As<byte, int>(ref bytes[0]) = value;
+            return bytes;
+        }
+
+        public struct TwoByteStr
+        {
+            public byte first;
+            public byte second;
+        }
+
+    }
+
     // Extensions to EEType that are specific to the use in Runtime.Base.
     internal unsafe partial struct EEType
     {
         internal EEType* GetArrayEEType()
         {
+#if INPLACE_RUNTIME
+            return EETypePtr.EETypePtrOf<Array>().ToPointer();
+#else
             fixed (EEType* pThis = &this)
             {
                 IntPtr pGetArrayEEType = (IntPtr)InternalCalls.RhpGetClasslibFunctionFromEEType(new IntPtr(pThis), ClassLibFunctionId.GetSystemArrayEEType);
+                var vs = InternalCalls.RhpGetClasslibFunctionFromEEType(new IntPtr(pThis),
+                    ClassLibFunctionId.GetSystemArrayEEType);
+                X.PrintLine("pGetArrayEEType");
+                X.PrintUint((int)vs);
                 return (EEType*)CalliIntrinsics.Call<IntPtr>(pGetArrayEEType);
             }
+#endif
         }
 
         internal Exception GetClasslibException(ExceptionIDs id)
