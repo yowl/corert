@@ -11,6 +11,10 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+#if CODEGEN_WASM
+using System.Runtime.InteropServices;
+using Console=BringUpTest.Console;
+#endif
 
 // Make sure the interop data are present even without reflection
 namespace System.Runtime.CompilerServices
@@ -1006,6 +1010,63 @@ namespace PInvokeTests
             var result = IsNULL(comPointer);
             ThrowIfNotEquals(true, IsNULL(comPointer), "COM interface marshalling null check failed");
         }
+
+
+#if CODEGEN_WASM
+        internal class Console
+        {
+            private static unsafe void PrintString(string s)
+            {
+                int length = s.Length;
+                fixed (char* curChar = s)
+                {
+                    for (int i = 0; i < length; i++)
+                    {
+                        TwoByteStr curCharStr = new TwoByteStr();
+                        curCharStr.first = (byte)(*(curChar + i));
+                        printf((byte*)&curCharStr, null);
+                    }
+                }
+            }
+
+            internal static void Write(int i)
+            {
+                PrintString(i.ToString());
+            }
+
+            internal static void Write(string s)
+            {
+                PrintString(s);
+            }
+
+            internal static void WriteLine(int i)
+            {
+                WriteLine(i.ToString());
+            }
+
+            internal static void WriteLine(string s)
+            {
+                PrintString(s);
+                PrintString("\n");
+            }
+
+            internal static void WriteLine(string format, string p)
+            {
+                PrintString(string.Format(format, p));
+                PrintString("\n");
+            }
+        }
+
+        struct TwoByteStr
+        {
+            public byte first;
+            public byte second;
+        }
+
+        [DllImport("*")]
+        private static unsafe extern int printf(byte* str, byte* unused);
+#endif
+
     }
 
     public class SafeMemoryHandle : SafeHandle //SafeHandle subclass
