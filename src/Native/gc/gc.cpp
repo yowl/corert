@@ -28990,12 +28990,10 @@ uint8_t* gc_heap::find_first_object (uint8_t* start, uint8_t* first_object)
 
         }
         if(prev_brick < min_brick){
-            printf("prev_brick %d < min_brick %d\n", prev_brick, min_brick);
             o = first_object;
         }
         else
         {
-            printf("brick address(prev_brick) %d brick_entry %d\n", brick_address(prev_brick), brick_entry);
                       o = brick_address (prev_brick) + brick_entry - 1;
         }
 
@@ -29004,7 +29002,6 @@ uint8_t* gc_heap::find_first_object (uint8_t* start, uint8_t* first_object)
                       brick_address (prev_brick) + brick_entry - 1);
                       */
         assert (o <= start);
-        assert(size(o) != 0);
     }
 
     if(Align (size (o)) < Align (min_obj_size))
