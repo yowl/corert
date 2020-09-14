@@ -50,11 +50,25 @@ struct gc_alloc_context
     int            alloc_count;
 };
 
+void PrintIfNotAligendSize(int s)
+{
+    if(((size_t)s & 2) == 2)
+    {
+        printf("not aligned size %d\n", s);
+    }
+}
 void PrintIfNotAligend(Object * o)
 {
     if(((size_t)o & 2) == 2)
     {
         printf("not aligned %p\n", o);
+    }
+}
+void PrintIfNotAligned2(UInt8 * o)
+{
+    if(((size_t)o & 2) == 2)
+    {
+        printf("end not aligned %p\n", o);
     }
 }
 
@@ -81,6 +95,7 @@ COOP_PINVOKE_HELPER(Object *, RhpNewFast, (EEType* pEEType))
         pObject = (Object *)result;
         pObject->set_EEType(pEEType);
 PrintIfNotAligend(pObject);
+PrintIfNotAligned2(advance);
         return pObject;
     }
 
@@ -95,6 +110,8 @@ PrintIfNotAligend(pObject);
         RhpPublishObject(pObject, size);
 
 PrintIfNotAligend(pObject);
+PrintIfNotAligendSize(size);
+
     return pObject;
 }
 
@@ -119,6 +136,7 @@ COOP_PINVOKE_HELPER(Object *, RhpNewFinalizable, (EEType* pEEType))
     if (size >= RH_LARGE_OBJECT_SIZE)
         RhpPublishObject(pObject, size);
 
+PrintIfNotAligendSize(size);
     return pObject;
 }
 
@@ -167,6 +185,7 @@ COOP_PINVOKE_HELPER(Array *, RhpNewArray, (EEType * pArrayEEType, int numElement
         pObject->set_EEType(pArrayEEType);
         pObject->InitArrayLength((UInt32)numElements);
 PrintIfNotAligend(pObject);
+PrintIfNotAligned2(advance);
         return pObject;
     }
 
@@ -182,6 +201,7 @@ PrintIfNotAligend(pObject);
         RhpPublishObject(pObject, size);
 
 PrintIfNotAligend(pObject);
+PrintIfNotAligendSize(size);
     return pObject;
 }
 
@@ -237,6 +257,7 @@ COOP_PINVOKE_HELPER(Object *, RhpNewFastAlign8, (EEType* pEEType))
         pObject = (Object*)result;
         pObject->set_EEType(pEEType);
 PrintIfNotAligend(pObject);
+PrintIfNotAligned2(advance);
         return pObject;
     }
 
@@ -251,6 +272,7 @@ PrintIfNotAligend(pObject);
         RhpPublishObject(pObject, size);
 
 PrintIfNotAligend(pObject);
+PrintIfNotAligendSize(size);
     return pObject;
 }
 
@@ -280,6 +302,7 @@ COOP_PINVOKE_HELPER(Object*, RhpNewFastMisalign, (EEType* pEEType))
         pObject->set_EEType(pEEType);
 
 PrintIfNotAligend(pObject);
+PrintIfNotAligned2(advance);
         return pObject;
     }
 
@@ -295,6 +318,7 @@ PrintIfNotAligend(pObject);
 
     printf("fast misalign %d for type %d with size %d\n", (size_t)pObject, (size_t)pEEType, size);
 PrintIfNotAligend(pObject);
+PrintIfNotAligendSize(size);
     return pObject;
 }
 
@@ -355,6 +379,7 @@ COOP_PINVOKE_HELPER(Array *, RhpNewArrayAlign8, (EEType * pArrayEEType, int numE
         pObject->InitArrayLength((UInt32)numElements);
         printf("allocating array at 8 from alloc limit %d\n", (size_t)pObject);
 PrintIfNotAligend(pObject);
+PrintIfNotAligned2(advance);
         return pObject;
     }
 
@@ -371,6 +396,7 @@ PrintIfNotAligend(pObject);
 
     printf("allocating array at 8 %d\n", (size_t)pObject);
 PrintIfNotAligend(pObject);
+PrintIfNotAligendSize(size);
     return pObject;
 }
 #endif // defined(HOST_ARM) || defined(HOST_WASM)
