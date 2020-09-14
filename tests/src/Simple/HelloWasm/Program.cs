@@ -452,17 +452,29 @@ internal static class Program
     class F4 { internal int i; }
     class F8 { internal long l; }
     class F2Plus8 { internal short s; internal long l; }
-    class CDisp : IDisposable  { public void Dispose() { } }
+    class CDisp : IDisposable { public void Dispose() { } }
     struct StructF48 { internal int i1; internal long l2; }
+    private static WeakReference largeRef;
+    private static object largeObj;
     private static bool TestCreateDifferentObjects()
     {
+        // can gc large object
+        CreateLargeObjAndWeakRef();
+        GC.Collect();
+        GC.Collect();
+        if(!largeRef.IsAlive)
+        {
+            PrintLine("LargeObj died unexpectedly");
+            return false;
+        }
+        KillLargeObj();
         var mr = new MiniRandom(257);
-        var keptObjects = new object[100];
+        var keptObjects = new object[1000];
         for (var i = 0; i < 1000000; i++)
         {
             var r = mr.Next();
             object o;
-            switch (r % 8)
+            switch (r % 9)
             {
                 case 0:
                     o = new F4 { i = 1, };
@@ -480,22 +492,44 @@ internal static class Program
                     o = new long[10000];
                     break;
                 case 5:
-                    o = new int[10000];
+                    o = new long[20000]; // large object heap, 160000 > 85KB
                     break;
                 case 6:
-                    o = new StructF48 { i1 = 7, l2 = 8 };
+                    o = new int[10000];
                     break;
                 case 7:
+                    o = new StructF48 { i1 = 7, l2 = 8 };
+                    break;
+                case 8:
                     o = new CDisp();
                     break;
                 default:
                     o = null;
                     break;
             }
-            keptObjects[r % 100] = o;
+            keptObjects[r % 1000] = o;
+        }
+        GC.Collect();
+        GC.Collect();
+        if (largeRef.IsAlive)
+        {
+            PrintLine("LargeObj alive unexpectedly");
+            return false;
         }
         return true;
     }
+
+    private static void CreateLargeObjAndWeakRef()
+    {
+        largeObj = new long[20000];
+        largeRef = new WeakReference(largeObj);
+    }
+
+    private static void KillLargeObj()
+    {
+        largeObj = null;
+    }
+
 
     private static Parent aParent;
     private static ParentOfStructWithObjRefs aParentOfStructWithObjRefs;

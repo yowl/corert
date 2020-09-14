@@ -35813,6 +35813,7 @@ void GCHeap::Relocate (Object** ppObject, ScanContext* sc,
 
         if (gc_heap::loh_object_p (object))
         {
+            printf("loh find object %p\n", object);
             pheader = hp->find_object (object);
             if (pheader == 0)
             {
