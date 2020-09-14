@@ -28995,6 +28995,11 @@ uint8_t* gc_heap::find_first_object (uint8_t* start, uint8_t* first_object)
         else
         {
                       o = brick_address (prev_brick) + brick_entry - 1;
+                      if(((int)o & 3) != 0)
+                      {
+                          printf("caclulated address not aligned %p prev_brick %p, brick_address %p brick_entry %d\n", o, prev_brick, brick_address(prev_brick), brick_entry);
+                      }
+
         }
 
         /*
