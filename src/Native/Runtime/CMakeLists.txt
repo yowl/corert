@@ -171,6 +171,12 @@ else()
     ../gc/unix/cgroup.cpp
   )
 
+  if(CLR_CMAKE_PLATFORM_ARCH_WASM)
+    list(APPEND COMMON_RUNTIME_SOURCES
+      ../gc/wasm/gcenv.wasm.cpp
+    )
+  endif()
+
   list(APPEND FULL_RUNTIME_SOURCES
     unix/HardwareExceptions.cpp
     unix/UnixContext.cpp

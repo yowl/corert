@@ -405,7 +405,11 @@ internal static class Program
             PrintString("GC Collection Count " + i.ToString() + " ");
             PrintLine(GC.CollectionCount(i).ToString());
         }
-        if(!TestCreateDifferentObjects())
+        if(!TestCreateLotsOfLargeObject())
+        {
+            FailTest("Failed test for creating/collecting lots of large objects");
+        }
+        if (!TestCreateDifferentObjects())
         {
             FailTest("Failed test for creating/collecting different objects");
         }
@@ -429,6 +433,19 @@ internal static class Program
         }
 
         EndTest(TestGeneration2Rooting());
+    }
+    
+    private static bool TestCreateLotsOfLargeObject()
+    {
+        var mr = new MiniRandom(257);
+        var keptObjects = new object[1000];
+        for (var i = 0; i < 100000; i++)
+        {
+            var r = mr.Next();
+            object o = new long[20000]; // large object heap, 160000 > 85KB
+            keptObjects[r % 1000] = o;
+        }
+        return true;
     }
 
     struct MiniRandom
@@ -454,23 +471,11 @@ internal static class Program
     class F2Plus8 { internal short s; internal long l; }
     class CDisp : IDisposable { public void Dispose() { } }
     struct StructF48 { internal int i1; internal long l2; }
-    private static WeakReference largeRef;
-    private static object largeObj;
     private static bool TestCreateDifferentObjects()
     {
-        // can gc large object
-        CreateLargeObjAndWeakRef();
-        GC.Collect();
-        GC.Collect();
-        if(!largeRef.IsAlive)
-        {
-            PrintLine("LargeObj died unexpectedly");
-            return false;
-        }
-        KillLargeObj();
         var mr = new MiniRandom(257);
         var keptObjects = new object[1000];
-        for (var i = 0; i < 1000000; i++)
+        for (var i = 0; i < 100000; i++)
         {
             var r = mr.Next();
             object o;
@@ -511,25 +516,8 @@ internal static class Program
         }
         GC.Collect();
         GC.Collect();
-        if (largeRef.IsAlive)
-        {
-            PrintLine("LargeObj alive unexpectedly");
-            return false;
-        }
         return true;
     }
-
-    private static void CreateLargeObjAndWeakRef()
-    {
-        largeObj = new long[20000];
-        largeRef = new WeakReference(largeObj);
-    }
-
-    private static void KillLargeObj()
-    {
-        largeObj = null;
-    }
-
 
     private static Parent aParent;
     private static ParentOfStructWithObjRefs aParentOfStructWithObjRefs;
@@ -1471,6 +1459,10 @@ internal static class Program
     {
         StartTest("TestStoreFromGenericMethod");
         var values = new string[1];
+        var s = values.AsSpan(0, 1);
+        PrintLine("s length " + s.Length);
+
+        PrintLine("SpanLength " + values.AsSpan(0, 1).Length);
         // testing that the generic return value type from the function can be stored in a concrete type
         values = values.AsSpan(0, 1).ToArray();
         PassTest();
