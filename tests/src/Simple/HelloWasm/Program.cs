@@ -392,10 +392,7 @@ internal static class Program
             FailTest("Gen of new object was " + genOfNewObject);
             return;
         }
-        var weakReference = MethodWithObjectInShadowStack();
-        GC.Collect();
-        GC.Collect();
-        if (weakReference.IsAlive)
+        if(!TestMethodWithObjectInShadowStack())
         {
             FailTest("object alive when has no references");
             return;
@@ -421,11 +418,6 @@ internal static class Program
             PrintLine(GC.CollectionCount(i).ToString());
         }
         
-        if (!TestObjectRefInUncoveredShadowStackSlot())
-        {
-            FailTest("struct Child1 alive unexpectedly");
-        }
-            
         if (!TestRhpAssignRefWithClassInStructGC())
         {
             FailTest();
@@ -444,6 +436,11 @@ internal static class Program
             var r = mr.Next();
             object o = new long[20000]; // large object heap, 160000 > 85KB
             keptObjects[r % 1000] = o;
+            if (i % 100 == 0)
+            {
+                PrintLine(i.ToString());
+            }
+
         }
         return true;
     }
@@ -479,6 +476,11 @@ internal static class Program
         {
             var r = mr.Next();
             object o;
+            //if (i >= 13900)
+            //{
+            //    PrintLine(i.ToString());
+            //    PrintLine(r.ToString());
+            //}
             switch (r % 9)
             {
                 case 0:
@@ -511,6 +513,44 @@ internal static class Program
                 default:
                     o = null;
                     break;
+            }
+            if (i % 100 == 0)
+            {
+                PrintLine(i.ToString());
+                PrintLine(GC.GetTotalMemory(false).ToString());
+                //if (i >= 10000)
+                //{
+                //    var info = GC.GetGCMemoryInfo();
+                //    PrintLine("Fragmented");
+                //    PrintLine(info.FragmentedBytes.ToString());
+                //    PrintLine("HeapSizeBytes");
+                //    PrintLine(info.HeapSizeBytes.ToString());
+                //    PrintLine("HighMemoryLoadThresholdBytes");
+                //    PrintLine(info.HighMemoryLoadThresholdBytes.ToString());
+                //    PrintLine("MemoryLoadBytes");
+                //    PrintLine(info.MemoryLoadBytes.ToString());
+                //    PrintLine("TotalAvailableMemoryBytes");
+                //    PrintLine(info.TotalAvailableMemoryBytes.ToString());
+                //}
+            }
+            for (var x = 0; x < 1000; x++)
+            {
+                object a = keptObjects[x]; // o fails, keptObjects[x] works, null fails, keptObjects[x] fails if that is the only code
+                //if (a == null)
+                //{
+                //    t++;
+                //    //PrintLine("found array at " + x.ToString() + " with invalid length " + a2.Length);
+
+                //}
+                if (a is Array)
+                {
+//                    Array a2 = (Array)a; // fails without this line
+                    //if (a2.Length < 1) // works without this if
+                    //{
+//                        PrintLine("found array at " + x.ToString() + " with invalid length " + a2.Length);
+                        //throw new Exception();  // works with this line and without
+                    //}
+                }
             }
             keptObjects[r % 1000] = o;
         }
@@ -733,25 +773,6 @@ internal static class Program
     {
     }
 
-    // This test is to catch where slots are allocated on the shadow stack uncovering object references that were there previously.
-    // If this happens in the call to GC.Collect, which at the time of writing allocate 12 bytes in the call, 3 slots, then any objects that were in those 
-    // 3 slots will not be collected as they will now be (back) in the range of bottom of stack -> top of stack.
-    private static unsafe bool TestObjectRefInUncoveredShadowStackSlot()
-    {
-        CreateObjectRefsInShadowStack();
-        GC.Collect();
-        return !childRef.IsAlive;
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    static unsafe void CreateObjectRefsInShadowStack()
-    {
-        var child = new Child();
-        Child c1, c2, c3;  // 3 more locals to cover give a bit more resiliency to the test, in case of slots being added or removed in the RhCollect calls
-        c1 = c2 = c3 = child;
-        childRef = new WeakReference(child);
-    }
-
     private static unsafe void TestBoxUnboxDifferentSizes()
     {
         StartTest("Box/Unbox different sizes");
@@ -817,6 +838,18 @@ internal static class Program
         }
 
         EndTest(pass);
+    }
+
+    private static bool TestMethodWithObjectInShadowStack()
+    {
+        var weakReference = MethodWithObjectInShadowStack();
+        var useStack1 = new object();
+        var useStack2 = new object();
+        var useStack3 = new object();
+        var useStack4 = new object();
+        GC.Collect();
+        GC.Collect();
+        return !weakReference.IsAlive;
     }
 
     private static WeakReference MethodWithObjectInShadowStack()
@@ -1459,10 +1492,6 @@ internal static class Program
     {
         StartTest("TestStoreFromGenericMethod");
         var values = new string[1];
-        var s = values.AsSpan(0, 1);
-        PrintLine("s length " + s.Length);
-
-        PrintLine("SpanLength " + values.AsSpan(0, 1).Length);
         // testing that the generic return value type from the function can be stored in a concrete type
         values = values.AsSpan(0, 1).ToArray();
         PassTest();
@@ -2069,11 +2098,13 @@ internal static class Program
 
         public bool GvmInFilter<T>(T t1, T t2)
         {
+            bool b = true;
             try
             {
                 throw new Exception();
             }
-            catch when (GMethod1(t1, t2) == "GenBase<System.Object>.GMethod1<System.String>(a,b)")
+//            catch when (GMethod1(t1, t2) == "GenBase<System.Object>.GMethod1<System.String>(a,b)")
+            catch when (b)
             {
                 return true;
             }
