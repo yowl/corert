@@ -31,7 +31,7 @@ TSF_DoNotTriggerGc_Bit          = 4
     NESTED_ENTRY RhpWaitForSuspend, _TEXT, NoHandler
 
         // FP and LR registers
-        PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, #-0xA0            // Push down stack pointer and store FP and LR
+        PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -0xA0            // Push down stack pointer and store FP and LR
 
         // Need to save argument registers x0-x7 and the return buffer register x8
         // Also save x9 which may be used for saving indirect call target
@@ -63,7 +63,7 @@ TSF_DoNotTriggerGc_Bit          = 4
         ldp            x8, x9, [sp, #0x50]
 
         // Restore FP and LR registers, and free the allocated stack block
-        EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, #0xA0
+        EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, 0xA0
         EPILOG_RETURN
 
     NESTED_END RhpWaitForSuspend, _TEXT
@@ -81,7 +81,7 @@ TSF_DoNotTriggerGc_Bit          = 4
     NESTED_ENTRY RhpWaitForGCNoAbort, _TEXT, NoHandler
 
         // FP and LR registers
-        PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, #-0x40            // Push down stack pointer and store FP and LR
+        PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -0x40            // Push down stack pointer and store FP and LR
 
         // Save the integer return registers, as well as the floating return registers
         stp         x0, x1, [sp, #0x10]
@@ -99,7 +99,7 @@ Done:
         ldp         x0, x1, [sp, #0x10]
         ldp         d0, d1, [sp, #0x20]
         ldp         d2, d3, [sp, #0x30]
-        EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, #0x40
+        EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, 0x40
         EPILOG_RETURN
 
     NESTED_END RhpWaitForGCNoAbort
@@ -116,7 +116,7 @@ Done:
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
     NESTED_ENTRY RhpWaitForGC, _TEXT, NoHandler
 
-        PROLOG_SAVE_REG_PAIR_INDEXED    fp, lr, #-0x10
+        PROLOG_SAVE_REG_PAIR_INDEXED    fp, lr, -0x10
 
         PREPARE_EXTERNAL_VAR_INDIRECT_W RhpTrapThreads, 10
 
@@ -127,94 +127,16 @@ NoWait:
         ldr         x10, [x9, #OFFSETOF__PInvokeTransitionFrame__m_Flags]
         tbz         x10, #PTFF_THREAD_ABORT_BIT, NoAbort
 
-        EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, #0x10
+        EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, 0x10
         mov w0, #STATUS_REDHAWK_THREAD_ABORT
         mov x1, lr          // hijack target address as exception PC
         b RhpThrowHwEx        
 
 NoAbort:
-        EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, #0x10
+        EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, 0x10
         EPILOG_RETURN
 
     NESTED_END RhpWaitForGC, _TEXT
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// RhpReversePInvoke
-//
-// IN:  x9: address of reverse pinvoke frame
-//                  0: save slot for previous M->U transition frame
-//                  8: save slot for thread pointer to avoid re-calc in epilog sequence
-//
-// PRESERVES: x0 - x8 -- need to preserve these because the caller assumes they are not trashed
-//
-// TRASHES:   x10, x11
-//
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    LEAF_ENTRY RhpReversePInvoke, _TEXT
-
-        INLINE_GETTHREAD x10    // x10 = Thread
-        str         x10, [x9, #8]    // save Thread pointer for RhpReversePInvokeReturn
-
-        // x9 = reverse pinvoke frame
-        // x10 = thread
-        // x11 = scratch
-
-        ldr         w11, [x10, #OFFSETOF__Thread__m_ThreadStateFlags]
-        tbz         x11, #TSF_Attached_Bit, AttachThread
-
-ThreadAttached:
-        //
-        // Check for the correct mode.  This is accessible via various odd things that we cannot completely 
-        // prevent such as :
-        //     1) Registering a reverse pinvoke entrypoint as a vectored exception handler
-        //     2) Performing a managed delegate invoke on a reverse pinvoke delegate.
-        //
-        ldr         x11, [x10, #OFFSETOF__Thread__m_pTransitionFrame]
-        cbz         x11, CheckBadTransition
-
-        // Save previous TransitionFrame prior to making the mode transition so that it is always valid 
-        // whenever we might attempt to hijack this thread.
-        str         x11, [x9]
-
-        str         xzr, [x10, #OFFSETOF__Thread__m_pTransitionFrame] 
-        dmb         ish
-
-        PREPARE_EXTERNAL_VAR_INDIRECT_W RhpTrapThreads, 11
-
-        tbnz        x11, #TrapThreadsFlags_TrapThreads_Bit, TrapThread
-
-        ret
-
-CheckBadTransition:
-        // Allow 'bad transitions' in when the TSF_DoNotTriggerGc mode is set.  This allows us to have 
-        // [NativeCallable] methods that are called via the "restricted GC callouts" as well as from native,
-        // which is necessary because the methods are CCW vtable methods on interfaces passed to native.
-        ldr         w11, [x10, #OFFSETOF__Thread__m_ThreadStateFlags]
-        tbz         x11, #TSF_DoNotTriggerGc_Bit, BadTransition
-
-        // zero-out our 'previous transition frame' save slot
-        mov         x11, #0
-        str         x11, [x9]
-
-        // nothing more to do
-        ret
-
-TrapThread:
-        // put the previous frame back (sets us back to preemptive mode)
-        ldr         x11, [x9]
-        str         x11, [x10, #OFFSETOF__Thread__m_pTransitionFrame] 
-        dmb         ish
-
-AttachThread:
-        // passing address of reverse pinvoke frame in x9
-        b           RhpReversePInvokeAttachOrTrapThread
-
-BadTransition:
-        mov         x0, lr  // arg <- return address
-        b           RhpReversePInvokeBadTransition
-
-    LEAF_END RhpReversePInvoke, _TEXT
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -231,7 +153,7 @@ BadTransition:
     NESTED_ENTRY RhpReversePInvokeAttachOrTrapThread, _TEXT, NoHandler
 
         // FP and LR registers
-        PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, #-0xA0            // Push down stack pointer and store FP and LR
+        PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -0xA0            // Push down stack pointer and store FP and LR
 
         // Need to save argument registers x0-x7 and the return buffer register x8 (twice for 16B alignment)
         stp         x0, x1, [sp, #0x10]
@@ -263,7 +185,7 @@ BadTransition:
         ldr         x8, [sp, #0x50] 
 
         // Restore FP and LR registers, and free the allocated stack block
-        EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, #0xA0
+        EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, 0xA0
         EPILOG_RETURN
 
     NESTED_END RhpReversePInvokeTrapThread
@@ -287,10 +209,15 @@ NESTED_ENTRY RhpPInvoke, _TEXT, NoHandler
         str     x9, [x0, #OFFSETOF__PInvokeTransitionFrame__m_Flags]
 
         // get TLS global variable address
-        // r0 = GetThread()
-        INLINE_GETTHREAD x10
-        str     x10, [x0, #OFFSETOF__PInvokeTransitionFrame__m_pThread]
-        str     x0, [x10, #OFFSETOF__Thread__m_pTransitionFrame]
+
+#ifdef FEATURE_EMULATED_TLS
+        GETTHREAD_ETLS_1
+#else
+        INLINE_GETTHREAD x1
+#endif
+
+        str     x1, [x0, #OFFSETOF__PInvokeTransitionFrame__m_pThread]
+        str     x0, [x1, #OFFSETOF__Thread__m_pTransitionFrame]
 
         PREPARE_EXTERNAL_VAR_INDIRECT_W RhpTrapThreads, 9
 

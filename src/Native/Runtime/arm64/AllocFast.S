@@ -21,7 +21,11 @@ OFFSETOF__Thread__m_alloc_context__alloc_limit      = OFFSETOF__Thread__m_rgbAll
     LEAF_ENTRY RhpNewFast, _TEXT
 
         // x1 = GetThread()
+#ifdef FEATURE_EMULATED_TLS
+        GETTHREAD_ETLS_1
+#else
         INLINE_GETTHREAD x1
+#endif
 
         //
         // x0 contains EEType pointer
@@ -120,8 +124,8 @@ NewOutOfMemory:
 //  x1 == element/character count
     LEAF_ENTRY RhNewString, _TEXT
         // Make sure computing the overall allocation size wont overflow
-        // TODO: this should be actually MAX_STRING_LENGTH
-        mov         x2, 0x7FFFFFFF
+        movz        x2, MAX_STRING_LENGTH & 0xFFFF
+        movk        x2, MAX_STRING_LENGTH >> 16, lsl 16
         cmp         x1, x2
         bhi         StringSizeOverflow
 
@@ -135,7 +139,11 @@ NewOutOfMemory:
         // x1 == element count
         // x2 == string size
 
+#ifdef FEATURE_EMULATED_TLS
+        GETTHREAD_ETLS_3
+#else
         INLINE_GETTHREAD x3
+#endif
 
         // Load potential new object address into x12.
         ldr         x12, [x3, #OFFSETOF__Thread__m_alloc_context__alloc_ptr]
@@ -196,7 +204,11 @@ StringSizeOverflow:
         // x1 == element count
         // x2 == array size
 
+#ifdef FEATURE_EMULATED_TLS
+        GETTHREAD_ETLS_3
+#else
         INLINE_GETTHREAD x3
+#endif
 
         // Load potential new object address into x12.
         ldr         x12, [x3, #OFFSETOF__Thread__m_alloc_context__alloc_ptr]
