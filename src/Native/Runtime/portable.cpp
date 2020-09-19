@@ -71,6 +71,7 @@ COOP_PINVOKE_HELPER(Object *, RhpNewFast, (EEType* pEEType))
         acontext->alloc_ptr = advance;
         pObject = (Object *)result;
         pObject->set_EEType(pEEType);
+        //printf("newFast from context %p %x\n", pObject, size);
         return pObject;
     }
 
@@ -84,6 +85,7 @@ COOP_PINVOKE_HELPER(Object *, RhpNewFast, (EEType* pEEType))
     if (size >= RH_LARGE_OBJECT_SIZE)
         RhpPublishObject(pObject, size);
 
+    printf("newFast from RhpGcAlloc %p %x\n", pObject, size);
     return pObject;
 }
 
@@ -113,11 +115,6 @@ COOP_PINVOKE_HELPER(Object *, RhpNewFinalizable, (EEType* pEEType))
 
 COOP_PINVOKE_HELPER(Array *, RhpNewArray, (EEType * pArrayEEType, int numElements))
 {
-    if(pArrayEEType->RequiresAlign8())
-    {
-        printf("RhpNewArray called for array that required Align8\n");
-    }
-
     ASSERT_MSG(!pArrayEEType->RequiresAlign8(), "NYI");
 
     Thread * pCurThread = ThreadStore::GetCurrentThread();
@@ -126,7 +123,6 @@ COOP_PINVOKE_HELPER(Array *, RhpNewArray, (EEType * pArrayEEType, int numElement
 
     if (numElements < 0)
     {
-        printf("numElements < 0\n");
         ASSERT_UNCONDITIONALLY("NYI");  // TODO: Throw overflow
     }
 
@@ -136,8 +132,6 @@ COOP_PINVOKE_HELPER(Array *, RhpNewArray, (EEType * pArrayEEType, int numElement
     // <= 0xffff, and thus the product is <= 0xffff0000, and the base size is only ~12 bytes
     if (numElements > 0x10000)
     {
-        printf("numElements > 0x10000\n");
-        printf("componentyysize %u\n", pArrayEEType->get_ComponentSize());
         // Perform the size computation using 64-bit integeres to detect overflow
         uint64_t size64 = (uint64_t)pArrayEEType->get_BaseSize() + ((uint64_t)numElements * (uint64_t)pArrayEEType->get_ComponentSize());
         size64 = (size64 + (sizeof(UIntNative)-1)) & ~(sizeof(UIntNative)-1);
@@ -145,7 +139,6 @@ COOP_PINVOKE_HELPER(Array *, RhpNewArray, (EEType * pArrayEEType, int numElement
         size = (size_t)size64;
         if (size != size64)
         {
-            printf("size overflow\n");
             ASSERT_UNCONDITIONALLY("NYI");  // TODO: Throw overflow
         }
     }
@@ -164,24 +157,25 @@ COOP_PINVOKE_HELPER(Array *, RhpNewArray, (EEType * pArrayEEType, int numElement
         pObject = (Array *)result;
         pObject->set_EEType(pArrayEEType);
         pObject->InitArrayLength((UInt32)numElements);
+        //printf("array from context %p %x\n", pObject, size);
         return pObject;
     }
 
     pObject = (Array *)RhpGcAlloc(pArrayEEType, 0, size, NULL);
     if (pObject == nullptr)
     {
-        printf("oomi for sipze %x\n", size);
-        printf("componentyysize %u\n", pArrayEEType->get_ComponentSize());
-        printf("numelements %u\n", numElements);
-        printf("base size %u\n", (size_t)pArrayEEType->get_BaseSize());
         ASSERT_UNCONDITIONALLY("NYI");  // TODO: Throw OOM
     }
     pObject->set_EEType(pArrayEEType);
     pObject->InitArrayLength((UInt32)numElements);
 
     if (size >= RH_LARGE_OBJECT_SIZE)
+    {
+        printf("large\n");
         RhpPublishObject(pObject, size);
+    }
 
+        printf("array from RhpGCAlloc %p %x\n", pObject, size);
     return pObject;
 }
 

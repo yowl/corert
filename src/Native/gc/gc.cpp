@@ -4021,10 +4021,12 @@ BOOL gc_heap::reserve_initial_memory (size_t normal_size, size_t large_size, siz
     size_t requestedMemory = memory_details.block_count * (normal_size + large_size + temp_pinned_size);
 
     uint8_t* allatonce_block = (uint8_t*)virtual_alloc (requestedMemory, use_large_pages_p);
+    printf("initial alloc %p %x\n", allatonce_block, requestedMemory);
     uint8_t* separated_poh_block = nullptr;
     if (allatonce_block && separated_poh_p)
     {
         separated_poh_block = (uint8_t*)virtual_alloc (separate_pinned_size, false);
+        printf("separated %p %x\n", separated_poh_block, separate_pinned_size);
         if (!separated_poh_block)
         {
             virtual_free (allatonce_block, requestedMemory);
@@ -4231,6 +4233,7 @@ void* virtual_alloc (size_t size, bool use_large_pages_p)
     void* prgmem = use_large_pages_p ?
         GCToOSInterface::VirtualReserveAndCommitLargePages(requested_size) :
         GCToOSInterface::VirtualReserve(requested_size, card_size * card_word_width, flags);
+    printf("virtual alloc reserve %p %x\n", prgmem, requested_size);
     void *aligned_mem = prgmem;
 
     // We don't want (prgmem + size) to be right at the end of the address space
@@ -4244,6 +4247,7 @@ void* virtual_alloc (size_t size, bool use_large_pages_p)
 
         if ((end_mem == 0) || ((size_t)(MAX_PTR - end_mem) <= END_SPACE_AFTER_GC))
         {
+            printf("virtual alloc release size %x\n", requested_size);
             GCToOSInterface::VirtualRelease (prgmem, requested_size);
             dprintf (2, ("Virtual Alloc size %Id returned memory right against 4GB [%Ix, %Ix[ - discarding",
                         requested_size, (size_t)prgmem, (size_t)((uint8_t*)prgmem+requested_size)));
@@ -4547,6 +4551,7 @@ gc_heap::get_segment (size_t size, gc_oh_num oh)
     if (!result)
     {
         void* mem = virtual_alloc (size);
+        printf("get_segment alloc %p %x\n", mem, size);
         if (!mem)
         {
             fgm_result.set_fgm (fgm_reserve_segment, size, uoh_p);
@@ -5696,6 +5701,7 @@ bool gc_heap::virtual_decommit (void* address, size_t size, gc_oh_num oh, int h_
 void gc_heap::virtual_free (void* add, size_t allocated_size, heap_segment* sg)
 {
     assert(!heap_hard_limit);
+    printf("virtal_free %x\n", allocated_size);
     bool release_succeeded_p = GCToOSInterface::VirtualRelease (add, allocated_size);
     if (release_succeeded_p)
     {
@@ -7242,6 +7248,7 @@ void destroy_card_table (uint32_t* c_table)
 {
 //  delete (uint32_t*)&card_table_refcount(c_table);
 
+    printf("destroy card table %x\n",  card_table_size(c_table));
     GCToOSInterface::VirtualRelease (&card_table_refcount(c_table), card_table_size(c_table));
     dprintf (2, ("Table Virtual Free : %Ix", (size_t)&card_table_refcount(c_table)));
 }
@@ -7311,6 +7318,7 @@ uint32_t* gc_heap::make_card_table (uint8_t* start, uint8_t* end)
     if (!virtual_commit (mem, commit_size, gc_oh_num::none))
     {
         dprintf (1, ("Card table commit failed"));
+        printf("make_card_table %x\n", alloc_size);
         GCToOSInterface::VirtualRelease (mem, alloc_size);
         return 0;
     }
@@ -7321,6 +7329,7 @@ uint32_t* gc_heap::make_card_table (uint8_t* start, uint8_t* end)
     card_table_lowest_address (ct) = start;
     card_table_highest_address (ct) = end;
     card_table_brick_table (ct) = (short*)((uint8_t*)ct + cs);
+    printf("setting card size %x\n", alloc_size);
     card_table_size (ct) = alloc_size;
     card_table_next (ct) = 0;
 
@@ -7690,6 +7699,7 @@ fail:
 #endif
 
             //delete (uint32_t*)((uint8_t*)ct - sizeof(card_table_info));
+            printf("grow_brick_card_tables %x\n", alloc_size);
             if (!GCToOSInterface::VirtualRelease (mem, alloc_size))
             {
                 dprintf (GC_TABLE_LOG, ("GCToOSInterface::VirtualRelease failed"));
@@ -35813,7 +35823,6 @@ void GCHeap::Relocate (Object** ppObject, ScanContext* sc,
 
         if (gc_heap::loh_object_p (object))
         {
-            printf("loh find object %p\n", object);
             pheader = hp->find_object (object);
             if (pheader == 0)
             {
@@ -38503,7 +38512,10 @@ void GCHeap::DiagScanDependentHandles (handle_scan_fn fn, int gen_number, ScanCo
 void deleteGCShadow()
 {
     if (g_GCShadow != 0)
+    {
+        printf("deleteGCShadow %x\n",  g_GCShadowEnd - g_GCShadow);
         GCToOSInterface::VirtualRelease (g_GCShadow, g_GCShadowEnd - g_GCShadow);
+    }
     g_GCShadow = 0;
     g_GCShadowEnd = 0;
 }
@@ -38519,6 +38531,7 @@ void initGCShadow()
     {
         deleteGCShadow();
         g_GCShadowEnd = g_GCShadow = (uint8_t *)GCToOSInterface::VirtualReserve(len, 0, VirtualReserveFlags::None);
+        printf("initGCShadow %p %x\n", g_GCShadow, len);
         if (g_GCShadow == NULL || !GCToOSInterface::VirtualCommit(g_GCShadow, len))
         {
             _ASSERTE(!"Not enough memory to run HeapVerify level 2");

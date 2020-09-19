@@ -436,11 +436,6 @@ internal static class Program
             var r = mr.Next();
             object o = new long[20000]; // large object heap, 160000 > 85KB
             keptObjects[r % 1000] = o;
-            if (i % 100 == 0)
-            {
-                PrintLine(i.ToString());
-            }
-
         }
         return true;
     }
@@ -476,11 +471,8 @@ internal static class Program
         {
             var r = mr.Next();
             object o;
-            //if (i >= 13900)
-            //{
-            //    PrintLine(i.ToString());
-            //    PrintLine(r.ToString());
-            //}
+            //PrintString("r is:");
+            //PrintLine(r.ToString());
             switch (r % 9)
             {
                 case 0:
@@ -514,42 +506,30 @@ internal static class Program
                     o = null;
                     break;
             }
-            if (i % 100 == 0)
-            {
-                PrintLine(i.ToString());
-                PrintLine(GC.GetTotalMemory(false).ToString());
-                //if (i >= 10000)
-                //{
-                //    var info = GC.GetGCMemoryInfo();
-                //    PrintLine("Fragmented");
-                //    PrintLine(info.FragmentedBytes.ToString());
-                //    PrintLine("HeapSizeBytes");
-                //    PrintLine(info.HeapSizeBytes.ToString());
-                //    PrintLine("HighMemoryLoadThresholdBytes");
-                //    PrintLine(info.HighMemoryLoadThresholdBytes.ToString());
-                //    PrintLine("MemoryLoadBytes");
-                //    PrintLine(info.MemoryLoadBytes.ToString());
-                //    PrintLine("TotalAvailableMemoryBytes");
-                //    PrintLine(info.TotalAvailableMemoryBytes.ToString());
-                //}
-            }
+            //if (i % 100 == 0)
+            //{
+            //    PrintLine(i.ToString());
+            //    PrintLine(GC.GetTotalMemory(false).ToString());
+            //}
+//            PrintLine("checking arrays");
             for (var x = 0; x < 1000; x++)
             {
+//                PrintLine(x.ToString());
                 object a = keptObjects[x]; // o fails, keptObjects[x] works, null fails, keptObjects[x] fails if that is the only code
-                //if (a == null)
-                //{
-                //    t++;
-                //    //PrintLine("found array at " + x.ToString() + " with invalid length " + a2.Length);
+                                            //if (a == null)
+                                            //{
+                                            //    t++;
+                                            //    //PrintLine("found array at " + x.ToString() + " with invalid length " + a2.Length);
 
                 //}
                 if (a is Array)
                 {
-//                    Array a2 = (Array)a; // fails without this line
-                    //if (a2.Length < 1) // works without this if
-                    //{
-//                        PrintLine("found array at " + x.ToString() + " with invalid length " + a2.Length);
-                        //throw new Exception();  // works with this line and without
-                    //}
+                    Array a2 = (Array)a; // fails without this line
+                    if (a2.Length != 10000 && a2.Length != 20000) // works without this if
+                    {
+                        PrintLine("found array at " + x.ToString() + " with invalid length " + a2.Length);
+                        return false;
+                    }
                 }
             }
             keptObjects[r % 1000] = o;

@@ -408,9 +408,10 @@ extern RtuObjectRef * t_pShadowStackBottom;
 
 void GcScanWasmShadowStack(void * pfnEnumCallback, void * pvCallbackData)
 {
-    printf("scan stack\n");
     // Wasm does not permit iteration of stack frames so is uses a shadow stack instead
-    // TODO: if this runs inside a ReversePInvoke, then there is an additional shadow stack block (one per ReversePInvoke) t_pShadowStackTop will encompass them both, but is not efficient and may crash depending on what is between the blocks 
+    // TODO: if this runs inside a ReversePInvoke, then there is an additional shadow stack block 
+    // (one per active ReversePInvoke).  t_pShadowStackBottom -> t_pShadowStackTop will encompass them both, but is not efficient.
+    printf("scan roots\n");
     RedhawkGCInterface::EnumGcRefsInRegionConservatively(t_pShadowStackBottom, t_pShadowStackTop, pfnEnumCallback, pvCallbackData);
 }
 #endif
