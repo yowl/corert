@@ -21,7 +21,11 @@ OFFSETOF__Thread__m_alloc_context__alloc_limit      = OFFSETOF__Thread__m_rgbAll
     LEAF_ENTRY RhpNewFast, _TEXT
 
         // x1 = GetThread()
+#ifdef FEATURE_EMULATED_TLS
+        GETTHREAD_ETLS_1
+#else
         INLINE_GETTHREAD x1
+#endif
 
         //
         // x0 contains EEType pointer
@@ -89,7 +93,7 @@ RhpNewFast_RarePath:
 
         // If the object is bigger than RH_LARGE_OBJECT_SIZE, we must publish it to the BGC
         ldr         w1, [x19, #OFFSETOF__EEType__m_uBaseSize]
-        movk        x2, #(RH_LARGE_OBJECT_SIZE & 0xFFFF)
+        movz        x2, #(RH_LARGE_OBJECT_SIZE & 0xFFFF)
         movk        x2, #(RH_LARGE_OBJECT_SIZE >> 16), lsl #16
         cmp         x1, x2
         blo         New_SkipPublish
@@ -120,8 +124,8 @@ NewOutOfMemory:
 //  x1 == element/character count
     LEAF_ENTRY RhNewString, _TEXT
         // Make sure computing the overall allocation size wont overflow
-        // TODO: this should be actually MAX_STRING_LENGTH
-        mov         x2, 0x7FFFFFFF
+        movz        x2, MAX_STRING_LENGTH & 0xFFFF
+        movk        x2, MAX_STRING_LENGTH >> 16, lsl 16
         cmp         x1, x2
         bhi         StringSizeOverflow
 
@@ -135,7 +139,11 @@ NewOutOfMemory:
         // x1 == element count
         // x2 == string size
 
+#ifdef FEATURE_EMULATED_TLS
+        GETTHREAD_ETLS_3
+#else
         INLINE_GETTHREAD x3
+#endif
 
         // Load potential new object address into x12.
         ldr         x12, [x3, #OFFSETOF__Thread__m_alloc_context__alloc_ptr]
@@ -196,7 +204,11 @@ StringSizeOverflow:
         // x1 == element count
         // x2 == array size
 
+#ifdef FEATURE_EMULATED_TLS
+        GETTHREAD_ETLS_3
+#else
         INLINE_GETTHREAD x3
+#endif
 
         // Load potential new object address into x12.
         ldr         x12, [x3, #OFFSETOF__Thread__m_alloc_context__alloc_ptr]
@@ -264,7 +276,7 @@ ArraySizeOverflow:
         str         x20, [x0, #OFFSETOF__Array__m_Length]
 
         // If the object is bigger than RH_LARGE_OBJECT_SIZE, we must publish it to the BGC
-        movk        x2, #(RH_LARGE_OBJECT_SIZE & 0xFFFF)
+        movz        x2, #(RH_LARGE_OBJECT_SIZE & 0xFFFF)
         movk        x2, #(RH_LARGE_OBJECT_SIZE >> 16), lsl #16
         cmp         x21, x2
         blo         NewArray_SkipPublish

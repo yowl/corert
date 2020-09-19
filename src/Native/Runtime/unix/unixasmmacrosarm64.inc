@@ -21,16 +21,19 @@ C_FUNC(\Name):
 
 .macro ALTERNATE_ENTRY Name
         .global C_FUNC(\Name)
+        .hidden C_FUNC(\Name)
 C_FUNC(\Name):
 .endm
 
 .macro LABELED_RETURN_ADDRESS Name
         .global C_FUNC(\Name)
+        .hidden C_FUNC(\Name)
 C_FUNC(\Name):
 .endm
 
 .macro LEAF_ENTRY Name, Section
         .global C_FUNC(\Name)
+        .hidden C_FUNC(\Name)
         .type \Name, %function
 C_FUNC(\Name):
         .cfi_startproc
@@ -46,13 +49,24 @@ C_FUNC(\Name):
         add	\HelperReg, \HelperReg, :lo12:C_FUNC(\Name)
 .endm 
 
+.macro PREPARE_EXTERNAL_VAR_INDIRECT Name, HelperReg
+        adrp \HelperReg, C_FUNC(\Name)
+        ldr	\HelperReg, [\HelperReg, :lo12:C_FUNC(\Name)]
+.endm 
+
+.macro PREPARE_EXTERNAL_VAR_INDIRECT_W Name, HelperReg
+        adrp x\HelperReg, C_FUNC(\Name)
+        ldr	w\HelperReg, [x\HelperReg, :lo12:C_FUNC(\Name)]
+.endm 
+
+
 .macro PROLOG_STACK_ALLOC Size
         sub sp, sp, \Size
-        .cfi_adjust_cfa_offset \Size
 .endm
 
 .macro EPILOG_STACK_FREE Size
         add sp, sp, \Size
+        .cfi_adjust_cfa_offset -\Size
 .endm
 
 .macro EPILOG_STACK_RESTORE
@@ -61,10 +75,13 @@ C_FUNC(\Name):
 
 .macro PROLOG_SAVE_REG reg, ofs
         str \reg, [sp, \ofs]
+        .cfi_rel_offset \reg, \ofs
 .endm
 
 .macro PROLOG_SAVE_REG_PAIR reg1, reg2, ofs
         stp \reg1, \reg2, [sp, \ofs]
+        .cfi_rel_offset \reg1, \ofs
+        .cfi_rel_offset \reg2, \ofs + 8
         .ifc \reg1, fp
         mov fp, sp
         .endif
@@ -72,26 +89,39 @@ C_FUNC(\Name):
 
 .macro PROLOG_SAVE_REG_PAIR_INDEXED reg1, reg2, ofs
         stp \reg1, \reg2, [sp, \ofs]!
+        .cfi_adjust_cfa_offset -\ofs
+        .cfi_rel_offset \reg1, 0
+        .cfi_rel_offset \reg2, 8
         .ifc \reg1, fp
         mov fp, sp
+        .cfi_def_cfa_register fp
         .endif
 .endm
 
 .macro PROLOG_SAVE_REG_PAIR_NO_FP_INDEXED reg1, reg2, ofs
         stp \reg1, \reg2, [sp, \ofs]!
+        .cfi_adjust_cfa_offset -\ofs
+        .cfi_rel_offset \reg1, 0
+        .cfi_rel_offset \reg2, 8
 .endm
 
 
 .macro EPILOG_RESTORE_REG reg, ofs
         ldr \reg, [sp, \ofs]
+        .cfi_restore \reg
 .endm
 
 .macro EPILOG_RESTORE_REG_PAIR reg1, reg2, ofs
         ldp \reg1, \reg2, [sp, \ofs]
+        .cfi_restore \reg1
+        .cfi_restore \reg2
 .endm
 
 .macro EPILOG_RESTORE_REG_PAIR_INDEXED reg1, reg2, ofs
         ldp \reg1, \reg2, [sp], \ofs
+        .cfi_restore \reg1
+        .cfi_restore \reg2
+        .cfi_adjust_cfa_offset -\ofs
 .endm
 
 .macro EPILOG_RETURN
@@ -161,13 +191,54 @@ C_FUNC(\Name):
     add	\target, \target, #:tprel_lo12_nc:\var
 .endm
 
-
-.macro PREPARE_INLINE_GETTHREAD
-.global tls_CurrentThread 
-.endm
-
 .macro INLINE_GETTHREAD target
     INLINE_GET_TLS_VAR \target, tls_CurrentThread
+.endm
+
+// Do not use these ETLS macros in functions that already create a stack frame. 
+// Creating two stack frames in one function can confuse the unwinder/debugger
+
+.macro GETTHREAD_ETLS_1
+    PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -32           // ;; Push down stack pointer and store FP and LR
+    str         x0,  [sp, #0x10]
+
+    bl RhpGetThread
+    mov x1, x0
+
+    ldr         x0,  [sp, #0x10]
+    EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, 32
+.endm
+
+.macro GETTHREAD_ETLS_3
+    PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -48           // ;; Push down stack pointer and store FP and LR
+    stp         x0, x1, [sp, #0x10]
+    str         x2,  [sp, #0x20]
+
+    bl RhpGetThread
+    mov x3, x0
+
+    ldp         x0, x1, [sp, #0x10]
+    ldr         x2,  [sp, #0x20]
+    EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, 48
+.endm
+
+.macro GETTHUNKDATA_ETLS_9
+    PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -96           // ;; Push down stack pointer and store FP and LR
+    stp         x0, x1, [sp, #0x10]
+    stp         x2, x3, [sp, #0x20]
+    stp         x4, x5, [sp, #0x30]
+    stp         x6, x7, [sp, #0x40]
+    stp         x8, xip0, [sp, #0x50]
+
+    bl RhpGetThunkData
+    mov x9, x0
+
+    ldp         x0, x1, [sp, #0x10]
+    ldp         x2, x3, [sp, #0x20]
+    ldp         x4, x5, [sp, #0x30]
+    ldp         x6, x7, [sp, #0x40]
+    ldp         x8, xip0, [sp, #0x50]
+    EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, 96
 .endm
 
 .macro  ArmInterlockedOperationBarrier
@@ -196,8 +267,9 @@ C_FUNC(\Name):
         .data
         .align      8
 C_FUNC(\Name):
-        .word       1b
+        .quad       1b
         .global     C_FUNC(\Name)
+        .hidden     C_FUNC(\Name)
         .text
 .endm
 
@@ -209,16 +281,16 @@ DEFAULT_FRAME_SAVE_FLAGS = PTFF_SAVE_ALL_PRESERVED + PTFF_SAVE_SP
 
 .macro PUSH_COOP_PINVOKE_FRAME trashReg
 
-    PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, #-0x80      // Push down stack pointer and store FP and LR
+    PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -0x80      // Push down stack pointer and store FP and LR
 
     // 0x10 bytes reserved for Thread* and flags
 
     // Save callee saved registers
-    PROLOG_SAVE_REG_PAIR   x19, x20, #0x20
-    PROLOG_SAVE_REG_PAIR   x21, x22, #0x30
-    PROLOG_SAVE_REG_PAIR   x23, x24, #0x40
-    PROLOG_SAVE_REG_PAIR   x25, x26, #0x50
-    PROLOG_SAVE_REG_PAIR   x27, x28, #0x60
+    PROLOG_SAVE_REG_PAIR   x19, x20, 0x20
+    PROLOG_SAVE_REG_PAIR   x21, x22, 0x30
+    PROLOG_SAVE_REG_PAIR   x23, x24, 0x40
+    PROLOG_SAVE_REG_PAIR   x25, x26, 0x50
+    PROLOG_SAVE_REG_PAIR   x27, x28, 0x60
 
     // Save the value of SP before stack allocation to the last slot in the frame (slot #15)
     add                    \trashReg, sp, #0x80
@@ -234,12 +306,12 @@ DEFAULT_FRAME_SAVE_FLAGS = PTFF_SAVE_ALL_PRESERVED + PTFF_SAVE_SP
 // Pop the frame and restore register state preserved by PUSH_COOP_PINVOKE_FRAME
 .macro POP_COOP_PINVOKE_FRAME
 
-    EPILOG_RESTORE_REG_PAIR   x19, x20, #0x20
-    EPILOG_RESTORE_REG_PAIR   x21, x22, #0x30
-    EPILOG_RESTORE_REG_PAIR   x23, x24, #0x40
-    EPILOG_RESTORE_REG_PAIR   x25, x26, #0x50
-    EPILOG_RESTORE_REG_PAIR   x27, x28, #0x60
-    EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, #0x80
+    EPILOG_RESTORE_REG_PAIR   x19, x20, 0x20
+    EPILOG_RESTORE_REG_PAIR   x21, x22, 0x30
+    EPILOG_RESTORE_REG_PAIR   x23, x24, 0x40
+    EPILOG_RESTORE_REG_PAIR   x25, x26, 0x50
+    EPILOG_RESTORE_REG_PAIR   x27, x28, 0x60
+    EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, 0x80
 .endm
 
 // Bit position for the flags above, to be used with tbz / tbnz instructions

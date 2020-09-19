@@ -515,10 +515,10 @@ namespace Internal.IL
                 var funcletArgs = new LLVMTypeRef[] { LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0) }; 
                 LLVMTypeRef universalFuncletSignature = LLVMTypeRef.CreateFunction(returnType, funcletArgs, false);
                 funclet = Module.AddFunction(funcletName, universalFuncletSignature);
-                if (_debugFunction.Handle != IntPtr.Zero)
-                {
-                    LLVMSharpInterop.DISetSubProgram(funclet, _debugFunction);
-                }
+                //if (_debugFunction.Handle != IntPtr.Zero)
+                //{
+                //    LLVMSharpInterop.DISetSubProgram(funclet, _debugFunction);
+                //} // TODO: need a new subProgram, which will be easier when the address context change is PR'ed
                 _exceptionFunclets.Add(funclet);
             }
 
@@ -1905,6 +1905,21 @@ namespace Internal.IL
                 }
             }
 
+            // Hard coded InternalCall mappings for mono interoperability
+            if (callee.IsInternalCall)
+            {
+                var metadataType = callee.OwningType as MetadataType;
+                // See https://github.com/dotnet/runtime/blob/9ba9a300a08170c8170ea52981810f41fad68cf0/src/mono/wasm/runtime/driver.c#L400-L407
+                // Mono have these InternalCall methods in different namespaces but just mapping them to System.Private.WebAssembly.
+                if (metadataType != null && (metadataType.Namespace == "WebAssembly.JSInterop" && metadataType.Name == "InternalCalls" || metadataType.Namespace == "WebAssembly" && metadataType.Name == "Runtime"))
+                {
+                    var coreRtJsInternalCallsType = _compilation.TypeSystemContext
+                        .GetModuleForSimpleName("System.Private.WebAssembly")
+                        .GetKnownType("System.Private.WebAssembly", "InternalCalls");
+                    callee = coreRtJsInternalCallsType.GetMethod(callee.Name, callee.Signature);
+                }
+            }
+
             if (callee.IsRawPInvoke() || (callee.IsInternalCall && callee.HasCustomAttribute("System.Runtime", "RuntimeImportAttribute")))
             {
                 ImportRawPInvoke(callee);
@@ -2113,7 +2128,6 @@ namespace Internal.IL
             dictPtrPtrStore = default(LLVMValueRef);
             fatFunctionPtr = default(LLVMValueRef);
 
-            string canonMethodName = _compilation.NameMangler.GetMangledMethodName(canonMethod).ToString();
             TypeDesc owningType = callee.OwningType;
             bool delegateInvoke = owningType.IsDelegate && callee.Name == "Invoke";
             // Sealed methods must not be called virtually due to sealed vTables, so call them directly, but not delegate Invoke
@@ -2124,7 +2138,8 @@ namespace Internal.IL
                     hasHiddenParam = canonMethod.RequiresInstArg() || canonMethod.IsArrayAddressMethod();
                 }
                 AddMethodReference(canonMethod);
-                return GetOrCreateLLVMFunction(canonMethodName, canonMethod.Signature, hasHiddenParam);
+                string physicalName = _compilation.NodeFactory.MethodEntrypoint(canonMethod).GetMangledName(_compilation.NameMangler);
+                return GetOrCreateLLVMFunction(physicalName, canonMethod.Signature, hasHiddenParam);
             }
 
             LLVMValueRef thisRef = default;
@@ -2195,6 +2210,7 @@ namespace Internal.IL
 
             hasHiddenParam = canonMethod.RequiresInstArg();
             AddMethodReference(canonMethod);
+            string canonMethodName = _compilation.NodeFactory.MethodEntrypoint(canonMethod).GetMangledName(_compilation.NameMangler);
             return GetOrCreateLLVMFunction(canonMethodName, canonMethod.Signature, hasHiddenParam);
         }
 
@@ -2914,7 +2930,7 @@ namespace Internal.IL
             var destStruct = GetLLVMTypeForTypeDesc(actualReturnType).Undef;
             for (uint elemNo = 0; elemNo < llvmReturn.TypeOf.StructElementTypesCount; elemNo++)
             {
-                var elemValRef = _builder.BuildExtractValue(llvmReturn, 0, "ex" + elemNo);
+                var elemValRef = _builder.BuildExtractValue(llvmReturn, elemNo, "ex" + elemNo);
                 destStruct = _builder.BuildInsertValue(destStruct, elemValRef, elemNo, "st" + elemNo);
             }
             return new ExpressionEntry(stackValueKind, calleeName, destStruct, actualReturnType);
@@ -4089,6 +4105,7 @@ namespace Internal.IL
             if (enumCleanTargetType != null && targetType.IsPrimitive)
             {
                 if (enumCleanTargetType.IsWellKnownType(WellKnownType.Byte) ||
+                    enumCleanTargetType.IsWellKnownType(WellKnownType.Boolean) ||
                     enumCleanTargetType.IsWellKnownType(WellKnownType.Char) ||
                     enumCleanTargetType.IsWellKnownType(WellKnownType.UInt16) ||
                     enumCleanTargetType.IsWellKnownType(WellKnownType.UInt32) ||
@@ -4180,7 +4197,7 @@ namespace Internal.IL
                 }
             }
 
-            PushExpression(StackValueKind.Int32, "cmpop", result, GetWellKnownType(WellKnownType.SByte));
+            PushExpression(StackValueKind.Int32, "cmpop", result, GetWellKnownType(WellKnownType.UInt32));
         }
 
         private void ImportConvert(WellKnownType wellKnownType, bool checkOverflow, bool unsigned)
@@ -5016,7 +5033,15 @@ namespace Internal.IL
                 arguments = new StackEntry[] { new LoadExpressionEntry(StackValueKind.ValueType, "eeType", GetEETypePointerForTypeDesc(runtimeDeterminedArrayType, true), eeTypeDesc), sizeOfArray };
             }
             var helper = GetNewArrayHelperForType(runtimeDeterminedArrayType);
-            PushNonNull(CallRuntime(_compilation.TypeSystemContext, InternalCalls, helper, arguments, runtimeDeterminedArrayType));
+            var res = CallRuntime(_compilation.TypeSystemContext, InternalCalls, helper, arguments, runtimeDeterminedArrayType);
+            int spillIndex = _spilledExpressions.Count;
+            SpilledExpressionEntry spillEntry = new SpilledExpressionEntry(StackValueKind.ObjRef, "newarray" + _currentOffset, runtimeDeterminedArrayType, spillIndex, this);
+            _spilledExpressions.Add(spillEntry);
+            LLVMValueRef addrOfValueType = LoadVarAddress(spillIndex, LocalVarKind.Temp, out TypeDesc unused);
+            var typedAddress = CastIfNecessary(_builder, addrOfValueType, LLVMTypeRef.CreatePointer(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), 0));
+            _builder.BuildStore(res.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), typedAddress);
+
+            PushNonNull(spillEntry);
         }
 
         //TODO: copy of the same method in JitHelper.cs but that is internal

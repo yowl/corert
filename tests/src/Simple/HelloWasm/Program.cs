@@ -6,6 +6,7 @@ using System.Threading;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Collections.Generic;
+using System.Collections;
 using System.Reflection;
 using System.Diagnostics;
 
@@ -364,6 +365,12 @@ internal static class Program
         TestJavascriptCall();
 
         TestDefaultConstructorOf();
+
+        TestStructUnboxOverload();
+
+        TestGetSystemArrayEEType();
+
+        TestBoolCompare();
 
         // This test should remain last to get other results before stopping the debugger
         PrintLine("Debugger.Break() test: Ok if debugger is open and breaks.");
@@ -1360,7 +1367,7 @@ internal static class Program
         var values = new string[1];
         // testing that the generic return value type from the function can be stored in a concrete type
         values = values.AsSpan(0, 1).ToArray();
-        PassTest();
+        EndTest(values.Length == 1);
     }
 
     private static void TestCallToGenericInterfaceMethod()
@@ -2881,6 +2888,48 @@ internal static class Program
         StartTest("Test DefaultConstructorOf");
         var c = Activator.CreateInstance<ClassForNre>();
         EndTest(c != null);
+    }
+
+    internal struct LargeArrayBuilder<T>
+    {
+        private readonly int _maxCapacity;
+
+        public LargeArrayBuilder(bool initialize)
+            : this(maxCapacity: int.MaxValue)
+        {
+        }
+
+        public LargeArrayBuilder(int maxCapacity)
+            : this()
+        {
+            _maxCapacity = maxCapacity;
+        }
+    }
+
+    static void TestStructUnboxOverload()
+    {
+        StartTest("Test DefaultConstructorOf");
+        var s = new LargeArrayBuilder<string>(true);
+        var s2 = new LargeArrayBuilder<string>(1);
+        EndTest(true); // testing compilation 
+    }
+
+    static void TestGetSystemArrayEEType()
+    {
+        StartTest("Test can call GetSystemArrayEEType through CalliIntrinsic");
+        IList e = new string[] { "1" };
+        foreach (string s in e)
+        {
+        }
+        EndTest(true); // testing compilation 
+    }
+
+    static void TestBoolCompare()
+    {
+        StartTest("Test Bool.Equals");
+        bool expected = true;
+        bool actual = true;
+        EndTest(expected.Equals(actual));
     }
 
     static ushort ReadUInt16()

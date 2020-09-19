@@ -8,8 +8,8 @@
 #endif
 
 #ifdef TRASH_SAVED_ARGUMENT_REGISTERS
-    // TODO .extern RhpIntegerTrashValues
-    // TODO .extern RhpFpTrashValues
+    .global RhpIntegerTrashValues
+    .global RhpFpTrashValues
 #endif // TRASH_SAVED_ARGUMENT_REGISTERS
 
 // Padding to account for the odd number of saved integer registers
@@ -92,7 +92,7 @@
     NESTED_ENTRY Rhp\FunctionName, _TEXT, NoHandler
 
         // FP and LR registers
-        PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, #-STACK_SIZE           // ;; Push down stack pointer and store FP and LR
+        PROLOG_SAVE_REG_PAIR_INDEXED   fp, lr, -STACK_SIZE           // ;; Push down stack pointer and store FP and LR
 
         // Floating point registers
         stp         d0, d1, [sp, #(FLOAT_ARG_OFFSET       )]
@@ -110,7 +110,18 @@
         stp         x8, xzr, [sp, #(ARGUMENT_REGISTERS_OFFSET + 0x40)]
 
 #ifdef TRASH_SAVED_ARGUMENT_REGISTERS
-        // ARM64TODO
+        PREPARE_EXTERNAL_VAR RhpFpTrashValues, x1
+
+        ldp d0,d1, [x1, 0x0] 
+        ldp d2,d3, [x1, 0x10] 
+        ldp d4,d5, [x1, 0x20] 
+        ldp d6,d7, [x1, 0x30] 
+
+        PREPARE_EXTERNAL_VAR RhpIntegerTrashValues, x1
+
+        ldp x2,x3, [x1, 0x10]
+        ldp x4,x5, [x1, 0x20]
+        ldp x6,x7, [x1, 0x30]
 #endif // TRASH_SAVED_ARGUMENT_REGISTERS
 
         add         x0, sp, #DISTANCE_FROM_CHILDSP_TO_RETURN_BLOCK  // First parameter to target function is a pointer to the return block
@@ -141,10 +152,9 @@
         ldr         x8,      [sp, #(ARGUMENT_REGISTERS_OFFSET + 0x40)]
 
         // Restore FP and LR registers, and free the allocated stack block
-        EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, #STACK_SIZE
+        EPILOG_RESTORE_REG_PAIR_INDEXED   fp, lr, STACK_SIZE
 
         // Tailcall to the target address.
-        // TODO EPILOG_NOP
         br x12
 
     NESTED_END Rhp\FunctionName, _TEXT
