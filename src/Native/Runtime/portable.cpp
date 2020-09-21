@@ -157,7 +157,6 @@ COOP_PINVOKE_HELPER(Array *, RhpNewArray, (EEType * pArrayEEType, int numElement
         pObject = (Array *)result;
         pObject->set_EEType(pArrayEEType);
         pObject->InitArrayLength((UInt32)numElements);
-        //printf("array from context %p %x\n", pObject, size);
         return pObject;
     }
 
@@ -171,11 +170,9 @@ COOP_PINVOKE_HELPER(Array *, RhpNewArray, (EEType * pArrayEEType, int numElement
 
     if (size >= RH_LARGE_OBJECT_SIZE)
     {
-        printf("large\n");
         RhpPublishObject(pObject, size);
     }
 
-        printf("array from RhpGCAlloc %p %x\n", pObject, size);
     return pObject;
 }
 

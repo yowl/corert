@@ -471,8 +471,6 @@ internal static class Program
         {
             var r = mr.Next();
             object o;
-            //PrintString("r is:");
-            //PrintLine(r.ToString());
             switch (r % 9)
             {
                 case 0:
@@ -506,26 +504,14 @@ internal static class Program
                     o = null;
                     break;
             }
-            //if (i % 100 == 0)
-            //{
-            //    PrintLine(i.ToString());
-            //    PrintLine(GC.GetTotalMemory(false).ToString());
-            //}
-//            PrintLine("checking arrays");
             for (var x = 0; x < 1000; x++)
             {
-//                PrintLine(x.ToString());
-                object a = keptObjects[x]; // o fails, keptObjects[x] works, null fails, keptObjects[x] fails if that is the only code
-                                            //if (a == null)
-                                            //{
-                                            //    t++;
-                                            //    //PrintLine("found array at " + x.ToString() + " with invalid length " + a2.Length);
+                object a = keptObjects[x];
 
-                //}
                 if (a is Array)
                 {
-                    Array a2 = (Array)a; // fails without this line
-                    if (a2.Length != 10000 && a2.Length != 20000) // works without this if
+                    Array a2 = (Array)a; 
+                    if (a2.Length != 10000 && a2.Length != 20000 && a2.Length != 40000) 
                     {
                         PrintLine("found array at " + x.ToString() + " with invalid length " + a2.Length);
                         return false;

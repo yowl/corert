@@ -85,6 +85,7 @@ void* GCToOSInterface::VirtualReserveAndCommitLargePages(size_t size)
 //  true if it has succeeded, false if it has failed
 bool GCToOSInterface::VirtualCommit(void* address, size_t size, uint16_t node)
 {
+    memset(address, 0, size);
     return TRUE;
 }
 
