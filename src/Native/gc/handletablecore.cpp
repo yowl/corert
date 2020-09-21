@@ -565,7 +565,6 @@ void SegmentFree(TableSegment *pSegment)
     */
 
     // free the segment's memory
-    printf("SegmentFree\n");
     GCToOSInterface::VirtualRelease(pSegment, HANDLE_SEGMENT_SIZE);
 }
 

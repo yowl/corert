@@ -71,7 +71,6 @@ COOP_PINVOKE_HELPER(Object *, RhpNewFast, (EEType* pEEType))
         acontext->alloc_ptr = advance;
         pObject = (Object *)result;
         pObject->set_EEType(pEEType);
-        //printf("newFast from context %p %x\n", pObject, size);
         return pObject;
     }
 
@@ -85,7 +84,6 @@ COOP_PINVOKE_HELPER(Object *, RhpNewFast, (EEType* pEEType))
     if (size >= RH_LARGE_OBJECT_SIZE)
         RhpPublishObject(pObject, size);
 
-    printf("newFast from RhpGcAlloc %p %x\n", pObject, size);
     return pObject;
 }
 
@@ -169,9 +167,7 @@ COOP_PINVOKE_HELPER(Array *, RhpNewArray, (EEType * pArrayEEType, int numElement
     pObject->InitArrayLength((UInt32)numElements);
 
     if (size >= RH_LARGE_OBJECT_SIZE)
-    {
         RhpPublishObject(pObject, size);
-    }
 
     return pObject;
 }

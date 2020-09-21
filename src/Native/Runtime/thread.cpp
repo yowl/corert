@@ -411,7 +411,6 @@ void GcScanWasmShadowStack(void * pfnEnumCallback, void * pvCallbackData)
     // Wasm does not permit iteration of stack frames so is uses a shadow stack instead
     // TODO: if this runs inside a ReversePInvoke, then there is an additional shadow stack block 
     // (one per active ReversePInvoke).  t_pShadowStackBottom -> t_pShadowStackTop will encompass them both, but is not efficient.
-    printf("scan roots\n");
     RedhawkGCInterface::EnumGcRefsInRegionConservatively(t_pShadowStackBottom, t_pShadowStackTop, pfnEnumCallback, pvCallbackData);
 }
 #endif

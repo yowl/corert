@@ -29,7 +29,6 @@ static void* VirtualReserveInner(size_t size, size_t alignment, uint32_t flags)
         return NULL; // failed
     }
     memset(pRetVal, 0, size);
-    printf("alloced %p with size %x\n", pRetVal, size);
     return pRetVal;
 }
 
@@ -54,7 +53,8 @@ void* GCToOSInterface::VirtualReserve(size_t size, size_t alignment, uint32_t fl
 //  true if it has succeeded, false if it has failed
 bool GCToOSInterface::VirtualRelease(void* address, size_t size)
 {
-    printf("free address %p with size %x\n", address, size);
+    // WASM: TODO: if an attempt is made to release a partial range from an alloc, starting from the start of the range, this will release the whole range
+    // This would cause corruption, but this case does not appear to happen at the time of writing
     free(address);
 
     return TRUE; // free() is void

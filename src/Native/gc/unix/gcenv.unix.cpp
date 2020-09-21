@@ -1001,7 +1001,6 @@ size_t GCToOSInterface::GetCacheSizePerLogicalCpu(bool trueSize)
     s_maxSize = maxSize;
     s_maxTrueSize = maxTrueSize;
 
-    //    printf("GetCacheSizePerLogicalCpu returns %d, adjusted size %d\n", maxSize, maxTrueSize);
     return trueSize ? maxTrueSize : maxSize;
 }
 
@@ -1165,7 +1164,6 @@ uint64_t GetAvailablePhysicalMemory()
         // Ensure that we don't try to read the /proc/meminfo in successive calls to the GlobalMemoryStatusEx
         // if we have failed to access the file or the file didn't contain the MemAvailable value.
         tryReadMemInfo = ReadMemAvailable(&available);
-        printf(" tryReadMemInfo GetAvailablePhysicalMemory %x\n", available);
     }
 
     if (!tryReadMemInfo)
