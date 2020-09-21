@@ -29,6 +29,7 @@ static void* VirtualReserveInner(size_t size, size_t alignment, uint32_t flags)
         return NULL; // failed
     }
     memset(pRetVal, 0, size);
+    printf("reserverinner %p %x\n", pRetVal, size);
     return pRetVal;
 }
 
@@ -55,6 +56,7 @@ bool GCToOSInterface::VirtualRelease(void* address, size_t size)
 {
     // WASM: TODO: if an attempt is made to release a partial range from an alloc, starting from the start of the range, this will release the whole range
     // This would cause corruption, but this case does not appear to happen at the time of writing
+    printf("free %p %x\n", address, size);
     free(address);
 
     return TRUE; // free() is void
@@ -85,7 +87,6 @@ void* GCToOSInterface::VirtualReserveAndCommitLargePages(size_t size)
 //  true if it has succeeded, false if it has failed
 bool GCToOSInterface::VirtualCommit(void* address, size_t size, uint16_t node)
 {
-    memset(address, 0, size);
     return TRUE;
 }
 
@@ -97,5 +98,6 @@ bool GCToOSInterface::VirtualCommit(void* address, size_t size, uint16_t node)
 //  true if it has succeeded, false if it has failed
 bool GCToOSInterface::VirtualDecommit(void* address, size_t size)
 {
+    memset(address, 0, size);
     return TRUE;
 }
