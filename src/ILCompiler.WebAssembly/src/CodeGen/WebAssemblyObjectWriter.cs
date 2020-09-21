@@ -185,9 +185,9 @@ namespace ILCompiler.DependencyAnalysis
 
             EmitDebugMetadata(context);
 
-#if DEBUG
+//#if DEBUG
             Module.PrintToFile(Path.ChangeExtension(_objectFilePath, ".txt"));
-#endif //DEBUG
+//#endif //DEBUG
             Module.Verify(LLVMVerifierFailureAction.LLVMAbortProcessAction);
 
             Module.WriteBitcodeToFile(_objectFilePath);

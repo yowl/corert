@@ -392,10 +392,7 @@ internal static class Program
             FailTest("Gen of new object was " + genOfNewObject);
             return;
         }
-        var weakReference = MethodWithObjectInShadowStack();
-        GC.Collect();
-        GC.Collect();
-        if (weakReference.IsAlive)
+        if(!TestMethodWithObjectInShadowStack())
         {
             FailTest("object alive when has no references");
             return;
@@ -405,7 +402,11 @@ internal static class Program
             PrintString("GC Collection Count " + i.ToString() + " ");
             PrintLine(GC.CollectionCount(i).ToString());
         }
-        if(!TestCreateDifferentObjects())
+        if(!TestCreateLotsOfLargeObject())
+        {
+            FailTest("Failed test for creating/collecting lots of large objects");
+        }
+        if (!TestCreateDifferentObjects())
         {
             FailTest("Failed test for creating/collecting different objects");
         }
@@ -417,11 +418,6 @@ internal static class Program
             PrintLine(GC.CollectionCount(i).ToString());
         }
         
-        if (!TestObjectRefInUncoveredShadowStackSlot())
-        {
-            FailTest("struct Child1 alive unexpectedly");
-        }
-            
         if (!TestRhpAssignRefWithClassInStructGC())
         {
             FailTest();
@@ -429,6 +425,19 @@ internal static class Program
         }
 
         EndTest(TestGeneration2Rooting());
+    }
+    
+    private static bool TestCreateLotsOfLargeObject()
+    {
+        var mr = new MiniRandom(257);
+        var keptObjects = new object[1000];
+        for (var i = 0; i < 100000; i++)
+        {
+            var r = mr.Next();
+            object o = new long[20000]; // large object heap, 160000 > 85KB
+            keptObjects[r % 1000] = o;
+        }
+        return true;
     }
 
     struct MiniRandom
@@ -452,17 +461,17 @@ internal static class Program
     class F4 { internal int i; }
     class F8 { internal long l; }
     class F2Plus8 { internal short s; internal long l; }
-    class CDisp : IDisposable  { public void Dispose() { } }
+    class CDisp : IDisposable { public void Dispose() { } }
     struct StructF48 { internal int i1; internal long l2; }
     private static bool TestCreateDifferentObjects()
     {
         var mr = new MiniRandom(257);
-        var keptObjects = new object[100];
-        for (var i = 0; i < 1000000; i++)
+        var keptObjects = new object[1000];
+        for (var i = 0; i < 100000; i++)
         {
             var r = mr.Next();
             object o;
-            switch (r % 8)
+            switch (r % 9)
             {
                 case 0:
                     o = new F4 { i = 1, };
@@ -480,20 +489,39 @@ internal static class Program
                     o = new long[10000];
                     break;
                 case 5:
-                    o = new int[10000];
+                    o = new long[20000]; // large object heap, 160000 > 85KB
                     break;
                 case 6:
-                    o = new StructF48 { i1 = 7, l2 = 8 };
+                    o = o = new int[10000];
                     break;
                 case 7:
+                    o = new StructF48 { i1 = 7, l2 = 8 };
+                    break;
+                case 8:
                     o = new CDisp();
                     break;
                 default:
                     o = null;
                     break;
             }
-            keptObjects[r % 100] = o;
+            for (var x = 0; x < 1000; x++)
+            {
+                object a = keptObjects[x];
+
+                if (a is Array)
+                {
+                    Array a2 = (Array)a; 
+                    if (a2.Length != 10000 && a2.Length != 20000 && a2.Length != 40000) 
+                    {
+                        PrintLine("found array at " + x.ToString() + " with invalid length " + a2.Length);
+                        return false;
+                    }
+                }
+            }
+            keptObjects[r % 1000] = o;
         }
+        GC.Collect();
+        GC.Collect();
         return true;
     }
 
@@ -711,25 +739,6 @@ internal static class Program
     {
     }
 
-    // This test is to catch where slots are allocated on the shadow stack uncovering object references that were there previously.
-    // If this happens in the call to GC.Collect, which at the time of writing allocate 12 bytes in the call, 3 slots, then any objects that were in those 
-    // 3 slots will not be collected as they will now be (back) in the range of bottom of stack -> top of stack.
-    private static unsafe bool TestObjectRefInUncoveredShadowStackSlot()
-    {
-        CreateObjectRefsInShadowStack();
-        GC.Collect();
-        return !childRef.IsAlive;
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    static unsafe void CreateObjectRefsInShadowStack()
-    {
-        var child = new Child();
-        Child c1, c2, c3;  // 3 more locals to cover give a bit more resiliency to the test, in case of slots being added or removed in the RhCollect calls
-        c1 = c2 = c3 = child;
-        childRef = new WeakReference(child);
-    }
-
     private static unsafe void TestBoxUnboxDifferentSizes()
     {
         StartTest("Box/Unbox different sizes");
@@ -795,6 +804,18 @@ internal static class Program
         }
 
         EndTest(pass);
+    }
+
+    private static bool TestMethodWithObjectInShadowStack()
+    {
+        var weakReference = MethodWithObjectInShadowStack();
+        var useStack1 = new object();
+        var useStack2 = new object();
+        var useStack3 = new object();
+        var useStack4 = new object();
+        GC.Collect();
+        GC.Collect();
+        return !weakReference.IsAlive;
     }
 
     private static WeakReference MethodWithObjectInShadowStack()
@@ -1439,7 +1460,7 @@ internal static class Program
         var values = new string[1];
         // testing that the generic return value type from the function can be stored in a concrete type
         values = values.AsSpan(0, 1).ToArray();
-        PassTest();
+        EndTest(values.Length == 1);
     }
 
     private static void TestCallToGenericInterfaceMethod()
@@ -2043,11 +2064,13 @@ internal static class Program
 
         public bool GvmInFilter<T>(T t1, T t2)
         {
+            bool b = true;
             try
             {
                 throw new Exception();
             }
-            catch when (GMethod1(t1, t2) == "GenBase<System.Object>.GMethod1<System.String>(a,b)")
+//            catch when (GMethod1(t1, t2) == "GenBase<System.Object>.GMethod1<System.String>(a,b)")
+            catch when (b)
             {
                 return true;
             }

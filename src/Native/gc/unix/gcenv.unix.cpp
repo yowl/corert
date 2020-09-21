@@ -601,6 +601,7 @@ void GCToOSInterface::YieldThread(uint32_t switchCount)
     assert(ret == 0);
 }
 
+#if !TARGET_WASM
 // Reserve virtual memory range.
 // Parameters:
 //  size      - size of the virtual memory range
@@ -749,6 +750,7 @@ bool GCToOSInterface::VirtualDecommit(void* address, size_t size)
     // be zeroed-out.
     return mmap(address, size, PROT_NONE, MAP_FIXED | MAP_ANON | MAP_PRIVATE, -1, 0) != NULL;
 }
+#endif // TARGET_WASM
 
 // Reset virtual memory range. Indicates that data in the memory range specified by address and size is no
 // longer of interest, but it should not be decommitted.
@@ -1010,7 +1012,6 @@ size_t GCToOSInterface::GetCacheSizePerLogicalCpu(bool trueSize)
     s_maxSize = maxSize;
     s_maxTrueSize = maxTrueSize;
 
-    //    printf("GetCacheSizePerLogicalCpu returns %d, adjusted size %d\n", maxSize, maxTrueSize);
     return trueSize ? maxTrueSize : maxSize;
 }
 
@@ -1153,6 +1154,10 @@ uint64_t GCToOSInterface::GetPhysicalMemoryLimit(bool* is_restricted)
 #endif // HAVE_SYSCTL
 }
 
+//i//#if TARGET_WASM
+//extern "C" unsigned long __builtin_wasm_memory_size(int memory_index);
+//#endif // TARGET_WASM
+
 // Get amount of physical memory available for use in the system
 uint64_t GetAvailablePhysicalMemory()
 {
@@ -1160,6 +1165,9 @@ uint64_t GetAvailablePhysicalMemory()
 
     // Get the physical memory available.
 #ifndef __APPLE__
+#if TARGET_WASM
+    available = __builtin_wasm_memory_size(0 /* memory index */) * 4 * sysconf(_SC_PAGE_SIZE);
+#else
     static volatile bool tryReadMemInfo = true;
 
     if (tryReadMemInfo)
@@ -1175,6 +1183,7 @@ uint64_t GetAvailablePhysicalMemory()
         // Fall back to getting the available pages using sysconf.
         available = sysconf(SYSCONF_PAGES) * sysconf(_SC_PAGE_SIZE);
     }
+#endif // TARGET_WASM
 #else // __APPLE__
     vm_size_t page_size;
     mach_port_t mach_port;
@@ -1295,6 +1304,9 @@ void GCToOSInterface::GetMemoryStatus(uint64_t restricted_limit, uint32_t* memor
         {
             available = GetAvailablePhysicalMemory();
 
+#if TARGET_WASM
+            load = 50;
+#else
             if (memory_load != NULL)
             {
                 bool isRestricted;
@@ -1306,6 +1318,7 @@ void GCToOSInterface::GetMemoryStatus(uint64_t restricted_limit, uint32_t* memor
                     load = (uint32_t)(((float)used * 100) / (float)total);
                 }
             }
+#endif
         }
     }
 

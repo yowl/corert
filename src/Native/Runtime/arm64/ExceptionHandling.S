@@ -20,23 +20,24 @@
         // Setup a PAL_LIMITED_CONTEXT on the stack {
         .if \exceptionType == HARDWARE_EXCEPTION
             sub sp,sp,#0x50
+            .cfi_adjust_cfa_offset 0x50
             stp x3, x1, [sp]   // x3 is the SP and x1 is the IP of the fault site 
-            // TODO PROLOG_PUSH_MACHINE_FRAME
         .else
             PROLOG_STACK_ALLOC 0x50
+            .cfi_adjust_cfa_offset 0x50
             stp x3, lr, [sp]   // x3 is the SP and lr is the IP of the fault site 
         .endif
         stp d8, d9, [sp, #0x10]
         stp d10, d11, [sp, #0x20]
         stp d12, d13, [sp, #0x30]
         stp d14, d15, [sp, #0x40]
-        PROLOG_SAVE_REG_PAIR_INDEXED fp, lr, #-0x70
+        PROLOG_SAVE_REG_PAIR_INDEXED fp, lr, -0x70
         stp xzr, xzr, [sp, #0x10] // locations reserved for return value, not used for exception handling
-        PROLOG_SAVE_REG_PAIR x19, x20, #0x20
-        PROLOG_SAVE_REG_PAIR x21, x22, #0x30
-        PROLOG_SAVE_REG_PAIR x23, x24, #0x40
-        PROLOG_SAVE_REG_PAIR x25, x26, #0x50
-        PROLOG_SAVE_REG_PAIR x27, x28, #0x60
+        PROLOG_SAVE_REG_PAIR x19, x20, 0x20
+        PROLOG_SAVE_REG_PAIR x21, x22, 0x30
+        PROLOG_SAVE_REG_PAIR x23, x24, 0x40
+        PROLOG_SAVE_REG_PAIR x25, x26, 0x50
+        PROLOG_SAVE_REG_PAIR x27, x28, 0x60
         // } end PAL_LIMITED_CONTEXT
  
         PROLOG_STACK_ALLOC STACKSIZEOF_ExInfo 
@@ -53,13 +54,14 @@
         // sp in fp. If sp is saved in fp in prolog then it is not expected that fp can change in the body
         // of method. However, this method needs to be able to change fp before calling funclet.
         // This is required to access locals in funclet.
-        PROLOG_SAVE_REG_PAIR_NO_FP_INDEXED fp,lr, #-0x60
-        PROLOG_SAVE_REG_PAIR x19, x20, #0x10
-        PROLOG_SAVE_REG_PAIR x21, x22, #0x20
-        PROLOG_SAVE_REG_PAIR x23, x24, #0x30
-        PROLOG_SAVE_REG_PAIR x25, x26, #0x40
-        PROLOG_SAVE_REG_PAIR x27, x28, #0x50
+        PROLOG_SAVE_REG_PAIR_NO_FP_INDEXED fp,lr, -0x60
+        PROLOG_SAVE_REG_PAIR x19, x20, 0x10
+        PROLOG_SAVE_REG_PAIR x21, x22, 0x20
+        PROLOG_SAVE_REG_PAIR x23, x24, 0x30
+        PROLOG_SAVE_REG_PAIR x25, x26, 0x40
+        PROLOG_SAVE_REG_PAIR x27, x28, 0x50
         mov fp, sp
+        .cfi_def_cfa_register fp
 
         .if \extraStackSize != 0
             PROLOG_STACK_ALLOC \extraStackSize
@@ -78,12 +80,12 @@
             EPILOG_STACK_FREE \extraStackSize
         .endif
 
-        EPILOG_RESTORE_REG_PAIR x19, x20, #0x10
-        EPILOG_RESTORE_REG_PAIR x21, x22, #0x20
-        EPILOG_RESTORE_REG_PAIR x23, x24, #0x30
-        EPILOG_RESTORE_REG_PAIR x25, x26, #0x40
-        EPILOG_RESTORE_REG_PAIR x27, x28, #0x50
-        EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, #0x60
+        EPILOG_RESTORE_REG_PAIR x19, x20, 0x10
+        EPILOG_RESTORE_REG_PAIR x21, x22, 0x20
+        EPILOG_RESTORE_REG_PAIR x23, x24, 0x30
+        EPILOG_RESTORE_REG_PAIR x25, x26, 0x40
+        EPILOG_RESTORE_REG_PAIR x27, x28, 0x50
+        EPILOG_RESTORE_REG_PAIR_INDEXED fp, lr, 0x60
    .endm
 
 
@@ -167,7 +169,7 @@
 // regdisplayReg - register pointing to the REGDISPLAY structure
    .macro TRASH_PRESERVED_REGISTERS_STORAGE regdisplayReg
 
-#if 0 // def _DEBUG  // @TODO: temporarily removed because trashing the frame pointer breaks the debugger
+#if _DEBUG
         movz        x3, #0xbaad, LSL #48
         movk        x3, #0xdeed, LSL #32
         movk        x3, #0xbaad, LSL #16
@@ -197,7 +199,12 @@
 #endif // _DEBUG
     .endm
 
-
+.macro GetThreadX2
+    stp x0, x1, [sp, -16]!
+    bl RhpGetThread
+    mov x2, x0
+    ldp x0, x1, [sp], 16
+.endm
 
 #define rsp_offsetof_ExInfo  0
 #define rsp_offsetof_Context STACKSIZEOF_ExInfo
@@ -214,8 +221,7 @@
 
         ALLOC_THROW_FRAME HARDWARE_EXCEPTION
 
-        // x2 = GetThread()
-        INLINE_GETTHREAD x2
+        GetThreadX2
 
         add         x1, sp, #rsp_offsetof_ExInfo                    // x1 <- ExInfo*
         str         xzr, [x1, #OFFSETOF__ExInfo__m_exception]       // pExInfo->m_exception = null
@@ -258,8 +264,7 @@
 
         ALLOC_THROW_FRAME SOFTWARE_EXCEPTION
 
-        // x2 = GetThread()
-        INLINE_GETTHREAD x2
+        GetThreadX2
 
         // There is runtime C# code that can tail call to RhpThrowEx using a binder intrinsic.  So the return 
         // address could have been hijacked when we were in that C# code and we must remove the hijack and
@@ -348,8 +353,7 @@ NotHijacked:
 
         ALLOC_THROW_FRAME SOFTWARE_EXCEPTION
 
-        // x2 = GetThread()
-        INLINE_GETTHREAD x2
+        GetThreadX2
 
         add         x1, sp, #rsp_offsetof_ExInfo                    // x1 <- ExInfo*
         str         xzr, [x1, #OFFSETOF__ExInfo__m_exception]       // pExInfo->m_exception = null
@@ -393,22 +397,31 @@ NotHijacked:
 
     NESTED_ENTRY RhpCallCatchFunclet, _TEXT, NoHandler
 
-        ALLOC_CALL_FUNCLET_FRAME 0x60
+        ALLOC_CALL_FUNCLET_FRAME 0x70 // Size needs to be equal with ExceptionHandling.asm variant of this function
         stp d8, d9,   [sp, #0x00]
         stp d10, d11, [sp, #0x10]
         stp d12, d13, [sp, #0x20]
         stp d14, d15, [sp, #0x30]
-        stp x0, x2,   [sp, #0x40]  // x0, x2 & x3 are saved so we have the exception object, REGDISPLAY and 
-        stp x3, xzr,  [sp, #0x50]  // ExInfo later, xzr makes space for the local "is_not_handling_thread_abort"
+        stp x0, x1,   [sp, #0x40] // x0 to x3 are stored to restore them anytime
+        stp x2, x3,   [sp, #0x50] 
+        str xzr,      [sp, #0x60] // xzr makes space for the local "is_not_handling_thread_abort"; last qword will store the thread obj  
 
-#define rsp_offset_is_not_handling_thread_abort 0x58
-#define rsp_offset_x2 0x48
-#define rsp_offset_x3 0x50
+#define rsp_offset_is_not_handling_thread_abort 0x60
+#define rsp_offset_x0 0x40
+#define rsp_offset_x1 0x48
+#define rsp_offset_x2 0x50
+#define rsp_offset_x3 0x58
+#define rsp_CatchFunclet_offset_thread 0x68
 
         //
         // clear the DoNotTriggerGc flag, trashes x4-x6
         //
-        INLINE_GETTHREAD x5 // x5 <- Thread*
+
+        bl RhpGetThread
+        str x0, [sp, rsp_CatchFunclet_offset_thread]
+        mov x5,x0
+        ldp x0, x1,   [sp, #0x40]
+        ldp x2, x3,   [sp, #0x50]
 
         ldr         x4, [x5, #OFFSETOF__Thread__m_threadAbortException]
         sub         x4, x4, x0
@@ -445,9 +458,29 @@ ClearSuccess_Catch:
 
         ldr         x2, [sp, #rsp_offset_x2]                    // x2 <- REGDISPLAY*
 
-// @TODO: add debug-only validation code for ExInfo pop
+#ifdef _DEBUG
+        // Call into some C++ code to validate the pop of the ExInfo.  We only do this in debug because we 
+        // have to spill all the preserved registers and then refill them after the call.
 
-        INLINE_GETTHREAD x1                                     // x1 <- Thread*
+        str         x0, [sp, rsp_offset_x0]
+
+        SAVE_PRESERVED_REGISTERS x2
+
+        ldr         x0, [sp, rsp_CatchFunclet_offset_thread]    // x0 <- Thread*
+        ldr         x1, [sp, #rsp_offset_x3]                    // x1 <- current ExInfo*
+        ldr         x2, [x2, #OFFSETOF__REGDISPLAY__SP]         // x2 <- resume SP value
+        bl          RhpValidateExInfoPop
+
+        ldr         x2, [sp, rsp_offset_x2]                             // x2 <- REGDISPLAY*
+
+        RESTORE_PRESERVED_REGISTERS x2
+
+        ldr         x0, [sp, rsp_offset_x0]                             // reload resume IP
+#endif
+
+        ldr         x1, [sp, rsp_CatchFunclet_offset_thread]
+
+        ldr x1, [sp, rsp_CatchFunclet_offset_thread]
 
         // We must unhijack the thread at this point because the section of stack where the hijack is applied
         // may go dead.  If it does, then the next time we try to unhijack the thread, it will corrupt the stack.
@@ -497,14 +530,15 @@ NoAbort:
 
     NESTED_ENTRY RhpCallFinallyFunclet, _TEXT, NoHandler
 
-        ALLOC_CALL_FUNCLET_FRAME 0x50
+        ALLOC_CALL_FUNCLET_FRAME 0x60 // Size needs to be equal with ExceptionHandling.asm variant of this function
         stp d8, d9,   [sp, #0x00]
         stp d10, d11, [sp, #0x10]
         stp d12, d13, [sp, #0x20]
         stp d14, d15, [sp, #0x30]
-        stp x0, x1,   [sp, #0x40]   // x1 is saved so we have the REGDISPLAY later, x0 is just alignment padding
+        stp x0, x1,   [sp, #0x40]   // x0 and x1 are saved so we have them later
 
 #define rsp_offset_x1 0x48
+#define rsp_FinallyFunclet_offset_thread 0x50
 
         
         // We want to suppress hijacking between invocations of subsequent finallys.  We do this because we
@@ -517,7 +551,11 @@ NoAbort:
         //
         // clear the DoNotTriggerGc flag, trashes x2-x4
         //
-        INLINE_GETTHREAD    x2      // x2 <- Thread*
+
+        bl RhpGetThread
+        str x0, [sp, rsp_FinallyFunclet_offset_thread]
+        mov x2, x0
+        ldp x0, x1, [sp, #0x40]
 
         add         x12, x2, #OFFSETOF__Thread__m_ThreadStateFlags
 
@@ -555,7 +593,8 @@ ClearSuccess:
         //
         // set the DoNotTriggerGc flag, trashes x1-x3
         //
-        INLINE_GETTHREAD    x2      // x2 <- Thread*
+
+        ldr x2, [sp, rsp_FinallyFunclet_offset_thread]
 
         add         x12, x2, #OFFSETOF__Thread__m_ThreadStateFlags
 SetRetry:
@@ -571,7 +610,7 @@ SetSuccess:
         ldp         d12, d13, [sp, #0x20]
         ldp         d14, d15, [sp, #0x30]
 
-        FREE_CALL_FUNCLET_FRAME 0x50
+        FREE_CALL_FUNCLET_FRAME 0x60
         EPILOG_RETURN
 
     NESTED_END RhpCallFinallyFunclet, _Text
