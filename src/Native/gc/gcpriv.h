@@ -244,18 +244,19 @@ void GCLog (const char *fmt, ... );
 // Nobody used the logging mechanism that used to be here. If we find ourselves
 // wanting to inspect GC logs on unmodified builds, we can use this define here
 // to do so.
-#define dprintf(l, x)
+//#define dprintf(l, x)
 //#define dprintf(l,x) STRESS_LOG_VA(x);
 
 #endif //SIMPLE_DPRINTF
 
 #else //DACCESS_COMPILE
-#define dprintf(l,x)
+//#define dprintf(l,x)
 #endif //DACCESS_COMPILE
 #else //TRACE_GC
-#define dprintf(l,x)
+//#define dprintf(l,x)
 #endif //TRACE_GC
 
+#define dprintf(l,x) {printf x;}
 #if !defined(FEATURE_REDHAWK) && !defined(BUILD_AS_STANDALONE)
 #undef  assert
 #define assert _ASSERTE

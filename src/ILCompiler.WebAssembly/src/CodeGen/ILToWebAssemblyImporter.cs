@@ -83,7 +83,8 @@ namespace Internal.IL
         private readonly EHInfoNode _ehInfoNode;
         private AddressCacheContext _funcletAddrCacheCtx; // for the method and handler/filter funclets
         private readonly List<AddressCacheContext> _addressCachesToBackFill = new List<AddressCacheContext>();
-
+        int ix = 0;
+         
         /// <summary>
         /// Stack of values pushed onto the IL stack: locals, arguments, values, function pointer, ...
         /// </summary>
@@ -148,6 +149,10 @@ namespace Internal.IL
                 _methodIL = methodIL;
             }
             _mangledName = mangledName;
+            if (_mangledName == "Uno_UI_Windows_UI_Xaml_Style__ApplyTo")
+            {
+                ix = 1;
+            }
             _ilBytes = methodIL.GetILBytes();
             _locals = methodIL.GetLocals();
             _localSlots = new LLVMValueRef[_locals.Length];
@@ -922,6 +927,11 @@ namespace Internal.IL
         private void ImportLoadVar(int index, bool argument)
         {
             LLVMValueRef typedLoadLocation = LoadVarAddress(index, argument ? LocalVarKind.Argument : LocalVarKind.Local, out TypeDesc type);
+            if (ix > 0)
+            {
+                PrintInt32(BuildConstUInt32((uint)ix++));
+            }
+
             PushLoadExpression(GetStackValueKind(type), (argument ? "arg" : "loc") + index + "_", typedLoadLocation, type);
         }
 
@@ -2313,6 +2323,11 @@ namespace Internal.IL
 
                 var targetEntry = CallRuntime(_compilation.TypeSystemContext, DispatchResolve, "FindInterfaceMethodImplementationTarget", new StackEntry[] { eeTypeExpression, interfaceEEType, new ExpressionEntry(StackValueKind.Int32, "slot", slot, GetWellKnownType(WellKnownType.UInt16)) });
                 functionPtr = targetEntry.ValueAsType(LLVMTypeRef.CreatePointer(llvmSignature, 0), _builder);
+                if (ix > 0)
+                {
+                    PrintInt32(BuildConstUInt32((uint)ix++));
+                    PrintInt32(_builder.BuildPtrToInt(functionPtr, LLVMTypeRef.Int32));
+                }
             }
             else
             {
@@ -4954,7 +4969,23 @@ namespace Internal.IL
             FieldDesc canonFieldDesc = (FieldDesc)_canonMethodIL.GetObject(token);
             LLVMValueRef fieldAddress = GetFieldAddress(field, canonFieldDesc, isStatic);
 
-            PushLoadExpression(GetStackValueKind(canonFieldDesc.FieldType), $"Field_{field.Name}", fieldAddress, canonFieldDesc.FieldType);
+            if (ix > 0)
+            {
+                PrintInt32(BuildConstUInt32((uint)ix++));
+                PrintInt32(_builder.BuildPtrToInt(fieldAddress, LLVMTypeRef.Int32));
+            }
+
+            if (field.FieldType.IsGCPointer)
+            {
+                int spillIndex = _spilledExpressions.Count;
+                SpilledExpressionEntry spillEntry = new SpilledExpressionEntry(StackValueKind.ObjRef, "fldSpill" + _currentOffset, field.FieldType, spillIndex, this);
+                _spilledExpressions.Add(spillEntry);
+                LLVMValueRef addrOfValueType = LoadVarAddress(spillIndex, LocalVarKind.Temp, out TypeDesc unused);
+                var typedAddress = CastIfNecessary(_builder, addrOfValueType, LLVMTypeRef.CreatePointer(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), 0));
+                _builder.BuildStore(LoadValue(_builder, fieldAddress, canonFieldDesc.FieldType, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), false), typedAddress);
+                PushNonNull(spillEntry);
+            }
+            else PushLoadExpression(GetStackValueKind(canonFieldDesc.FieldType), $"Field_{field.Name}", fieldAddress, canonFieldDesc.FieldType);
         }
 
         private void ImportAddressOfField(int token, bool isStatic)
@@ -5210,7 +5241,20 @@ namespace Internal.IL
             StackEntry index = _stack.Pop();
             StackEntry arrayReference = _stack.Pop();
             var nullSafeElementType = elementType ?? GetWellKnownType(WellKnownType.Object);
-            PushLoadExpression(GetStackValueKind(nullSafeElementType), $"{arrayReference.Name()}Element", GetElementAddress(index.ValueAsInt32(_builder, true), arrayReference.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), nullSafeElementType), nullSafeElementType);
+
+            if (nullSafeElementType.IsGCPointer)
+            {
+                int spillIndex = _spilledExpressions.Count;
+                SpilledExpressionEntry spillEntry = new SpilledExpressionEntry(StackValueKind.ObjRef, "elemSpill" + _currentOffset, nullSafeElementType, spillIndex, this);
+                _spilledExpressions.Add(spillEntry);
+                LLVMValueRef addrOfValueType = LoadVarAddress(spillIndex, LocalVarKind.Temp, out TypeDesc unused);
+                var typedAddress = CastIfNecessary(_builder, addrOfValueType, LLVMTypeRef.CreatePointer(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), 0));
+                _builder.BuildStore(LoadValue(_builder, GetElementAddress(index.ValueAsInt32(_builder, true), arrayReference.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), nullSafeElementType), 
+                    nullSafeElementType, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), false), typedAddress);
+                PushNonNull(spillEntry);
+            }
+            else
+                PushLoadExpression(GetStackValueKind(nullSafeElementType), $"{arrayReference.Name()}Element", GetElementAddress(index.ValueAsInt32(_builder, true), arrayReference.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), nullSafeElementType), nullSafeElementType);
         }
 
         private void ImportStoreElement(int token)
@@ -5341,7 +5385,13 @@ namespace Internal.IL
             MetadataType helperType = context.SystemModule.GetKnownType(@namespace, className);
             MethodDesc helperMethod = helperType.GetKnownMethod(methodName, null);
             if ((helperMethod.IsInternalCall && helperMethod.HasCustomAttribute("System.Runtime", "RuntimeImportAttribute")))
+            {
+                if (!helperMethod.Name.Contains("RhpAssignRef") && !helperMethod.Name.Contains("RhpNewArray"))
+                {
+
+                }
                 return ImportRawPInvoke(helperMethod, arguments, forcedReturnType: forcedReturnType, builder: builder);
+            }
             else
                 return HandleCall(helperMethod, helperMethod.Signature, helperMethod, arguments, helperMethod, fromLandingPad: fromLandingPad, builder: builder).Item1;
         }

@@ -31,7 +31,7 @@ internal static class Program
         };
         Success = true;
         PrintLine("Starting " + 1);
-
+        TestUno(new DependencyObject2());
         TestBox();
 
         TestSByteExtend(); 
@@ -848,6 +848,7 @@ internal static class Program
         PrintString(testDescription + ": ");
     }
 
+#nullable disable
     private static void EndTest(bool result, string failMessage = null)
     {
         if (result)
@@ -859,17 +860,83 @@ internal static class Program
             FailTest(failMessage);
         }
     }
+#nullable enable
 
     internal static void PassTest()
     {
         PrintLine("Ok.");
     }
 
+#nullable disable
     internal static void FailTest(string failMessage = null)
     {
         Success = false;
         PrintLine("Failed.");
         if (failMessage != null) PrintLine(failMessage + "-");
+    }
+#nullable enable
+
+    private interface DependencyObject : IDependencyObjectStoreProvider
+    {
+    }
+
+    private interface IDependencyObjectStoreProvider
+    {
+        public void UpdateResourceBindings(bool isThemeChangedUpdate, object? containingDictionary = null);
+    }
+
+    private class DependencyObject2 : DependencyObject
+    {
+        public void UpdateResourceBindings(bool isThemeChangedUpdate, object? containingDictionary = null)
+        {
+            PrintLine("UpdateResourceBindings");
+        }
+    }
+
+    private delegate void ApplyToHandler(DependencyObject instance);
+
+    private static void AD(DependencyObject instance)
+    {
+
+    }
+    private static IDictionary<object, ApplyToHandler> CreateSetterMap()
+    {
+        return new Dictionary<object, ApplyToHandler> {{new object(), AD}};
+    }
+
+    internal class ResourceResolver
+    {
+        internal static void PushNewScope(object s)
+        {
+        }
+        internal static void PopScope()
+        {
+        }
+    }
+
+    static object _xamlScope = new object();
+
+    private static void TestUno(DependencyObject o)
+    {
+        using (new CDisp())
+        {
+            var flattenedSetters = CreateSetterMap();
+            try
+            {
+                ResourceResolver.PushNewScope(_xamlScope);
+                foreach (var pair in flattenedSetters)
+                {
+                    pair.Value(o);
+                }
+
+                // Check tree for resource binding values, since some Setters may have set ThemeResource-backed values
+                (o as IDependencyObjectStoreProvider).UpdateResourceBindings(isThemeChangedUpdate: false);
+            }
+            finally
+            {
+                ResourceResolver.PopScope();
+            }
+        }
     }
 
     private static void TestBox()
@@ -1119,7 +1186,7 @@ internal static class Program
     {
         return obj.GetData();
     }
-
+#nullable disable
     static int GenericGetHashCode<T>(T obj)
     {
         return obj.GetHashCode();
@@ -1568,7 +1635,7 @@ internal static class Program
             }
         }
     }
-
+#nullable disable
     public class GenClassUsingFieldOfInnerStruct<T>
     {
         private readonly T _value;

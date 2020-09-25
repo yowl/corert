@@ -98,6 +98,7 @@ bool GCToOSInterface::VirtualCommit(void* address, size_t size, uint16_t node)
 //  true if it has succeeded, false if it has failed
 bool GCToOSInterface::VirtualDecommit(void* address, size_t size)
 {
+    printf("decommit at %p size %x\n", address, size);
     memset(address, 0, size);
     return TRUE;
 }
