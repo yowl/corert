@@ -26,6 +26,7 @@ static void* VirtualReserveInner(size_t size, size_t alignment, uint32_t flags)
     int result = posix_memalign(&pRetVal, alignment, size);
     if(result != 0)
     {
+        printf("reserveinner failed\n");
         return NULL; // failed
     }
     memset(pRetVal, 0, size);

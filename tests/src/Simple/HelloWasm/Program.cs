@@ -430,12 +430,12 @@ internal static class Program
     private static bool TestCreateLotsOfLargeObject()
     {
         var mr = new MiniRandom(257);
-        var keptObjects = new object[1000];
+        //var keptObjects = new object[1000];
         for (var i = 0; i < 100000; i++)
         {
             var r = mr.Next();
             object o = new long[20000]; // large object heap, 160000 > 85KB
-            keptObjects[r % 1000] = o;
+            //keptObjects[r % 1000] = o;
         }
         return true;
     }

@@ -9,7 +9,7 @@ using Internal.Runtime.CompilerServices;
 
 namespace Internal.Runtime
 {
-    internal class X
+    public class X
     {
         [DllImport("*")]
         internal static unsafe extern int printf(byte* str, byte* unused);
@@ -27,7 +27,7 @@ namespace Internal.Runtime
             }
         }
 
-        internal static void PrintLine(string s)
+        public static void PrintLine(string s)
         {
             PrintString(s);
             PrintString("\n");

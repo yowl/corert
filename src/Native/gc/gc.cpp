@@ -1,7 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-#define VERIFY_HEAP 1
+//#define VERIFY_HEAP 1
 
 //
 // #Overview
@@ -35070,7 +35070,7 @@ gc_heap::verify_heap (BOOL begin_gc_p)
     if (current_join->joined())
 #endif //MULTIPLE_HEAPS
     {
-        GCToEEInterface::VerifySyncTableEntry();
+        //GCToEEInterface::VerifySyncTableEntry();
 #ifdef MULTIPLE_HEAPS
         current_join->restart();
 #endif //MULTIPLE_HEAPS
@@ -38388,7 +38388,7 @@ CFinalize::GrowArray()
     {
         m_FillPointers [i] += (newArray - m_Array);
     }
-    delete m_Array;
+    delete [] m_Array;
     m_Array = newArray;
     m_EndArray = &m_Array [newArraySize];
 
