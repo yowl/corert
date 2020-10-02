@@ -338,7 +338,6 @@ void NUMASupportCleanup()
 //  true if it has succeeded, false if it has failed
 bool GCToOSInterface::Initialize()
 {
-    printf("GCToOSInterface::Initialize\n");
     int pageSize = sysconf( _SC_PAGE_SIZE );
 
     g_pageSizeUnixInl = uint32_t((pageSize > 0) ? pageSize : 0x1000);
@@ -347,7 +346,6 @@ bool GCToOSInterface::Initialize()
     int cpuCount = sysconf(SYSCONF_GET_NUMPROCS);
     if (cpuCount == -1)
     {
-        printf("-1 processors\n");
         return false;
     }
 
@@ -601,7 +599,6 @@ void GCToOSInterface::YieldThread(uint32_t switchCount)
     assert(ret == 0);
 }
 
-#if !TARGET_WASM
 // Reserve virtual memory range.
 // Parameters:
 //  size      - size of the virtual memory range
@@ -611,20 +608,15 @@ void GCToOSInterface::YieldThread(uint32_t switchCount)
 //  Starting virtual address of the reserved range
 static void* VirtualReserveInner(size_t size, size_t alignment, uint32_t flags, uint32_t hugePagesFlag = 0)
 {
-//    printf("VirtualReserveInner\n");
-
     assert(!(flags & VirtualReserveFlags::WriteWatch) && "WriteWatch not supported on Unix");
-//    printf("passed writewatch\n");
     if (alignment == 0)
     {
         alignment = OS_PAGE_SIZE;
     }
 
     size_t alignedSize = size + (alignment - OS_PAGE_SIZE);
-//    printf("mmap %d %d %d\n", alignedSize, PROT_NONE, MAP_ANON | MAP_PRIVATE | hugePagesFlag);
     void * pRetVal = mmap(nullptr, alignedSize, PROT_NONE, MAP_ANON | MAP_PRIVATE | hugePagesFlag, -1, 0);
 
-//    printf("passed mmap %d\n", pRetVal);
     if (pRetVal != NULL)
     {
         void * pAlignedRetVal = (void *)(((size_t)pRetVal + (alignment - 1)) & ~(alignment - 1));
@@ -632,7 +624,6 @@ static void* VirtualReserveInner(size_t size, size_t alignment, uint32_t flags, 
         if (startPadding != 0)
         {
             int ret = munmap(pRetVal, startPadding);
- //           printf("munmap %d\n", ret);
             assert(ret == 0);
         }
 
@@ -640,14 +631,12 @@ static void* VirtualReserveInner(size_t size, size_t alignment, uint32_t flags, 
         if (endPadding != 0)
         {
             int ret = munmap((void *)((size_t)pAlignedRetVal + size), endPadding);
-   //         printf("munmap 2 %d\n", ret);
             assert(ret == 0);
         }
 
         pRetVal = pAlignedRetVal;
     }
 
-//    printf("ReserverInner end\n");
     return pRetVal;
 }
 
@@ -692,7 +681,6 @@ void* GCToOSInterface::VirtualReserveAndCommitLargePages(size_t size)
     uint32_t largePagesFlag = 0;
 #endif
 
-    printf("VirtualReserveAndCommitLargePages\n");
     void* pRetVal = VirtualReserveInner(size, OS_PAGE_SIZE, 0, largePagesFlag);
     if (VirtualCommit(pRetVal, size, NUMA_NODE_UNDEFINED))
     {
@@ -750,7 +738,6 @@ bool GCToOSInterface::VirtualDecommit(void* address, size_t size)
     // be zeroed-out.
     return mmap(address, size, PROT_NONE, MAP_FIXED | MAP_ANON | MAP_PRIVATE, -1, 0) != NULL;
 }
-#endif // TARGET_WASM
 
 // Reset virtual memory range. Indicates that data in the memory range specified by address and size is no
 // longer of interest, but it should not be decommitted.
@@ -1012,6 +999,7 @@ size_t GCToOSInterface::GetCacheSizePerLogicalCpu(bool trueSize)
     s_maxSize = maxSize;
     s_maxTrueSize = maxTrueSize;
 
+    //    printf("GetCacheSizePerLogicalCpu returns %d, adjusted size %d\n", maxSize, maxTrueSize);
     return trueSize ? maxTrueSize : maxSize;
 }
 
@@ -1154,10 +1142,6 @@ uint64_t GCToOSInterface::GetPhysicalMemoryLimit(bool* is_restricted)
 #endif // HAVE_SYSCTL
 }
 
-//i//#if TARGET_WASM
-//extern "C" unsigned long __builtin_wasm_memory_size(int memory_index);
-//#endif // TARGET_WASM
-
 // Get amount of physical memory available for use in the system
 uint64_t GetAvailablePhysicalMemory()
 {
@@ -1165,9 +1149,6 @@ uint64_t GetAvailablePhysicalMemory()
 
     // Get the physical memory available.
 #ifndef __APPLE__
-#if TARGET_WASM
-    available = __builtin_wasm_memory_size(0 /* memory index */) * 4 * sysconf(_SC_PAGE_SIZE);
-#else
     static volatile bool tryReadMemInfo = true;
 
     if (tryReadMemInfo)
@@ -1183,7 +1164,6 @@ uint64_t GetAvailablePhysicalMemory()
         // Fall back to getting the available pages using sysconf.
         available = sysconf(SYSCONF_PAGES) * sysconf(_SC_PAGE_SIZE);
     }
-#endif // TARGET_WASM
 #else // __APPLE__
     vm_size_t page_size;
     mach_port_t mach_port;
@@ -1304,9 +1284,6 @@ void GCToOSInterface::GetMemoryStatus(uint64_t restricted_limit, uint32_t* memor
         {
             available = GetAvailablePhysicalMemory();
 
-#if TARGET_WASM
-            load = 50;
-#else
             if (memory_load != NULL)
             {
                 bool isRestricted;
@@ -1318,7 +1295,6 @@ void GCToOSInterface::GetMemoryStatus(uint64_t restricted_limit, uint32_t* memor
                     load = (uint32_t)(((float)used * 100) / (float)total);
                 }
             }
-#endif
         }
     }
 

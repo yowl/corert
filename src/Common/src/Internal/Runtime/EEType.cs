@@ -1220,12 +1220,6 @@ namespace Internal.Runtime
         {
             get
             {
-                X.PrintLine("RareFlags");
-                // var o = this;
-                // fixed (void* thisP = (void*)&o)
-                // {
-                //     PrintU
-                // }
                 // If there are no optional fields then none of the rare flags have been set.
                 // Get the flags from the optional fields. The default is zero if that particular field was not included.
                 return HasOptionalFields ? (EETypeRareFlags)OptionalFieldsReader.GetInlineField(OptionalFieldsPtr, EETypeOptionalFieldTag.RareFlags, 0) : 0;

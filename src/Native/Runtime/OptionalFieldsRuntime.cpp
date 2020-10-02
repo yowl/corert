@@ -21,8 +21,6 @@
 /*static*/ OptionalFieldTag OptionalFields::DecodeFieldTag(PTR_UInt8 * ppFields, bool *pfLastField)
 {
     UInt8 tagByte;
-    printf("ppFields %p\n", ppFields);
-    printf("ind ppFields %p\n", *ppFields);
     tagByte = **ppFields;
 
     // The last field has the most significant bit of the byte set.
