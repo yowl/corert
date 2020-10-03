@@ -31,6 +31,8 @@ internal static class Program
         };
         Success = true;
         PrintLine("Starting " + 1);
+        TestDispatchResolve();
+
         TestUno(new DependencyObject2());
         TestBox();
 
@@ -379,6 +381,33 @@ internal static class Program
 
         PrintLine("Done");
         return Success ? 100 : -1;
+    }
+
+
+    private static void TestDispatchResolve()
+    {
+        StartTest("TestDispatchResolve");
+        var x = ResourceLoader.Test();
+        EndTest(true);
+    }
+
+        public sealed partial class ResourceLoader
+    {
+        private const int UPRIVersion = 2;
+        private const string DefaultResourceLoaderName = "Resources";
+        private static readonly Dictionary<string, ResourceLoader> _loaders = new Dictionary<string, ResourceLoader>(StringComparer.OrdinalIgnoreCase);
+        private string name;
+        public ResourceLoader (string s)
+        {
+            name = s;
+        }
+        public static ResourceLoader Test()
+        {
+            return GetNamedResourceLoader("a");
+        }
+
+        private static ResourceLoader GetNamedResourceLoader(string name)
+            => _loaders.FindOrCreate(name, () => new ResourceLoader(name));
     }
 
     private static void TestGC()
@@ -3518,6 +3547,22 @@ class FieldStatics
         S2 = "a different string";
 
         return X == 17 && Y == 347 && S1 == "first string" && S2 == "a different string";
+    }
+}
+
+public static class DictionaryExtensions
+{
+    public static TValue FindOrCreate<TKey, TValue>(this IDictionary<TKey, TValue> items, TKey key, Func<TValue> factory)
+    {
+        TValue value;
+
+        if (!items.TryGetValue(key, out value))
+        {
+            value = factory();
+            items.Add(key, value);
+        }
+
+        return value;
     }
 }
 
