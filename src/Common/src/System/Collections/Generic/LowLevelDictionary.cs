@@ -44,20 +44,25 @@ namespace System.Collections.Generic
         //    PrintString("\n");
         //}
 
-        public unsafe static void PrintUint(int s)
+        public unsafe static void PrintUint(int l)
         {
-            byte[] intBytes = BitConverter.GetBytes(s);
-            for (var i = 0; i < 4; i++)
-            {
-                TwoByteStr curCharStr = new TwoByteStr();
-                var nib = (intBytes[3 - i] & 0xf0) >> 4;
-                curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
-                printf((byte*)&curCharStr, null);
-                nib = (intBytes[3 - i] & 0xf);
-                curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
-                printf((byte*)&curCharStr, null);
-            }
+            PrintByte((byte)((l >> 24) & 0xff));
+            PrintByte((byte)((l >> 16) & 0xff));
+            PrintByte((byte)((l >> 8) & 0xff));
+            PrintByte((byte)(l & 0xff));
+
             PrintString("\n");
+        }
+
+        public unsafe static void PrintByte(byte b)
+        {
+            TwoByteStr curChaStr = new TwoByteStr();
+            var nib = (b & 0xf0) >> 4;
+            curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
+            printf((byte*)&curCharStr, null);
+            nib = (b & 0xf);
+            curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
+            printf((byte*)&curCharStr, null);
         }
 
         public struct TwoByteStr

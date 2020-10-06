@@ -1911,12 +1911,72 @@ namespace Internal.IL
                 typeRef = LoadAddressOfSymbolNode(lookup);
             }
 
+            if (_mangledName == "HelloWasm_Program__TestCreateDifferentObjects")
+            {
+                _builder.BuildCall(GetOrCreateCheckFunction(), new[] {GetEndOfUsedShadowStack(_builder)});
+            }
+
             _stack.Push(CallRuntime(_compilation.TypeSystemContext, TypeCast, function,
                 new StackEntry[]
                 {
                     new ExpressionEntry(StackValueKind.ValueType, "eeType", typeRef, GetWellKnownType(WellKnownType.IntPtr)),
                     _stack.Pop()
                 }, GetWellKnownType(WellKnownType.Object)));
+        }
+
+        static LLVMValueRef checkFunc = default;
+        static LLVMValueRef isSet = default;
+        static LLVMValueRef firstValue = default;
+        LLVMValueRef GetOrCreateCheckFunction()
+        {
+            if (checkFunc == default)
+            {
+                isSet = Module.AddGlobal(LLVMTypeRef.Int32, "isset");
+                isSet.Initializer = LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 0);
+                firstValue = Module.AddGlobal(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int32, 0), "firstValue");
+                firstValue.Initializer = LLVMValueRef.CreateConstPointerNull(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int32, 0));
+
+                checkFunc = Module.AddFunction("CheckEEType",
+                    LLVMTypeRef.CreateFunction(LLVMTypeRef.Void,
+                        new[] {LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)}));
+                var b = checkFunc.AppendBasicBlock("Block");
+                var builder = Context.CreateBuilder();
+                builder.PositionAtEnd(b);
+                var eeType = builder.BuildLoad(GetEETypePointerForTypeDesc(_method.Context.GetWellKnownType(WellKnownType.Array), true));
+                var setRef = builder.BuildLoad(isSet);
+
+                var cmp = builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, setRef, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 1));
+                var setBranch = checkFunc.AppendBasicBlock("setBranch");
+                var notSetBranch = checkFunc.AppendBasicBlock("notSetBranch");
+                var checkBranch = checkFunc.AppendBasicBlock("checkBranch");
+                builder.BuildCondBr(cmp, setBranch, notSetBranch);
+                
+                builder.PositionAtEnd(setBranch);
+                builder.BuildBr(checkBranch);
+
+                builder.PositionAtEnd(notSetBranch);
+                PrintInt32x(checkFunc.GetParam(0), BuildConstUInt32(64), builder);
+                PrintInt32x(checkFunc.GetParam(0), builder.BuildPtrToInt(eeType, LLVMTypeRef.Int32), builder);
+                builder.BuildStore(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 1), isSet);
+                builder.BuildBr(checkBranch);
+
+                builder.PositionAtEnd(checkBranch);
+                var loadFirst = builder.BuildLoad(firstValue);
+                var same = builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, loadFirst, eeType);
+                var sameBranch = checkFunc.AppendBasicBlock("sameBranch");
+                var notSameBranch = checkFunc.AppendBasicBlock("notSameBranch");
+                builder.BuildCondBr(same, sameBranch, notSameBranch);
+                builder.PositionAtEnd(notSameBranch);
+                PrintInt32x(checkFunc.GetParam(0), BuildConstUInt32(65), builder);
+                PrintInt32x(checkFunc.GetParam(0), builder.BuildPtrToInt(eeType, LLVMTypeRef.Int32), builder);
+                builder.BuildStore(eeType, firstValue);
+                builder.BuildBr(sameBranch);
+                
+                builder.PositionAtEnd(sameBranch);
+                builder.BuildRetVoid();
+
+            }
+            return checkFunc;
         }
 
         LLVMValueRef CallGenericHelper(ReadyToRunHelperId helperId, object helperArg)
@@ -4639,12 +4699,13 @@ namespace Internal.IL
                     throwBlock, retBlock);
                 builder.PositionAtEnd(throwBlock);
                 
-                ThrowException(builder, "ThrowHelpers", "ThrowNullReferenceException", NullRefFunction);
-
+                EmitTrapCall(builder);
+                //ThrowException(builder, "ThrowHelpers", "ThrowNullReferenceException", NullRefFunction);
+            
                 builder.PositionAtEnd(retBlock);
                 builder.BuildRetVoid();
             }
-
+            
             LLVMBasicBlockRef nextInstrBlock = default;
             CallOrInvoke(false, _builder, GetCurrentTryRegion(), NullRefFunction, new LLVMValueRef[] { GetEndOfUsedShadowStack(_builder), entry }, ref nextInstrBlock);
         }
@@ -4995,13 +5056,17 @@ namespace Internal.IL
             _stack.Push(new AddressExpressionEntry(StackValueKind.ByRef, $"FieldAddress_{field.Name}", fieldAddress, field.FieldType.MakeByRefType()));
         }
 
-        void PrintInt32(LLVMValueRef ptr)
+        void PrintInt32(LLVMValueRef ptr, LLVMBuilderRef b = default)
         {
+            if (b == default)
+            {
+                b = _builder;
+            }
             int offset = GetTotalParameterOffset() + GetTotalLocalOffset();
-            LLVMValueRef shadowStack = _builder.BuildGEP(_currentFunclet.GetParam(0),
+            LLVMValueRef shadowStack = b.BuildGEP(_currentFunclet.GetParam(0),
                 new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)offset, false), },
                 String.Empty);
-            _builder.BuildCall(
+            b.BuildCall(
                 GetOrCreateLLVMFunction("S_P_CoreLib_System_Collections_Generic_X__PrintUint",
                     LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new[]
                         {
@@ -5011,7 +5076,28 @@ namespace Internal.IL
                         false)),
                 new LLVMValueRef[]
                 {
-                    CastIfNecessary(_builder, shadowStack, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)),
+                    CastIfNecessary(b, shadowStack, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)),
+                    ptr
+                }, string.Empty);
+        }
+
+        void PrintInt32x(LLVMValueRef ss, LLVMValueRef ptr, LLVMBuilderRef b = default)
+        {
+            if (b == default)
+            {
+                b = _builder;
+            }
+            b.BuildCall(
+                GetOrCreateLLVMFunction("S_P_CoreLib_System_Collections_Generic_X__PrintUint",
+                    LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new[]
+                        {
+                            LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0),
+                            LLVMTypeRef.Int32
+                        },
+                        false)),
+                new LLVMValueRef[]
+                {
+                    CastIfNecessary(b, ss, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)),
                     ptr
                 }, string.Empty);
         }

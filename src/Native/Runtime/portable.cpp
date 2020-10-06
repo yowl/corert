@@ -337,9 +337,11 @@ PrintIfNotAligendSize(size);
     return pObject;
 }
 
+extern "C" void* firstValue;
+
 COOP_PINVOKE_HELPER(Array *, RhpNewArrayAlign8, (EEType * pArrayEEType, int numElements))
 {
-    printf("RhpNewArrayAlign8 %p %p\n", pArrayEEType, *pArrayEEType);
+    printf("RhpNewArrayAlign8 %p %p first %p\n", pArrayEEType, *pArrayEEType, firstValue);
     ASSERT_MSG(pArrayEEType->RequiresAlign8(), "RhpNewArrayAlign8 called for a type that is not aligned 8");
 
     Thread* pCurThread = ThreadStore::GetCurrentThread();
@@ -403,16 +405,22 @@ PrintIfNotAligend(pObject);
         return pObject;
     }
 
+    printf("RhpNewArrayAlign8 RhpGcAlloc first %p\n", firstValue);
     pObject = (Array*)RhpGcAlloc(pArrayEEType, GC_ALLOC_ALIGN8, size, NULL);
     if (pObject == nullptr)
     {
         ASSERT_UNCONDITIONALLY("NYI");  // TODO: Throw OOM
     }
+    printf("RhpNewArrayAlign8 setting eetype first %p\n", firstValue);
     pObject->set_EEType(pArrayEEType);
+    printf("RhpNewArrayAlign8 InitArrayLength first %p\n", firstValue);
     pObject->InitArrayLength((UInt32)numElements);
 
     if (size >= RH_LARGE_OBJECT_SIZE)
+    {
+        printf("RhpNewArrayAlign8 RhpPublishObject first %p\n", firstValue);
         RhpPublishObject(pObject, size);
+    }
 
     printf("allocating array at 8 %d\n", (size_t)pObject);
 PrintIfNotAligend(pObject);

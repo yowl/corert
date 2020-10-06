@@ -1220,7 +1220,7 @@ namespace Internal.Runtime
         {
             get
             {
-                X.PrintLine("RareFlags");
+                //X.PrintLine("RareFlags");
                 // var o = this;
                 // fixed (void* thisP = (void*)&o)
                 // {

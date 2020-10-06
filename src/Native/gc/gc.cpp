@@ -20,6 +20,7 @@
 #include "gcpriv.h"
 
 #define USE_INTROSORT
+extern "C" void* firstValue;
 
 // We just needed a simple random number generator for testing.
 class gc_rand
@@ -4041,7 +4042,7 @@ BOOL gc_heap::reserve_initial_memory (size_t normal_size, size_t large_size, siz
             allatonce_block = nullptr;
         }
     }
-    printf("allatonce_block\n");
+    printf("allatonce_block %p\n", allatonce_block);
     if (allatonce_block)
     {
         if (separated_poh_p)
@@ -4073,7 +4074,12 @@ BOOL gc_heap::reserve_initial_memory (size_t normal_size, size_t large_size, siz
                 memory_details.initial_pinned_heap[i].memory_base = allatonce_block +
                     (memory_details.block_count * (normal_size + large_size)) + (i * pinned_size);
             }
-
+            printf("normal_heap base %p large_heap base %p pinned_heap base %p", memory_details.initial_normal_heap[i].memory_base, 
+                memory_details.initial_large_heap[i].memory_base,
+                memory_details.initial_pinned_heap[i].memory_base);
+            printf("normal_size  %x large_size %x pinned_size %x", normal_size,
+                large_size,
+                pinned_size);
             reserve_success = TRUE;
         }
     }
@@ -4094,6 +4100,7 @@ BOOL gc_heap::reserve_initial_memory (size_t normal_size, size_t large_size, siz
 
             for (int i = 0; i < memory_details.block_count; i++)
             {
+                printf("reserver initial_memory b1 %p b2 %p b3 %p i %d normal_size %x large_size %x pinned_size %x\n", b1, b2, b3, i, normal_size, large_size, pinned_size);
                 memory_details.initial_normal_heap[i].memory_base = b1 + (i * normal_size);
                 memory_details.initial_large_heap[i].memory_base = b2 + (i * large_size);
                 memory_details.initial_pinned_heap[i].memory_base = b3 + (i * pinned_size);
@@ -4220,7 +4227,7 @@ void* virtual_alloc (size_t size)
 
 void* virtual_alloc (size_t size, bool use_large_pages_p)
 {
-    printf("virtual alloc\n");
+    printf("virtual alloc first %p\n", firstValue);
     size_t requested_size = size;
 
     if ((gc_heap::reserved_memory_limit - gc_heap::reserved_memory) < requested_size)
@@ -4243,7 +4250,7 @@ void* virtual_alloc (size_t size, bool use_large_pages_p)
     }
 #endif // !FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
 
-    printf("reserve use large %d\n", use_large_pages_p);
+    printf("reserve use large %d for size %d\n", use_large_pages_p, requested_size);
     void* prgmem = use_large_pages_p ?
         GCToOSInterface::VirtualReserveAndCommitLargePages(requested_size) :
         GCToOSInterface::VirtualReserve(requested_size, card_size * card_word_width, flags);
@@ -6344,7 +6351,7 @@ BOOL grow_mark_stack (mark*& m, size_t& len, size_t init_len)
     if (tmp)
     {
         memcpy (tmp, m, len * sizeof (mark));
-        delete m;
+        delete [] m;
         m = tmp;
         len = new_size;
         return TRUE;
@@ -7194,6 +7201,11 @@ uint32_t*& card_table_next (uint32_t* c_table)
 inline
 size_t& card_table_size (uint32_t* c_table)
 {
+    size_t s = ((card_table_info*)((uint8_t*)c_table - sizeof (card_table_info)))->size;
+    if(s == 0)
+    {
+        printf("card_table_size is 0 for c_table %d\n", c_table);
+    }
     return ((card_table_info*)((uint8_t*)c_table - sizeof (card_table_info)))->size;
 }
 
@@ -7316,6 +7328,7 @@ uint32_t* gc_heap::make_card_table (uint8_t* start, uint8_t* end)
     // it is impossible for alloc_size to overflow due bounds on each of
     // its components.
     size_t alloc_size = sizeof (uint8_t)*(sizeof(card_table_info) + cs + bs + cb + wws + st + ms);
+    printf("make_card_table calling VirtualReserve for size %d \n", alloc_size);
     uint8_t* mem = (uint8_t*)GCToOSInterface::VirtualReserve (alloc_size, 0, virtual_reserve_flags);
 
     if (!mem)
@@ -7518,6 +7531,7 @@ int gc_heap::grow_brick_card_tables (uint8_t* start,
         dprintf (GC_TABLE_LOG, ("card table: %d; brick table: %d; card bundle: %d; sw ww table: %d; seg table: %d; mark array: %d",
                                   cs, bs, cb, wws, st, ms));
 
+        printf("grow_brick_tables calling Virtual Reserve for size %d \n", alloc_size);
         uint8_t* mem = (uint8_t*)GCToOSInterface::VirtualReserve (alloc_size, 0, virtual_reserve_flags);
 
         if (!mem)
@@ -7546,7 +7560,6 @@ int gc_heap::grow_brick_card_tables (uint8_t* start,
         card_table_lowest_address (ct) = saved_g_lowest_address;
         card_table_highest_address (ct) = saved_g_highest_address;
         card_table_next (ct) = &g_gc_card_table[card_word (gcard_of (la))];
-
         //clear the card table
 /*
         memclr ((uint8_t*)ct,
@@ -7696,6 +7709,7 @@ int gc_heap::grow_brick_card_tables (uint8_t* start,
             // info.
             stomp_write_barrier_resize(GCToEEInterface::IsGCThread(), la != saved_g_lowest_address);
         }
+        printf("grown card size is %d\n", ((card_table_info*)((uint8_t*)ct - sizeof (card_table_info)))->size);
 
         return 0;
 
@@ -9260,16 +9274,18 @@ int gc_heap::object_gennum_plan (uint8_t* o)
 #pragma optimize("", on)        // Go back to command line default optimizations
 #endif //_MSC_VER && TARGET_X86
 
+
 heap_segment* gc_heap::make_heap_segment (uint8_t* new_pages, size_t size, gc_oh_num oh, int h_number)
 {
     assert(oh != gc_oh_num::none);    
+    printf("make_heap_segment first %p\n", firstValue);
     size_t initial_commit = SEGMENT_INITIAL_COMMIT;
 
     if (!virtual_commit (new_pages, initial_commit, oh, h_number))
     {
         return 0;
     }
-
+    printf("make_heap_segment new_pages %p size %x initial_commit %x\n", new_pages, size, initial_commit);
     heap_segment* new_segment = (heap_segment*)new_pages;
 
     uint8_t* start = new_pages + segment_info_size;
@@ -9277,6 +9293,11 @@ heap_segment* gc_heap::make_heap_segment (uint8_t* new_pages, size_t size, gc_oh
     heap_segment_used (new_segment) = start;
     heap_segment_reserved (new_segment) = new_pages + size;
     heap_segment_committed (new_segment) = (use_large_pages_p ? heap_segment_reserved(new_segment) : (new_pages + initial_commit));
+    if ((size_t)heap_segment_committed(new_segment) & (size_t)0x3fff)
+    {
+        printf("make_heap_segment not 16aligned %p\n", heap_segment_committed(new_segment));
+    }
+
     init_heap_segment (new_segment);
     dprintf (2, ("Creating heap segment %x", (size_t)new_segment));
     return new_segment;
@@ -9363,10 +9384,11 @@ void gc_heap::decommit_heap_segment_pages (heap_segment* seg,
     if (use_large_pages_p)
         return;
     uint8_t*  page_start = align_on_page (heap_segment_allocated(seg));
+    if (page_start > heap_segment_committed(seg)) return;
     size_t size = heap_segment_committed (seg) - page_start;
     extra_space = align_on_page (extra_space);
-    printf("decommit_heap_segment_pages size %d extra_space %d OS_PAGE_SIZE %d MIN_DECOMMIT_SIZE %d page_start %d",
-            size, extra_space, OS_PAGE_SIZE, MIN_DECOMMIT_SIZE, (size_t)page_start);
+    printf("decommit_heap_segment_pages size %x extra_space %x OS_PAGE_SIZE %x MIN_DECOMMIT_SIZE %x seg %d heap_segment_allocated %p heap_segment_committed %p page_start %p\n",
+            size, extra_space, OS_PAGE_SIZE, MIN_DECOMMIT_SIZE, (size_t)seg, heap_segment_allocated(seg), (size_t)heap_segment_committed(seg), (size_t)page_start);
     if (size >= max ((extra_space + 2*OS_PAGE_SIZE), MIN_DECOMMIT_SIZE))
     {
         page_start += max(extra_space, 32*OS_PAGE_SIZE);
@@ -9391,6 +9413,11 @@ size_t gc_heap::decommit_heap_segment_pages_worker (heap_segment* seg,
                 (size_t)(page_start + size),
                 size));
             heap_segment_committed (seg) = page_start;
+
+            if ((size_t)heap_segment_committed(seg) & (size_t)0x3fff)
+            {
+                printf("decommit_heap_segment_pages_worker not 16aligned %p\n", heap_segment_committed(seg));
+            }
             if (heap_segment_used (seg) > heap_segment_committed (seg))
             {
                 heap_segment_used (seg) = heap_segment_committed (seg);
@@ -9403,6 +9430,7 @@ size_t gc_heap::decommit_heap_segment_pages_worker (heap_segment* seg,
     }
     return size;
 }
+
 
 //decommit all pages except one or 2
 void gc_heap::decommit_heap_segment (heap_segment* seg)
@@ -9422,6 +9450,10 @@ void gc_heap::decommit_heap_segment (heap_segment* seg)
     {
         //re-init the segment object
         heap_segment_committed (seg) = page_start;
+        if ((size_t)heap_segment_committed(seg) & (size_t)0x3fff)
+        {
+            printf("decommit_heap_segment not 16aligned %p\n", heap_segment_committed(seg));
+        }
         if (heap_segment_used (seg) > heap_segment_committed (seg))
         {
             heap_segment_used (seg) = heap_segment_committed (seg);
@@ -11088,7 +11120,10 @@ BOOL gc_heap::grow_heap_segment (heap_segment* seg, uint8_t* high_address, bool*
     if (ret)
     {
         heap_segment_committed (seg) += c_size;
-
+        if ((size_t)heap_segment_committed(seg) & (size_t)0x3fff)
+        {
+            printf("grow_heap_segment not 16aligned %p\n", heap_segment_committed(seg));
+        }
         STRESS_LOG1(LF_GC, LL_INFO10000, "New commit: %x\n",
                     (size_t)heap_segment_committed (seg));
 
@@ -35609,6 +35644,7 @@ HRESULT GCHeap::Initialize()
     for (int numa_node_index = 0; numa_node_index < total_numa_nodes_on_machine; numa_node_index++)
     {
         int hb_info_size_per_node = hb_info_size_per_proc * procs_per_numa_node;
+        printf("Initialize calling VirtualReserve for size %d\n", hb_info_size_per_node);
         uint8_t* numa_mem = (uint8_t*)GCToOSInterface::VirtualReserve (hb_info_size_per_node, 0, 0, numa_node_index);
         if (!numa_mem)
             return E_FAIL;
@@ -38610,6 +38646,7 @@ void initGCShadow()
     if (len > (size_t)(g_GCShadowEnd - g_GCShadow))
     {
         deleteGCShadow();
+        printf("initGCShadow calling VirtualReserve for size %d\n", len);
         g_GCShadowEnd = g_GCShadow = (uint8_t *)GCToOSInterface::VirtualReserve(len, 0, VirtualReserveFlags::None);
         if (g_GCShadow == NULL || !GCToOSInterface::VirtualCommit(g_GCShadow, len))
         {
