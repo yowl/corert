@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Linq;
 using System.Threading;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
@@ -15,11 +16,168 @@ using System.Collections.Specialized;
 using CpObj;
 using CkFinite;
 #endif
+
+internal static class TSInteropMarshaller
+{
+    public const UnmanagedType LPUTF8Str = (UnmanagedType)48;
+
+    public static void InvokeJS<TParam>()
+    {
+        Program.PrintLine("size is " + MarshalSizeOf<TParam>.Size.ToString());
+        var pParms = Marshal.AllocHGlobal(MarshalSizeOf<TParam>.Size);
+    }
+
+    private class MarshalSizeOf<T>
+    {
+        internal static readonly int Size = Marshal.SizeOf(typeof(T));
+    }
+}
+
 internal static class Program
 {
     private static int staticInt;
     [ThreadStatic]
     private static int threadStaticInt;
+
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    private struct WindowManagerRegisterEventOnViewParams
+    {
+        public IntPtr HtmlId;
+
+        [MarshalAs(TSInteropMarshaller.LPUTF8Str)]
+        public string EventName;
+
+        public bool OnCapturePhase;
+
+        public int EventExtractorId;
+    }
+
+    interface IFrameworkElement : DependencyObject
+    { }
+
+    public class View : DependencyObject
+    { }
+
+    private static void ToArray(IEnumerable<View> subViews)
+    {
+        var a = subViews.OfType<IFrameworkElement>()
+            .ToArray();
+    }
+
+    public delegate object ActivatorDelegate();
+    public interface IBindableType
+    {
+        /// <summary>
+        /// Provides the Type of this bindable type
+        /// </summary>
+        Type Type { get; }
+
+        /// </summary>
+        /// <returns>An initialized instance.</returns>
+        ActivatorDelegate CreateInstance();
+    }
+    private static object CreateInstance() => new Page();
+
+    public class BindableType : IBindableType
+    {
+        Hashtable _properties;
+        private ActivatorDelegate _activator;
+
+
+        /// <summary>
+        /// Builds a new BindableType.
+        /// </summary>
+        /// <param name="estimatedPropertySize">Provide an estimated number of properties, so the dictionary does not need to grow unnecessarily.</param>
+        /// <param name="sourceType">The actual .NET type that corresponds to this instance.</param>
+        public BindableType(int estimatedPropertySize, Type sourceType)
+        {
+            _properties = new Hashtable(estimatedPropertySize);
+            Type = sourceType;
+        }
+
+        public Type Type { get; }
+
+        public ActivatorDelegate CreateInstance()
+        {
+            return _activator;
+        }
+
+        public void AddActivator(ActivatorDelegate activator)
+        {
+            _activator = activator;
+        }
+    }
+    internal class Page
+    {
+        internal Page()
+        {
+            PrintLine("ctor Page");
+        }
+    }
+
+    internal interface IBindableMetadataProvider
+    {
+        /// <summary>
+        /// Allows to get a Bindable type definition through a System.Type.
+        /// </summary>
+        /// <param name="type">The type to lookup</param>
+        /// <returns>A bindable type instance, otherwise null.</returns>
+        IBindableType GetBindableTypeByType(Type type);
+
+        /// <summary>
+        /// Allows to get a Bindable type definition through a string representing the full type name.
+        /// </summary>
+        /// <param name="fullName">The type to lookup</param>
+        /// <returns>A bindable type instance, otherwise null.</returns>
+        IBindableType GetBindableTypeByFullName(string fullName);
+    }
+    internal static Page CreatePageInstance(Type sourcePageType)
+    {
+            var bindableType = GetBindableMetadataProvider().GetBindableTypeByType(sourcePageType);
+        GC.Collect();
+        GC.Collect();
+        if (bindableType != null)
+            {
+
+                return bindableType.CreateInstance()() as Page;
+            }
+        throw new Exception();
+    }
+
+    static IBindableMetadataProvider GetBindableMetadataProvider()
+    {
+        return new BindableMetadataProvider();
+    }
+
+    class BindableMetadataProvider : IBindableMetadataProvider
+    {
+        IBindableType IBindableMetadataProvider.GetBindableTypeByType(Type type)
+        {
+            var bindableType = new BindableType(1, typeof(Page));
+            bindableType.AddActivator(CreateInstance);
+            return bindableType;
+
+        }
+
+        /// <summary>
+        /// Allows to get a Bindable type definition through a string representing the full type name.
+        /// </summary>
+        /// <param name="fullName">The type to lookup</param>
+        /// <returns>A bindable type instance, otherwise null.</returns>
+        IBindableType IBindableMetadataProvider.GetBindableTypeByFullName(string fullName)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static Size AtLeastZero(this Size value)
+    {
+        return new Size(
+            value.Width.AtLeast(0d),
+            value.Height.AtLeast(0d)
+        );
+    }
 
     internal static bool Success;
     private static unsafe int Main(string[] args)
@@ -31,6 +189,18 @@ internal static class Program
         };
         Success = true;
         PrintLine("Starting " + 1);
+
+        CreatePageInstance(typeof(Page));
+
+        IEnumerable<View> subViews;
+
+        subViews = new List<View>
+        {
+            new View()
+        };
+        ToArray(subViews);
+
+        TSInteropMarshaller.InvokeJS<WindowManagerRegisterEventOnViewParams>();
         TestUno(new DependencyObject2());
         TestBox();
 
@@ -504,6 +674,7 @@ internal static class Program
                     o = null;
                     break;
             }
+//            PrintLine("testing");
             for (var x = 0; x < 1000; x++)
             {
                 object a = keptObjects[x];
@@ -518,6 +689,8 @@ internal static class Program
                     }
                 }
             }
+  //          PrintLine("testing done");
+
             keptObjects[r % 1000] = o;
         }
         GC.Collect();
@@ -882,7 +1055,7 @@ internal static class Program
 
     private interface IDependencyObjectStoreProvider
     {
-        public void UpdateResourceBindings(bool isThemeChangedUpdate, object? containingDictionary = null);
+//        public void UpdateResourceBindings(bool isThemeChangedUpdate, object? containingDictionary = null);
     }
 
     private class DependencyObject2 : DependencyObject
@@ -930,7 +1103,7 @@ internal static class Program
                 }
 
                 // Check tree for resource binding values, since some Setters may have set ThemeResource-backed values
-                (o as IDependencyObjectStoreProvider).UpdateResourceBindings(isThemeChangedUpdate: false);
+//                (o as IDependencyObjectStoreProvider).UpdateResourceBindings(isThemeChangedUpdate: false);
             }
             finally
             {

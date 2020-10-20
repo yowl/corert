@@ -62,7 +62,7 @@ static int FindBlock(void * address)
 //  Starting virtual address of the reserved range
 static void* VirtualReserveInner(size_t size, size_t alignment, uint32_t flags)
 {
-    printf("VirtualReserveInner requested size %d with alignment %x\n", size, alignment);
+    printf("VirtualReserveInner requested size %d with alignment %x OS_PAGE_SIZE %x\n", size, alignment, OS_PAGE_SIZE);
 
     int b;
     b = FirstUnused();

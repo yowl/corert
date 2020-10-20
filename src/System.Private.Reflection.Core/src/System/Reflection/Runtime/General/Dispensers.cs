@@ -91,29 +91,58 @@ namespace System.Reflection.Runtime.Assemblies
             object runtimeAssemblyOrException = s_assemblyRefNameToAssemblyDispenser.GetOrAdd(assemblyRefName);
             if (runtimeAssemblyOrException is RuntimeAssembly runtimeAssembly)
             {
+                X.PrintLine("TryGetRuntimeAssembly got RuntimeAssembly");
                 result = runtimeAssembly;
                 return null;
             }
             else
             {
+                X.PrintLine("TryGetRuntimeAssembly got else");
+
                 result = null;
                 return (Exception)runtimeAssemblyOrException;
             }
         }
 
         // The "object" here is either a RuntimeAssembly or an Exception.
-        private static readonly Dispenser<RuntimeAssemblyName, object> s_assemblyRefNameToAssemblyDispenser =
-            DispenserFactory.CreateDispenser<RuntimeAssemblyName, object>(
-                DispenserScenario.AssemblyRefName_Assembly,
-                delegate (RuntimeAssemblyName assemblyRefName)
-                {
-                    AssemblyBinder binder = ReflectionCoreExecution.ExecutionDomain.ReflectionDomainSetup.AssemblyBinder;
-                    if (!binder.Bind(assemblyRefName, cacheMissedLookups: true, out AssemblyBindResult bindResult, out Exception exception))
-                        return exception;
+        private static readonly Dispenser<RuntimeAssemblyName, object> s_assemblyRefNameToAssemblyDispenser = GetS();
+        //     DispenserFactory.CreateDispenser<RuntimeAssemblyName, object>(
+        //         DispenserScenario.AssemblyRefName_Assembly,
+        //         delegate (RuntimeAssemblyName assemblyRefName)
+        //         {
+        //             X.PrintLine("dispenser called with refname " + assemblyRefName.FullName);
+        //             AssemblyBinder binder = ReflectionCoreExecution.ExecutionDomain.ReflectionDomainSetup.AssemblyBinder;
+        //             if (!binder.Bind(assemblyRefName, cacheMissedLookups: true, out AssemblyBindResult bindResult, out Exception exception))
+        //                 return exception;
+        //
+        //             var a =  GetRuntimeAssembly(bindResult);
+        //             X.PrintLine("dispenser found " + a.FullName);
+        //             return a;
+        //         }
+        // );
 
-                    return GetRuntimeAssembly(bindResult);
-                }
-        );
+        private static Dispenser<RuntimeAssemblyName, object> GetS()
+        {
+            X.PrintLine("Dispenser<RuntimeAssemblyName");
+            return DispenserFactory.CreateDispenser<RuntimeAssemblyName, object>(
+                DispenserScenario.AssemblyRefName_Assembly,
+                delegate(RuntimeAssemblyName assemblyRefName)
+                {
+                    X.PrintLine("dispenser called with refname " + assemblyRefName.FullName);
+                    AssemblyBinder binder = ReflectionCoreExecution.ExecutionDomain.ReflectionDomainSetup
+                        .AssemblyBinder;
+                    if (!binder.Bind(assemblyRefName, cacheMissedLookups: true, out AssemblyBindResult bindResult,
+                        out Exception exception))
+                    {
+                        X.PrintLine("dispenser Bind excetion " + exception.ToString());
+                        return exception;
+                    }
+
+                    var a = GetRuntimeAssembly(bindResult);
+                    X.PrintLine("dispenser found " + a.FullName);
+                    return a;
+                });
+        }
 
         private static RuntimeAssembly GetRuntimeAssembly(AssemblyBindResult bindResult, string assemblyPath = null)
         {

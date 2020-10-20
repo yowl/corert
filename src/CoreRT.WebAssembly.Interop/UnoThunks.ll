@@ -9,3 +9,11 @@ Block0:
   ret void
 }
 
+
+declare void @Uno_UI_Windows_UI_Xaml_Window__Resize(i8*, double, double)
+
+define void @CoreRT_WebAssembly_Interop_WebAssembly_Runtime__WindowResizeLLVM(i8*, double, double) {
+Block0:      
+  call void @Uno_UI_Windows_UI_Xaml_Window__Resize(i8* %0, double %1, double %2)
+  ret void
+}

@@ -1157,6 +1157,9 @@ public:
     PER_HEAP
     void verify_soh_segment_list();
 
+    PER_HEAP
+        void TestBricks(size_t i);
+
 #ifdef VERIFY_HEAP
     PER_HEAP
     void verify_free_lists();
@@ -4970,6 +4973,7 @@ dynamic_data* gc_heap::dynamic_data_of (int gen_number)
 }
 
 #define GC_PAGE_SIZE 0x1000
+//#define GC_PAGE_SIZE 0x4000
 
 #define card_word_width ((size_t)32)
 

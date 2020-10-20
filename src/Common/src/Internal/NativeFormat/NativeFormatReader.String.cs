@@ -7,10 +7,83 @@
 // ---------------------------------------------------------------------------
 
 using System;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Internal.NativeFormat
 {
+    internal class X3
+    {
+        [DllImport("*")]
+        internal static unsafe extern int printf(byte* str, byte* unused);
+        private static unsafe void PrintString(string s)
+        {
+            int length = s.Length;
+            fixed (char* curChar = s)
+            {
+                for (int i = 0; i < length; i++)
+                {
+                    TwoByteStr curCharStr = new TwoByteStr();
+                    curCharStr.first = (byte)(*(curChar + i));
+                    printf((byte*)&curCharStr, null);
+                }
+            }
+        }
+
+        internal static void PrintLine(string s)
+        {
+            PrintString(s);
+            PrintString("\n");
+        }
+
+        //public unsafe static void PrintLong(long l)
+        //{
+        //    PrintByte((byte)((l >> 56) & 0xff));
+        //    PrintByte((byte)((l >> 48) & 0xff));
+        //    PrintByte((byte)((l >> 40) & 0xff));
+        //    PrintByte((byte)((l >> 32) & 0xff));
+        //    PrintByte((byte)((l >> 24) & 0xff));
+        //    PrintByte((byte)((l >> 16) & 0xff));
+        //    PrintByte((byte)((l >> 8) & 0xff));
+        //    PrintByte((byte)(l & 0xff));
+        //    PrintString("\n");
+        //}
+
+        public unsafe static void PrintUint(int l)
+        {
+            TwoByteStr curCharStr = new TwoByteStr();
+
+            PrintByte((byte)((l >> 24) & 0xff));
+            PrintByte((byte)((l >> 16) & 0xff));
+            PrintByte((byte)((l >> 8) & 0xff));
+            PrintByte((byte)(l & 0xff));
+
+            curCharStr.first = 13;
+            printf((byte*)&curCharStr, null);
+            curCharStr.first = 10;
+            printf((byte*)&curCharStr, null);
+        }
+
+        public unsafe static void PrintByte(byte b)
+        {
+            TwoByteStr curCharStr = new TwoByteStr();
+            var nib = (b & 0xf0) >> 4;
+            curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
+            printf((byte*)&curCharStr, null);
+            nib = (b & 0xf);
+            curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
+            printf((byte*)&curCharStr, null);
+        }
+
+        public struct TwoByteStr
+        {
+            public byte first;
+            public byte second;
+        }
+
+    }
+
+
     internal partial struct NativeParser
     {
         public string GetString()
@@ -93,7 +166,16 @@ namespace Internal.NativeFormat
                 ThrowBadImageFormatException();
 
             if (numBytes < value.Length)
+            {
+
+                for (int i = 0; i < numBytes; i++)
+                {
+
+                    int ch = *(_base + offset + i);
+
+                }
                 return false;
+            }
 
             for (int i = 0; i < value.Length; i++)
             {

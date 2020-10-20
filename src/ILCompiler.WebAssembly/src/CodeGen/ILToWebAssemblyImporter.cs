@@ -84,7 +84,14 @@ namespace Internal.IL
         private AddressCacheContext _funcletAddrCacheCtx; // for the method and handler/filter funclets
         private readonly List<AddressCacheContext> _addressCachesToBackFill = new List<AddressCacheContext>();
         int ix = 0;
-         
+        int jx = 0;
+        int kx = 0;
+        int lx = 0;
+        int mx = 0;
+        int nx = 0;
+        int ox = 0;
+        int px = 0;
+
         /// <summary>
         /// Stack of values pushed onto the IL stack: locals, arguments, values, function pointer, ...
         /// </summary>
@@ -149,10 +156,48 @@ namespace Internal.IL
                 _methodIL = methodIL;
             }
             _mangledName = mangledName;
-            if (_mangledName == "Uno_UI_Windows_UI_Xaml_Style__ApplyTo")
+            if (_mangledName.Contains("Uno_UI_Uno_UI_DataBinding_BindableType__AddActivator"))
             {
                 ix = 1;
             }
+            if (_mangledName.Contains("UnoCoreRt_Wasm_UnoCoreRt_Wasm_MetadataBuilder_565__CreateInstance"))
+            {
+                jx = 1;
+            }
+            if (_mangledName.Contains("Uno_UI_Uno_UI_DataBinding_ActivatorDelegate__InvokeOpenStaticThunk"))
+            {
+                jx = 128;
+            }
+            if (_mangledName.Contains("UnoCoreRt_Wasm_UnoCoreRt_MainPage___ctor"))
+            {
+                kx = 21;
+            }
+            if (_mangledName.Contains("Uno_UI_Windows_UI_Xaml_Controls_ContentControl___ctor"))
+            {
+                lx = 1;
+            }
+            if (_mangledName.Contains("Uno_UI_Windows_UI_Xaml_Controls_Control___ctor"))
+            {
+                mx = 1;
+            }
+            if (_mangledName.Contains("Uno_UI_Windows_UI_Xaml_Controls_Control___ctor_0"))
+            {
+                nx = 1;
+            }
+            if (_mangledName.Contains("Uno_UI_Windows_UI_Xaml_FrameworkElement___ctor_0"))
+            {
+                ox = 1;
+            }
+            if (_mangledName.Contains("uno__ui_windows_ui_xaml_window_resize"))
+            {
+                px = 1;
+            }
+
+            if (_mangledName.Contains("Uno_UI_Windows_UI_Xaml_Controls_Grid__MeasureOverride"))
+            {
+            }
+            
+
             _ilBytes = methodIL.GetILBytes();
             _locals = methodIL.GetLocals();
             _localSlots = new LLVMValueRef[_locals.Length];
@@ -236,6 +281,10 @@ namespace Internal.IL
             }
             finally
             {
+                if (_mangledName.StartsWith("S_P_CoreLib_System_Runtime_RuntimeExports"))
+                {
+
+                }
                 // Generate thunk for runtime exports
                 if ((_method.IsRuntimeExport || _method.IsUnmanagedCallersOnly) && _method is EcmaMethod)  // TODO: Reverse delegate invokes probably need something here, but what would be the export name?
                 {
@@ -1706,13 +1755,6 @@ namespace Internal.IL
         private int GetTotalParameterOffset()
         {
             int offset = 0;
-            for (int i = 0; i < _signature.Length; i++)
-            {
-                if (!CanStoreVariableOnStack(_signature[i]))
-                {
-                    offset = PadNextOffset(_signature[i], offset);
-                }
-            }
             if (!_signature.IsStatic)
             {
                 // If this is a struct, then it's a pointer on the stack
@@ -1723,6 +1765,13 @@ namespace Internal.IL
                 else
                 {
                     offset = PadNextOffset(_thisType, offset);
+                }
+            }
+            for (int i = 0; i < _signature.Length; i++)
+            {
+                if (!CanStoreVariableOnStack(_signature[i]))
+                {
+                    offset = PadNextOffset(_signature[i], offset);
                 }
             }
 
@@ -1888,24 +1937,29 @@ namespace Internal.IL
         private void ImportCasting(ILOpcode opcode, int token)
         {
             TypeDesc type = (TypeDesc)_methodIL.GetObject(token);
+            if (_mangledName == "System_Linq_System_Linq_Enumerable__OfTypeIterator_d__36_1<System___Canon>__MoveNext")
+            {
 
+            }
             //TODO: call GetCastingHelperNameForType from JitHelper.cs (needs refactoring)
             string function;
             bool throwing = opcode == ILOpcode.castclass;
-            if (type.IsArray)
-                function = throwing ? "CheckCastArray" : "IsInstanceOfArray";
-            else if (type.IsInterface)
-                function = throwing ? "CheckCastInterface" : "IsInstanceOfInterface";
-            else
-                function = throwing ? "CheckCastClass" : "IsInstanceOfClass";
 
             LLVMValueRef typeRef;
             if (type.IsRuntimeDeterminedSubtype)
             {
+                function = throwing ? "CheckCast" : "IsInstanceOf";
                 typeRef = CallGenericHelper(ReadyToRunHelperId.TypeHandleForCasting, type);
             }
             else
             {
+                if (type.IsArray)
+                    function = throwing ? "CheckCastArray" : "IsInstanceOfArray";
+                else if (type.IsInterface)
+                    function = throwing ? "CheckCastInterface" : "IsInstanceOfInterface";
+                else
+                    function = throwing ? "CheckCastClass" : "IsInstanceOfClass";
+
                 ISymbolNode lookup = _compilation.ComputeConstantLookup(ReadyToRunHelperId.TypeHandleForCasting, type);
                 _dependencies.Add(lookup);
                 typeRef = LoadAddressOfSymbolNode(lookup);
@@ -2020,6 +2074,33 @@ namespace Internal.IL
 
         private void ImportCall(ILOpcode opcode, int token)
         {
+
+            if (ix > 0)
+            {
+                PrintInt32(BuildConstUInt32(64));
+                PrintInt32(BuildConstUInt32((uint)ix++));
+            }
+
+            if (lx > 0)
+            {
+                PrintInt32(BuildConstUInt32(48));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (mx > 0)
+            {
+                PrintInt32(BuildConstUInt32(49));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (nx > 0)
+            {
+                PrintInt32(BuildConstUInt32(50));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (px > 0)
+            {
+                PrintInt32(BuildConstUInt32(52));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
             MethodDesc runtimeDeterminedMethod = (MethodDesc)_methodIL.GetObject(token);
             MethodDesc callee = (MethodDesc)_canonMethodIL.GetObject(token);
             if (callee.IsIntrinsic)
@@ -2241,7 +2322,43 @@ namespace Internal.IL
                 }
             }
 
+            if (kx > 0)
+            {
+                PrintInt32(BuildConstUInt32(32));
+                PrintInt32(BuildConstUInt32((uint)kx++));
+            }
             HandleCall(callee, callee.Signature, runtimeDeterminedMethod, opcode, localConstrainedType);
+
+            if (jx > 0)
+            {
+                PrintInt32(BuildConstUInt32(256));
+                PrintInt32(BuildConstUInt32((uint)jx++));
+            }
+            if (kx > 0)
+            {
+                PrintInt32(BuildConstUInt32(32));
+                PrintInt32(BuildConstUInt32((uint)kx++));
+            }
+            if (lx > 0)
+            {
+                PrintInt32(BuildConstUInt32(48));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (mx > 0)
+            {
+                PrintInt32(BuildConstUInt32(49));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (nx > 0)
+            {
+                PrintInt32(BuildConstUInt32(50));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (px > 0)
+            {
+                PrintInt32(BuildConstUInt32(52));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
         }
 
         private LLVMValueRef LLVMFunctionForMethod(MethodDesc callee, MethodDesc canonMethod, StackEntry thisPointer, bool isCallVirt,
@@ -2385,6 +2502,7 @@ namespace Internal.IL
                 functionPtr = targetEntry.ValueAsType(LLVMTypeRef.CreatePointer(llvmSignature, 0), _builder);
                 if (ix > 0)
                 {
+                    PrintInt32(BuildConstUInt32(64));
                     PrintInt32(BuildConstUInt32((uint)ix++));
                     PrintInt32(_builder.BuildPtrToInt(functionPtr, LLVMTypeRef.Int32));
                 }
@@ -2395,6 +2513,19 @@ namespace Internal.IL
                 var eeType = _builder.BuildLoad(rawObjectPtr, "ldEEType");
                 var slotPtr = _builder.BuildGEP(eeType, new LLVMValueRef[] { slot }, "__getslot__");
                 functionPtr = _builder.BuildLoad(slotPtr, "ld__getslot__");
+
+                if (jx > 0)
+                {
+                    PrintInt32(BuildConstUInt32(128));
+                    PrintInt32(BuildConstUInt32((uint)jx++));
+                    PrintInt32(_builder.BuildPtrToInt(functionPtr, LLVMTypeRef.Int32));
+                }
+
+                if (ix > 0)
+                {
+                    PrintInt32(BuildConstUInt32(96));
+                    PrintInt32(BuildConstUInt32((uint)ix++));
+                }
             }
 
             return functionPtr;
@@ -2523,8 +2654,24 @@ namespace Internal.IL
 
         private ExpressionEntry AllocateObject(StackEntry eeType, TypeDesc forcedReturnType = null)
         {
+            if (jx > 0)
+            {
+                PrintInt32(BuildConstUInt32(256));
+                PrintInt32(BuildConstUInt32((uint)jx++));
+                PrintInt32(eeType.ValueAsInt32(_builder, false));
+            }
+
+
             //TODO: call GetNewObjectHelperForType from JitHelper.cs (needs refactoring)
-            return CallRuntime(_compilation.TypeSystemContext, RuntimeExport, "RhNewObject", new StackEntry[] { eeType }, forcedReturnType);
+            var x = CallRuntime(_compilation.TypeSystemContext, RuntimeExport, "RhNewObject", new StackEntry[] { eeType }, forcedReturnType);
+            if (jx > 0)
+            {
+                PrintInt32(BuildConstUInt32(256));
+                PrintInt32(BuildConstUInt32((uint)jx++));
+                PrintInt32(eeType.ValueAsInt32(_builder, false));
+            }
+
+            return x;
         }
 
         private static LLVMValueRef BuildConstInt1(int number)
@@ -3358,6 +3505,10 @@ namespace Internal.IL
             }
             else
             {
+                if (realMethodName == "RhMemberwiseClone")
+                {
+
+                }
                 _pinvokeMap.Add(realMethodName, method);
                 nativeFunc = realNativeFunc;
             }
@@ -3452,11 +3603,16 @@ namespace Internal.IL
         {
             if (_pinvokeMap.TryGetValue(nativeName, out MethodDesc existing))
             {
-                if (existing != method)
+                if (existing != method && nativeName != "RhMemberwiseClone") // dont really understand what _pinvokeMap is for
                     throw new InvalidProgramException("export and import function were mismatched");
             }
             else
             {
+                if (nativeName == "RhMemberwiseClone")
+                {
+
+                }
+
                 _pinvokeMap.Add(nativeName, method);
             }
 
@@ -3562,6 +3718,12 @@ namespace Internal.IL
         private void ImportCalli(int token)
         {
             MethodSignature methodSignature = (MethodSignature)_canonMethodIL.GetObject(token);
+
+            if (jx > 0)
+            {
+                PrintInt32(BuildConstUInt32(128));
+                PrintInt32(BuildConstUInt32((uint)jx++));
+            }
 
             var noHiddenParamSig = GetLLVMSignatureForMethod(methodSignature, false);
             var hddenParamSig = GetLLVMSignatureForMethod(methodSignature, true);
@@ -4699,15 +4861,85 @@ namespace Internal.IL
                     throwBlock, retBlock);
                 builder.PositionAtEnd(throwBlock);
                 
-                EmitTrapCall(builder);
-                //ThrowException(builder, "ThrowHelpers", "ThrowNullReferenceException", NullRefFunction);
+                ThrowException(builder, "ThrowHelpers", "ThrowNullReferenceException", NullRefFunction);
             
                 builder.PositionAtEnd(retBlock);
                 builder.BuildRetVoid();
             }
-            
+            if (ix > 0)
+            {
+                PrintInt32(BuildConstUInt32(96));
+                PrintInt32(BuildConstUInt32((uint)ix++));
+            }
+            if (kx > 0)
+            {
+                PrintInt32(BuildConstUInt32(32));
+                PrintInt32(BuildConstUInt32((uint)kx++));
+            }
+            if (lx > 0)
+            {
+                PrintInt32(BuildConstUInt32(48));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (mx > 0)
+            {
+                PrintInt32(BuildConstUInt32(49));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (nx > 0)
+            {
+                PrintInt32(BuildConstUInt32(50));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (ox > 0)
+            {
+                PrintInt32(BuildConstUInt32(51));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (px > 0)
+            {
+                PrintInt32(BuildConstUInt32(52));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
             LLVMBasicBlockRef nextInstrBlock = default;
             CallOrInvoke(false, _builder, GetCurrentTryRegion(), NullRefFunction, new LLVMValueRef[] { GetEndOfUsedShadowStack(_builder), entry }, ref nextInstrBlock);
+
+            if (ix > 0)
+            {
+                PrintInt32(BuildConstUInt32(97));
+                PrintInt32(BuildConstUInt32((uint)ix++));
+            }
+            if (kx > 0)
+            {
+                PrintInt32(BuildConstUInt32(32));
+                PrintInt32(BuildConstUInt32((uint)kx++));
+            }
+            if (lx > 0)
+            {
+                PrintInt32(BuildConstUInt32(48));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (mx > 0)
+            {
+                PrintInt32(BuildConstUInt32(49));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (nx > 0)
+            {
+                PrintInt32(BuildConstUInt32(50));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (ox > 0)
+            {
+                PrintInt32(BuildConstUInt32(51));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+            if (px > 0)
+            {
+                PrintInt32(BuildConstUInt32(52));
+                PrintInt32(BuildConstUInt32((uint)lx++));
+            }
+
         }
 
         private void ThrowCkFinite(LLVMValueRef value, int size, ref LLVMValueRef llvmCheckFunction)
@@ -5062,10 +5294,6 @@ namespace Internal.IL
             {
                 b = _builder;
             }
-            int offset = GetTotalParameterOffset() + GetTotalLocalOffset();
-            LLVMValueRef shadowStack = b.BuildGEP(_currentFunclet.GetParam(0),
-                new LLVMValueRef[] { LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (uint)offset, false), },
-                String.Empty);
             b.BuildCall(
                 GetOrCreateLLVMFunction("S_P_CoreLib_System_Collections_Generic_X__PrintUint",
                     LLVMTypeRef.CreateFunction(LLVMTypeRef.Void, new[]
@@ -5076,7 +5304,7 @@ namespace Internal.IL
                         false)),
                 new LLVMValueRef[]
                 {
-                    CastIfNecessary(b, shadowStack, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)),
+                    CastIfNecessary(b, GetEndOfUsedShadowStack(b), LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0)),
                     ptr
                 }, string.Empty);
         }
@@ -5251,6 +5479,16 @@ namespace Internal.IL
             }
             var helper = GetNewArrayHelperForType(runtimeDeterminedArrayType);
             var res = CallRuntime(_compilation.TypeSystemContext, InternalCalls, helper, arguments, runtimeDeterminedArrayType);
+
+            if (_mangledName == "HelloWasm_Program__TestCreateDifferentObjects")
+            {
+                var eeType = _builder.BuildLoad(GetEETypePointerForTypeDesc(_method.Context.GetWellKnownType(WellKnownType.Array), true));
+                PrintInt32(BuildConstUInt32(66), _builder);
+                PrintInt32(_builder.BuildPtrToInt(eeType, LLVMTypeRef.Int32), _builder);
+                //_builder.BuildCall(GetOrCreateCheckFunction(), new[] { GetEndOfUsedShadowStack(_builder) });
+            }
+
+
             int spillIndex = _spilledExpressions.Count;
             SpilledExpressionEntry spillEntry = new SpilledExpressionEntry(StackValueKind.ObjRef, "newarray" + _currentOffset, runtimeDeterminedArrayType, spillIndex, this);
             _spilledExpressions.Add(spillEntry);
@@ -5259,6 +5497,15 @@ namespace Internal.IL
             _builder.BuildStore(res.ValueAsType(LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), _builder), typedAddress);
 
             PushNonNull(spillEntry);
+
+            if (_mangledName == "HelloWasm_Program__TestCreateDifferentObjects")
+            {
+                var eeType = _builder.BuildLoad(GetEETypePointerForTypeDesc(_method.Context.GetWellKnownType(WellKnownType.Array), true));
+                PrintInt32(BuildConstUInt32(67), _builder);
+                PrintInt32(_builder.BuildPtrToInt(eeType, LLVMTypeRef.Int32), _builder);
+                //_builder.BuildCall(GetOrCreateCheckFunction(), new[] { GetEndOfUsedShadowStack(_builder) });
+            }
+
         }
 
         //TODO: copy of the same method in JitHelper.cs but that is internal

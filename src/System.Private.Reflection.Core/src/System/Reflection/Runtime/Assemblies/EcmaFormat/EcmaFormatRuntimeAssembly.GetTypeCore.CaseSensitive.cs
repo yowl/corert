@@ -25,6 +25,8 @@ namespace System.Reflection.Runtime.Assemblies.EcmaFormat
     {
         internal sealed override RuntimeTypeInfo UncachedGetTypeCoreCaseSensitive(string fullName)
         {
+            X.PrintLine("EcmaFormatRuntimeAssembly");
+
             foreach (TypeDefinitionHandle typeDefinitionHandle in MetadataReader.TypeDefinitions)
             {
                 TypeDefinition typeDefinition = MetadataReader.GetTypeDefinition(typeDefinitionHandle);

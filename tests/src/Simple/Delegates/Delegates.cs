@@ -3,6 +3,10 @@
 
 using System;
 using System.Linq.Expressions;
+#if CODEGEN_WASM
+using System.Runtime.InteropServices;
+using Console=BringUpTests.Console;
+#endif
 
 using Pointer = System.Reflection.Pointer;
 
@@ -397,6 +401,61 @@ public class BringUpTests
             State += 2;
         }
     }
+
+#if CODEGEN_WASM
+    internal class Console
+    {
+        private static unsafe void PrintString(string s)
+        {
+            int length = s.Length;
+            fixed (char* curChar = s)
+            {
+                for (int i = 0; i < length; i++)
+                {
+                    TwoByteStr curCharStr = new TwoByteStr();
+                    curCharStr.first = (byte)(*(curChar + i));
+                    printf((byte*)&curCharStr, null);
+                }
+            }
+        }
+
+        internal static void Write(int i)
+        {
+            PrintString(i.ToString());
+        }
+
+        internal static void Write(string s)
+        {
+            PrintString(s);
+        }
+
+        internal static void WriteLine(int i)
+        {
+            WriteLine(i.ToString());
+        }
+
+        internal static void WriteLine(string s)
+        {
+            PrintString(s);
+            PrintString("\n");
+        }
+
+        internal static void WriteLine(string format, string p)
+        {
+            PrintString(string.Format(format, p));
+            PrintString("\n");
+        }
+    }
+
+    struct TwoByteStr
+    {
+        public byte first;
+        public byte second;
+    }
+
+    [DllImport("*")]
+    private static unsafe extern int printf(byte* str, byte* unused);
+    #endif
 }
 
 static class ExtensionClass
@@ -463,10 +522,14 @@ class TestLinqExpressions
             {
                 del(ref i);
             }
-            catch (Exception) { }
-
+            catch (Exception)
+            {
+                Console.WriteLine("exception");
+            }
+            Console.WriteLine(i.ToString());
             if (i != 123)
                 throw new Exception();
         }
     }
 }
+

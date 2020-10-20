@@ -20,7 +20,6 @@
 #include "gcpriv.h"
 
 #define USE_INTROSORT
-extern "C" void* firstValue;
 
 // We just needed a simple random number generator for testing.
 class gc_rand
@@ -4227,7 +4226,7 @@ void* virtual_alloc (size_t size)
 
 void* virtual_alloc (size_t size, bool use_large_pages_p)
 {
-    printf("virtual alloc first %p\n", firstValue);
+    printf("virtual alloc size %d\n", size);
     size_t requested_size = size;
 
     if ((gc_heap::reserved_memory_limit - gc_heap::reserved_memory) < requested_size)
@@ -6808,20 +6807,39 @@ void gc_heap::set_brick (size_t index, ptrdiff_t val)
         val = -32767;
     }
     assert (val < 32767);
+  //  if(index > 620 && index < 640) printf("setting brick with val index %d val %d\n", index, val >= 0 ? val + 1 : val);
     if (val >= 0)
-        brick_table [index] = (short)val+1;
+    {
+        brick_table[index] = (short)val + 1;
+    }
     else
         brick_table [index] = (short)val;
+
+//    if(brick_table[629] != 0) printf("set_brick_entry  brick at index 629 is %d\n", brick_table[629]);
 }
 
 inline
 int gc_heap::get_brick_entry (size_t index)
 {
+//    if (brick_table[629] != 0) printf("set_brick_entry  brick at index 629 is %d\n", brick_table[629]);
 #ifdef MULTIPLE_HEAPS
     return VolatileLoadWithoutBarrier(&brick_table [index]);
 #else
     return brick_table[index];
 #endif
+}
+
+//extern "C" int emscripten_get_callstack(int flags, char* outBuf, int maxBytes);
+//static         char    backtraceBuffer[8192];
+void gc_heap::TestBricks(size_t i)
+{
+    if (brick_table[629] > 0 && ((brick_table[629] - 1) & 3)) {
+        printf("TestBricks %d brick at index 629 is %d\n", i, brick_table[629]);
+  //      int callstackLen = emscripten_get_callstack(8 /* original source stack if source maps available, not tested */, backtraceBuffer, 8192);
+    //    printf(backtraceBuffer);
+
+        assert(0);
+    }
 }
 
 
@@ -9278,7 +9296,6 @@ int gc_heap::object_gennum_plan (uint8_t* o)
 heap_segment* gc_heap::make_heap_segment (uint8_t* new_pages, size_t size, gc_oh_num oh, int h_number)
 {
     assert(oh != gc_oh_num::none);    
-    printf("make_heap_segment first %p\n", firstValue);
     size_t initial_commit = SEGMENT_INITIAL_COMMIT;
 
     if (!virtual_commit (new_pages, initial_commit, oh, h_number))
@@ -9559,7 +9576,9 @@ void gc_heap::rearrange_heap_segments(BOOL compacting)
                     // reset the pages between allocated and committed.
                     if (seg != ephemeral_heap_segment)
                     {
+		    printf("rearrange_heap_segments decommit_heap_segment_pages\n");
                         decommit_heap_segment_pages (seg, 0);
+		    printf("rearrange_heap_segments decommit_heap_segment_pages done\n");
                     }
                 }
                 prev_seg = seg;
@@ -11120,7 +11139,7 @@ BOOL gc_heap::grow_heap_segment (heap_segment* seg, uint8_t* high_address, bool*
     if (ret)
     {
         heap_segment_committed (seg) += c_size;
-        if ((size_t)heap_segment_committed(seg) & (size_t)0x3fff)
+        if ((size_t)heap_segment_committed(seg) & (size_t)0xfff)
         {
             printf("grow_heap_segment not 16aligned %p\n", heap_segment_committed(seg));
         }
@@ -21796,7 +21815,9 @@ void gc_heap::compact_loh()
 
                     heap_segment_allocated (seg) = heap_segment_plan_allocated (seg);
                     dprintf (3, ("Trimming seg to %x[", heap_segment_allocated (seg)));
+		    printf("compact_loh decommit_heap_segment_pages\n");
                     decommit_heap_segment_pages (seg, 0);
+		    printf("compact_loh decommit_heap_segment_pages done\n");
                     dprintf (1236, ("CLOH: seg: %x, alloc: %x, used: %x, committed: %x",
                         seg,
                         heap_segment_allocated (seg),
@@ -29037,6 +29058,27 @@ uint8_t* gc_heap::find_first_object (uint8_t* start, uint8_t* first_object)
                       if(((int)o & 3) != 0)
                       {
                           printf("caclulated address not aligned %p prev_brick %p, brick_address %p brick_entry %d\n", o, prev_brick, brick_address(prev_brick), brick_entry);
+
+                          min_brick = (ptrdiff_t)brick_of(first_object);
+                          prev_brick = (ptrdiff_t)brick - 1;
+                          brick_entry = 0;
+                          printf("min brick %d prev_brick %d\n", min_brick, prev_brick);
+                          while (1)
+                          {
+                              if (prev_brick < min_brick)
+                              {
+                                  printf("prev_brick < min_brick\n");
+                                  break;
+                              }
+                              if ((brick_entry = get_brick_entry(prev_brick)) >= 0)
+                              {
+                                  printf("brick_entry = get_brick_entry(prev_brick)  brick_entry %d get_brick_entry(prev_brick) %d\n", brick_entry, get_brick_entry(prev_brick));
+                                  break;
+                              }
+                              assert(!((brick_entry == 0)));
+                              prev_brick = (brick_entry + prev_brick);
+                              printf("brick_entry %d prev_brick now %d\n", brick_entry, prev_brick);
+                          }
                       }
 
         }
@@ -32060,7 +32102,9 @@ void gc_heap::decommit_ephemeral_segment_pages()
     decommit_size = min (decommit_size, max_decommit_size);
 
     slack_space = heap_segment_committed (ephemeral_heap_segment) - heap_segment_allocated (ephemeral_heap_segment) - decommit_size;
+		    printf("decommit_ephemeral_segment_pages decommit_heap_segment_pages\n");
     decommit_heap_segment_pages (ephemeral_heap_segment, slack_space);
+		    printf("decommit_ephemeral_segment_pages decommit_heap_segment_pages done\n");
 #endif // !MULTIPLE_HEAPS
 
     gc_history_per_heap* current_gc_data_per_heap = get_gc_data_per_heap();
@@ -32107,7 +32151,9 @@ size_t gc_heap::decommit_ephemeral_segment_pages_step ()
 
         // figure out where the new committed should be
         uint8_t* new_committed = (committed - decommit_size);
+		    printf("decommit_ephemeral_segment_pages_step decommit_heap_segment_pages\n");
         size_t size = decommit_heap_segment_pages_worker (ephemeral_heap_segment, new_committed);
+		    printf("decommit_ephemeral_segment_pages_step decommit_heap_segment_pages doneyy\n");
 
 #ifdef _DEBUG
         ephemeral_heap_segment->saved_committed = committed - size;
@@ -32983,7 +33029,9 @@ void gc_heap::process_background_segment_end (heap_segment* seg,
             heap_segment_allocated (seg) = last_plug_end;
             set_mem_verify (heap_segment_allocated (seg) - plug_skew, heap_segment_used (seg), 0xbb);
 
+		    printf("process_background_segment_end decommit_heap_segment_pages\n");
             decommit_heap_segment_pages (seg, 0);
+		    printf("process_background_segment_end decommit_heap_segment_pages doneyy\n");
         }
     }
 
@@ -33645,7 +33693,9 @@ void gc_heap::sweep_uoh_objects (int gen_num)
                 {
                     dprintf (3, ("Trimming seg to %x[", (size_t)plug_end));
                     heap_segment_allocated (seg) = plug_end;
+		    printf("sweep_uoh_objects decommit_heap_segment_pages\n");
                     decommit_heap_segment_pages (seg, 0);
+		    printf("sweep_uoh_objects decommit_heap_segment_pages done\n");
                 }
                 prev_seg = seg;
             }
@@ -36246,6 +36296,7 @@ GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags REQD_ALIGN_
     PREFIX_ASSUME(hp != NULL);
 #endif //_PREFAST_
 #endif //MULTIPLE_HEAPS
+    hp->TestBricks(0);
 
     assert(size < loh_size_threshold || (flags & GC_ALLOC_LARGE_OBJECT_HEAP));
 
@@ -36287,6 +36338,7 @@ GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags REQD_ALIGN_
     }
 
     CHECK_ALLOC_AND_POSSIBLY_REGISTER_FOR_FINALIZATION(newAlloc, size, flags & GC_ALLOC_FINALIZE);
+    hp->TestBricks(1);
     return newAlloc;
 }
 

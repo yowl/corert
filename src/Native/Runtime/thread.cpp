@@ -405,16 +405,15 @@ void Thread::Destroy()
 #ifdef HOST_WASM
 extern RtuObjectRef * t_pShadowStackTop;
 extern RtuObjectRef * t_pShadowStackBottom;
-extern void* firstValue;
 
 void GcScanWasmShadowStack(void * pfnEnumCallback, void * pvCallbackData)
 {
-    printf("GcScanWasmShadowStack first %p\n", firstValue);
+    printf("GcScanWasmShadowStack\n");
     // Wasm does not permit iteration of stack frames so is uses a shadow stack instead
     // TODO: if this runs inside a ReversePInvoke, then there is an additional shadow stack block 
     // (one per active ReversePInvoke).  t_pShadowStackBottom -> t_pShadowStackTop will encompass them both, but is not efficient.
     RedhawkGCInterface::EnumGcRefsInRegionConservatively(t_pShadowStackBottom, t_pShadowStackTop, pfnEnumCallback, pvCallbackData);
-    printf("GcScanWasmShadowStack end first %p\n", firstValue);
+    printf("GcScanWasmShadowStack end \n");
 }
 #endif
 

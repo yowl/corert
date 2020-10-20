@@ -192,15 +192,20 @@ namespace WebAssembly
 {
     public static class Runtime
     {
-        // missing as per mono driver.c
+        // missing as per mono driver.c, these aren't right, should they be RuntimeExport, what calls them, managed or native?
         [UnmanagedCallersOnly(EntryPoint = "InitializeModules", CallingConvention = CallingConvention.Cdecl)]
         public static int SystemNative_CloseNetworkChangeListenerSocket(int a) { return 0; }
         [UnmanagedCallersOnly(EntryPoint = "InitializeModules", CallingConvention = CallingConvention.Cdecl)]
         public static int SystemNative_CreateNetworkChangeListenerSocket(int a) { return 0; }
         [UnmanagedCallersOnly(EntryPoint = "InitializeModules", CallingConvention = CallingConvention.Cdecl)]
         public static void SystemNative_ReadEvents(int a, int b) { }
+
         [UnmanagedCallersOnly(EntryPoint = "InitializeModules", CallingConvention = CallingConvention.Cdecl)]
-        public static int SystemNative_SchedGetAffinity(int a, int b) { return 0; }
+        public static int SystemNative_SchedGetAffinity(int a, out IntPtr b)
+        {
+            b = IntPtr.Zero;
+            return 0;
+        }
         [UnmanagedCallersOnly(EntryPoint = "InitializeModules", CallingConvention = CallingConvention.Cdecl)]
         public static int SystemNative_SchedSetAffinity(int a, int b) { return 0; }
 
@@ -211,7 +216,6 @@ namespace WebAssembly
             throw new Exception("NYI");
         }
 
-        // CoreRT implementation of https://github.com/vargaz/mono/blob/be4037c2a3e70fdc6517e6aa0adb41981323639d/sdks/wasm/src/driver.c#L426
         [UnmanagedCallersOnly(EntryPoint = "uno_windows_ui_core_coredispatcher_dispatchercallback",
             CallingConvention = CallingConvention.Cdecl)]
         public static int DispatcherCallbackPublic()
@@ -219,10 +223,23 @@ namespace WebAssembly
             DispatcherLLVM();
             return 0;
         }
-        
+
+        [UnmanagedCallersOnly(EntryPoint = "uno__ui_windows_ui_xaml_window_resize",
+            CallingConvention = CallingConvention.Cdecl)]
+        public static void WindowResize(double width, double height)
+        {
+            // avoid a reference to Uno
+            WindowResizeLLVM(width, height);
+        }
+
+
         [RuntimeImport("UnoThunk", "UnoDispatcherCallbackLLVM")]
         [MethodImpl(MethodImplOptions.ForwardRef)]
         public static extern void DispatcherLLVM();
+
+        [RuntimeImport("UnoThunk", "WindowResizeLLVM")]
+        [MethodImpl(MethodImplOptions.ForwardRef)]
+        public static extern void WindowResizeLLVM(double width, double height);
     }
 }
 

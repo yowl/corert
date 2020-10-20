@@ -49,6 +49,8 @@ namespace System.Reflection.Runtime.TypeParsing
 
         public sealed override Type ResolveType(Assembly containingAssemblyIfAny, GetTypeOptions getTypeOptions)
         {
+            X.PrintLine("AssemblyQualifiedTypeName ResolveType");
+
             containingAssemblyIfAny = getTypeOptions.CoreResolveAssembly(_assemblyName);
             if (containingAssemblyIfAny == null)
                 return null;
@@ -86,6 +88,8 @@ namespace System.Reflection.Runtime.TypeParsing
 
         public sealed override Type ResolveType(Assembly containingAssemblyIfAny, GetTypeOptions getTypeOptions)
         {
+            X.PrintLine("NamespaceTypeName ResolveType");
+
             return getTypeOptions.CoreResolveType(containingAssemblyIfAny, _fullName);
         }
 
@@ -115,6 +119,7 @@ namespace System.Reflection.Runtime.TypeParsing
 
         public sealed override Type ResolveType(Assembly containingAssemblyIfAny, GetTypeOptions getTypeOptions)
         {
+            X.PrintLine("NestedTypeName ResolveType");
             Type declaringType = _declaringType.ResolveType(containingAssemblyIfAny, getTypeOptions);
             if (declaringType == null)
                 return null;
@@ -189,6 +194,7 @@ namespace System.Reflection.Runtime.TypeParsing
 
         public sealed override Type ResolveType(Assembly containingAssemblyIfAny, GetTypeOptions getTypeOptions)
         {
+            X.PrintLine("ArrayTypeName ResolveType");
             return ElementTypeName.ResolveType(containingAssemblyIfAny, getTypeOptions)?.MakeArrayType();
         }
     }
@@ -211,6 +217,8 @@ namespace System.Reflection.Runtime.TypeParsing
 
         public sealed override Type ResolveType(Assembly containingAssemblyIfAny, GetTypeOptions getTypeOptions)
         {
+            X.PrintLine("MultiDimArrayTypeName ResolveType");
+
             return ElementTypeName.ResolveType(containingAssemblyIfAny, getTypeOptions)?.MakeArrayType(_rank);
         }
 
@@ -234,6 +242,8 @@ namespace System.Reflection.Runtime.TypeParsing
 
         public sealed override Type ResolveType(Assembly containingAssemblyIfAny, GetTypeOptions getTypeOptions)
         {
+            X.PrintLine("ByRefTypeName ResolveType");
+
             return ElementTypeName.ResolveType(containingAssemblyIfAny, getTypeOptions)?.MakeByRefType();
         }
     }
@@ -255,6 +265,8 @@ namespace System.Reflection.Runtime.TypeParsing
 
         public sealed override Type ResolveType(Assembly containingAssemblyIfAny, GetTypeOptions getTypeOptions)
         {
+            X.PrintLine("PointerTypeName ResolveType");
+
             return ElementTypeName.ResolveType(containingAssemblyIfAny, getTypeOptions)?.MakePointerType();
         }
     }
@@ -290,6 +302,8 @@ namespace System.Reflection.Runtime.TypeParsing
 
         public sealed override Type ResolveType(Assembly containingAssemblyIfAny, GetTypeOptions getTypeOptions)
         {
+            X.PrintLine("ConstructedGenericTypeName ResolveType");
+
             Type genericTypeDefinition = _genericTypeDefinition.ResolveType(containingAssemblyIfAny, getTypeOptions);
             if (genericTypeDefinition == null)
                 return null;

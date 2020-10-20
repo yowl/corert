@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics;
 using System.Reflection.Runtime.General;
@@ -52,6 +53,12 @@ namespace System.Reflection.Runtime.TypeParsing
 
         public Type CoreResolveType(Assembly containingAssemblyIfAny, string name)
         {
+            X.PrintLine("CoreResolveType");
+            if (_coreTypeResolver == null)
+            {
+                X.PrintLine("CoreResolveType _coreTypeResolver == null");
+
+            }
             Type type = _coreTypeResolver(containingAssemblyIfAny, name);
             if (type == null && ThrowOnError)
                 throw Helpers.CreateTypeLoadException(name.EscapeTypeNameIdentifier(), containingAssemblyIfAny);

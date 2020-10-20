@@ -2,10 +2,14 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 extern "C" void * CoreLibNative_MemAlloc(size_t size)
 {
-    return malloc(size);
+    printf("CoreLibNative_MemAlloc size %ld\n", size);
+    void * r = malloc(size);
+    printf("CoreLibNative_MemAlloc address %p\n", r);
+    return r;
 }
 
 extern "C" void * CoreLibNative_MemAllocWithZeroInitialize(size_t size)

@@ -90,12 +90,20 @@ namespace System.Reflection.Runtime.Assemblies
 
             CoreAssemblyResolver coreAssemblyResolver = RuntimeAssembly.GetRuntimeAssemblyIfExists;
             CoreTypeResolver coreTypeResolver =
-                delegate (Assembly containingAssemblyIfAny, string coreTypeName)
+                delegate(Assembly containingAssemblyIfAny, string coreTypeName)
                 {
+                    X.PrintLine("coreTypeResolver " + coreTypeName);
                     if (containingAssemblyIfAny == null)
+                    {
+                    X.PrintLine("coreTypeResolver GetTypeCore");
                         return GetTypeCore(coreTypeName, ignoreCase: ignoreCase);
+                    }
                     else
+                    {
+                        X.PrintLine("containingAssemblyIfAny GetTypeCore");
+
                         return containingAssemblyIfAny.GetTypeCore(coreTypeName, ignoreCase: ignoreCase);
+                    }
                 };
             GetTypeOptions getTypeOptions = new GetTypeOptions(coreAssemblyResolver, coreTypeResolver, throwOnError: throwOnError, ignoreCase: ignoreCase);
 

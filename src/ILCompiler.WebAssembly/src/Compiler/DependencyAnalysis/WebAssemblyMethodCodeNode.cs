@@ -9,6 +9,7 @@ using ILCompiler.DependencyAnalysisFramework;
 
 using Internal.Text;
 using Internal.TypeSystem;
+using Internal.TypeSystem.Ecma;
 
 namespace ILCompiler.DependencyAnalysis
 {
@@ -61,6 +62,10 @@ namespace ILCompiler.DependencyAnalysis
         public WebAssemblyMethodBodyNode(MethodDesc method)
             : base(method)
         {
+                if (method.Name.Contains("RhGetThunkSize"))
+                {
+
+                }
         }
 
         protected override string GetName(NodeFactory factory) => this.GetMangledName(factory.NameMangler);

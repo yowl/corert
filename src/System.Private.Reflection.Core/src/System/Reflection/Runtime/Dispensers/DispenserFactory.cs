@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection.Runtime.TypeInfos;
 
@@ -21,9 +22,15 @@ namespace System.Reflection.Runtime.Dispensers
         {
             DispenserAlgorithm algorithm = s_dispenserPolicy.GetAlgorithm(scenario);
             if (algorithm == DispenserAlgorithm.ReuseAsLongAsKeyIsAlive)
+            {
+                X.PrintLine("dispenser DispenserThatReusesAsLongAsKeyIsAlive");
                 return new DispenserThatReusesAsLongAsKeyIsAlive<K, V>(factory);
+            }
             else
+            {
+                X.PrintLine("dispenser else, CreateDispenserV");
                 return CreateDispenserV<K, V>(scenario, factory);
+            }
 
             throw new Exception();
         }
@@ -43,11 +50,20 @@ namespace System.Reflection.Runtime.Dispensers
                 "Use CreateDispenser() if you want to use this algorithm. The key must not be a valuetype.");
 
             if (algorithm == DispenserAlgorithm.CreateAlways)
+            {
+                X.PrintLine("CreateDispenserV DispenserThatAlwaysCreates");
                 return new DispenserThatAlwaysCreates<K, V>(factory);
+            }
             else if (algorithm == DispenserAlgorithm.ReuseAlways)
+            {
+                X.PrintLine("CreateDispenserV DispenserThatAlwaysReuses");
                 return new DispenserThatAlwaysReuses<K, V>(factory);
+            }
             else if (algorithm == DispenserAlgorithm.ReuseAsLongAsValueIsAlive)
+            {
+                X.PrintLine("CreateDispenserV DispenserThatReusesAsLongAsValueIsAlive");
                 return new DispenserThatReusesAsLongAsValueIsAlive<K, V>(factory);
+            }
 
             throw new Exception();
         }

@@ -83,17 +83,29 @@ namespace Internal.Reflection.Core.Execution
                 {
                     if (containingAssemblyIfAny != null)
                     {
+                        X.PrintLine(" CreateCoreTypeResolver containingAssemblyIfAny != null " + coreTypeName);
                         return containingAssemblyIfAny.GetTypeCore(coreTypeName, ignoreCase: ignoreCase);
                     }
                     else
                     {
+                        X.PrintLine(" CreateCoreTypeResolver containingAssemblyIfAny == null " + coreTypeName);
+
                         foreach (string defaultAssemblyName in defaultAssemblyNames)
                         {
+                            X.PrintLine(" CreateCoreTypeResolver defaultAssemblyName " + defaultAssemblyName);
+
                             RuntimeAssemblyName runtimeAssemblyName = AssemblyNameParser.Parse(defaultAssemblyName);
+                            X.PrintLine(" CreateCoreTypeResolver GetRuntimeAssemblyIfExists " + runtimeAssemblyName);
                             RuntimeAssembly defaultAssembly = RuntimeAssembly.GetRuntimeAssemblyIfExists(runtimeAssemblyName);
                             if (defaultAssembly == null)
+                            {
+                                X.PrintLine(" CreateCoreTypeResolver defaultAssembly == null ");
                                 continue;
+                            }
+
+                            X.PrintLine(" CreateCoreTypeResolver defaultAssembly != null ");
                             Type resolvedType = defaultAssembly.GetTypeCore(coreTypeName, ignoreCase: ignoreCase);
+                            X.PrintLine(" CreateCoreTypeResolver resolvedType ");
                             if (resolvedType != null)
                                 return resolvedType;
                         }

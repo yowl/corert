@@ -46,17 +46,22 @@ namespace System.Collections.Generic
 
         public unsafe static void PrintUint(int l)
         {
+            TwoByteStr curCharStr = new TwoByteStr();
+
             PrintByte((byte)((l >> 24) & 0xff));
             PrintByte((byte)((l >> 16) & 0xff));
             PrintByte((byte)((l >> 8) & 0xff));
             PrintByte((byte)(l & 0xff));
 
-            PrintString("\n");
+            curCharStr.first = 13;
+            printf((byte*)&curCharStr, null);
+            curCharStr.first = 10;
+            printf((byte*)&curCharStr, null);
         }
 
         public unsafe static void PrintByte(byte b)
         {
-            TwoByteStr curChaStr = new TwoByteStr();
+            TwoByteStr curCharStr = new TwoByteStr();
             var nib = (b & 0xf0) >> 4;
             curCharStr.first = (byte)((nib <= 9 ? '0' : 'A') + (nib <= 9 ? nib : nib - 10));
             printf((byte*)&curCharStr, null);

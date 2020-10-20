@@ -24,6 +24,7 @@ namespace System.Reflection.Runtime.Assemblies.NativeFormat
     {
         internal sealed override RuntimeTypeInfo UncachedGetTypeCoreCaseSensitive(string fullName)
         {
+            X.PrintLine("NativeFormatRuntimeAssembly");
             string[] parts = fullName.Split('.');
             int numNamespaceParts = parts.Length - 1;
             string[] namespaceParts = new string[numNamespaceParts];
@@ -33,6 +34,8 @@ namespace System.Reflection.Runtime.Assemblies.NativeFormat
 
             foreach (QScopeDefinition scopeDefinition in AllScopes)
             {
+                X.PrintLine("NativeFormatRuntimeAssembly got scope " + name + " fullname " + fullName);
+
                 MetadataReader reader = scopeDefinition.Reader;
                 ScopeDefinitionHandle scopeDefinitionHandle = scopeDefinition.Handle;
 
@@ -44,15 +47,25 @@ namespace System.Reflection.Runtime.Assemblies.NativeFormat
                 TypeDefinitionHandleCollection candidateTypes = namespaceDefinition.TypeDefinitions;
                 foreach (TypeDefinitionHandle candidateType in candidateTypes)
                 {
+                    X.PrintLine("NativeFormatRuntimeAssembly got candidateType");
+
                     TypeDefinition typeDefinition = candidateType.GetTypeDefinition(reader);
+                    X.PrintLine("NativeFormatRuntimeAssembly comparing " + typeDefinition.Name);
+
                     if (typeDefinition.Name.StringEquals(name, reader))
+                    {
+                        X.PrintLine("NativeFormatRuntimeAssembly got typeDefinition " + typeDefinition.Name);
+
                         return candidateType.ResolveTypeDefinition(reader);
+                    }
                 }
 
                 // No match found in this assembly - see if there's a matching type forwarder.
                 TypeForwarderHandleCollection candidateTypeForwarders = namespaceDefinition.TypeForwarders;
                 foreach (TypeForwarderHandle typeForwarderHandle in candidateTypeForwarders)
                 {
+                    X.PrintLine("NativeFormatRuntimeAssembly got typeForwarderHandle");
+
                     TypeForwarder typeForwarder = typeForwarderHandle.GetTypeForwarder(reader);
                     if (typeForwarder.Name.StringEquals(name, reader))
                     {

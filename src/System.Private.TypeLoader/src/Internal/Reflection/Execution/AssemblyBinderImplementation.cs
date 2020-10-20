@@ -73,18 +73,23 @@ namespace Internal.Reflection.Execution
             bool foundMatch = false;
             result = default(AssemblyBindResult);
             exception = null;
+            X.PrintLine("Bind refName " + refName.FullName);
 
             Exception preferredException = null;
 
             foreach (KeyValuePair<RuntimeAssemblyName, ScopeDefinitionGroup> group in ScopeGroups)
             {
+                X.PrintLine("Bind AssemblyNameMatches match with " + group.Key.FullName);
                 if (AssemblyNameMatches(refName, group.Key, ref preferredException))
                 {
                     if (foundMatch)
                     {
                         exception = new AmbiguousMatchException();
+                        X.PrintLine("Bind AssemblyNameMatches AmbiguousMatchException ");
+
                         return false;
                     }
+                    X.PrintLine("Bind AssemblyNameMatches foundMatch ");
 
                     foundMatch = true;
                     ScopeDefinitionGroup scopeDefinitionGroup = group.Value;
@@ -93,6 +98,8 @@ namespace Internal.Reflection.Execution
                     result.ScopeDefinitionHandle = scopeDefinitionGroup.CanonicalScope.Handle;
                     result.OverflowScopes = scopeDefinitionGroup.OverflowScopes;
                 }
+                X.PrintLine("Bind AssemblyNameMatches after if");
+
             }
 
             BindEcmaAssemblyName(refName, cacheMissedLookups, ref result, ref exception, ref preferredException, ref foundMatch);
